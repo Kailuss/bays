@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SideTab as Bay } from '../../models/Bay';
+import { Bay } from '../../models/Bay';
 import { BayGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';

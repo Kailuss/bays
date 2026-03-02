@@ -4,8 +4,8 @@
  */
 
 // SideTab - Tab representation and actions
-export { SideTab, Bay } from './Bay';
-export { SideTabActions } from './BayActions';
+export { Bay } from './Bay';
+export { BayActions as SideTabActions } from './BayActions';
 export { BayHelpers as SideTabHelpers } from './BayHelpers';
 export type {
   BayType as SideTabType,

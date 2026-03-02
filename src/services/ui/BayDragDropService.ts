@@ -1,5 +1,5 @@
 import { BayStateService } from '../core/BayStateService';
-import { SideTab, Bay }    from '../../models/Bay';
+import { Bay }    from '../../models/Bay';
 import { Logger }          from '../../utils/logger';
 
 /**

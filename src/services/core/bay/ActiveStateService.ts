@@ -131,18 +131,18 @@ export class ActiveStateService {
     if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputNotebook) {
       return `${input.uri.toString()}-${viewColumn}`;
     }
-    
+
     if (input instanceof vscode.TabInputTextDiff) {
       // For diffs, use original URI (right-hand side)
       return `${input.original.toString()}-${viewColumn}`;
     }
-    
+
     if (input instanceof vscode.TabInputWebview) {
       // For webviews, use viewType if available
       const viewType = (input as any).viewType || 'webview';
       return `webview:${viewType}-${viewColumn}`;
     }
-    
+
     if (input instanceof vscode.TabInputCustom) {
       return `${input.uri.toString()}-${viewColumn}`;
     }

@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import { TabIconManager } from '../services/ui/BayIconManager';
 import type { DocumentManager } from '../services/core/DocumentManager';
-import { SideTab } from '../models/Bay';
+import { Bay } from '../models/Bay';
 import { BayGroup } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
@@ -109,7 +109,7 @@ export class BaysHtmlBuilder {
 
   private async renderAllTabs(
     groups: BayGroup[],
-    getTabsInGroup: (groupId: number) => SideTab[],
+    getTabsInGroup: (groupId: number) => Bay[],
     showPath: boolean,
     copilotReady: boolean,
     enableDragDrop: boolean,
@@ -144,7 +144,7 @@ export class BaysHtmlBuilder {
   }
 
   private async renderTabList(
-    tabs: SideTab[],
+    tabs: Bay[],
     showPath: boolean,
     copilotReady: boolean,
     enableDragDrop: boolean,
@@ -155,7 +155,7 @@ export class BaysHtmlBuilder {
     const childTabs = tabs.filter(t => t.metadata.parentId);
     
     // Build a map of parentId -> children
-    const childrenByParent = new Map<string, SideTab[]>();
+    const childrenByParent = new Map<string, Bay[]>();
     for (const child of childTabs) {
       const parentId = child.metadata.parentId!;
       if (!childrenByParent.has(parentId)) {
@@ -203,9 +203,9 @@ export class BaysHtmlBuilder {
    * Always compact, indented, no path shown.
    */
   private async renderChildTab(
-    tab: SideTab,
+    tab: Bay,
     copilotReady: boolean,
-    parent: SideTab,
+    parent: Bay,
   ): Promise<string> {
     const activeClass = tab.state.isActive ? ' active' : '';
     const dataParentId = `data-parentid="${this.esc(parent.metadata.id)}"`;
@@ -293,7 +293,7 @@ export class BaysHtmlBuilder {
    * Shown with full info since there's no parent context.
    */
   private async renderOrphanChildTab(
-    tab: SideTab,
+    tab: Bay,
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
@@ -303,7 +303,7 @@ export class BaysHtmlBuilder {
   }
 
   private async renderTab(
-    tab: SideTab,
+    tab: Bay,
     showPath: boolean,
     copilotReady: boolean,
     _enableDragDrop: boolean,
@@ -371,7 +371,7 @@ export class BaysHtmlBuilder {
 
   //= BOTONES DE ACCIÓN
 
-  private renderFileActionButton(tab: SideTab): string {
+  private renderFileActionButton(tab: Bay): string {
     if (!this.fileActionRegistry || !tab.metadata.uri) { return ''; }
 
     // Pass viewMode context for dynamic actions (like MD toggle)
@@ -386,7 +386,7 @@ export class BaysHtmlBuilder {
    * Renderiza un badge con el número de versiones del documento.
    * Solo se muestra para parent tabs que tienen document model con versiones.
    */
-  private renderVersionBadge(tab: SideTab): string {
+  private renderVersionBadge(tab: Bay): string {
     // Only show for parent tabs (not children)
     if (tab.metadata.parentId || !tab.metadata.uri || !this.documentManager) {
       return '';

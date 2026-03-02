@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getConfiguration }         from '../constants/styles';
 import { TIMINGS }                  from '../constants/timings';
-import { SideTab }                  from '../models/Bay';
+import { Bay }                  from '../models/Bay';
 import type { BayViewMode }         from '../models/Bay';
 import { BayStateService }          from '../services/core/BayStateService';
 import { TabIconManager }           from '../services/ui/BayIconManager';
@@ -317,7 +317,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private findTab(id: string): SideTab | undefined {
+  private findTab(id: string): Bay | undefined {
     return this.stateService.getTab(id);
   }
 

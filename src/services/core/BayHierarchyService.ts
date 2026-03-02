@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { SideTab, Bay, DiffStats } from '../../models/Bay';
+import type { Bay, DiffStats } from '../../models/Bay';
 import type { BayStateService } from './BayStateService';
 import type { DocumentManager } from './DocumentManager';
 import { Logger } from '../../utils/logger';

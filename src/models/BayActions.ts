@@ -8,7 +8,7 @@ import * as actions from './actions';
  *
  * All actions receive `metadata` (immutable) and mutate `state` in place.
  */
-export abstract class SideTabActions {
+export abstract class BayActions {
   abstract readonly metadata: BayMetadata;
   abstract state: BayState;
 

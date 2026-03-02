@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SideTabActions as BayActionManager } from './BayActions';
+import { BayActions } from './BayActions';
 
 //: Bay type - 4 core types according to Bay architecture
 export type BayType = 'file' | 'webview' | 'custom' | 'notebook';
@@ -244,7 +244,7 @@ export type BayState = {
  * @see DocumentModel for complete document metadata
  * @see DocumentManager for document lifecycle management
  */
-export class Bay extends BayActionManager {
+export class Bay extends BayActions {
   constructor(
     public readonly metadata: BayMetadata,
     public state: BayState,
@@ -252,6 +252,3 @@ export class Bay extends BayActionManager {
     super();
   }
 }
-
-// Backward compatibility alias
-export { Bay as SideTab };

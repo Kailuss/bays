@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SideTab } from '../../../models/Bay';
+import { Bay } from '../../../models/Bay';
 import { BayStateService } from '../BayStateService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { GitSyncService } from '../../integration/GitSyncService';
@@ -35,7 +35,7 @@ export class BayHeadService {
    * 
    * Contexto: handleTabChanges (evento opened)
    */
-  async ensureParentExists(childTab: SideTab, nativeChildTab: vscode.Tab): Promise<void> {
+  async ensureParentExists(childTab: Bay, nativeChildTab: vscode.Tab): Promise<void> {
     const parentId = childTab.metadata.parentId;
     if (!parentId) { return; }
 
@@ -114,9 +114,9 @@ export class BayHeadService {
    * Contexto: syncAll (sincronización completa inicial)
    */
   async ensureParentExistsForSync(
-    childTab: SideTab, 
+    childTab: Bay, 
     nativeChildTab: vscode.Tab, 
-    allTabs: SideTab[]
+    allTabs: Bay[]
   ): Promise<void> {
     const parentId = childTab.metadata.parentId;
     if (!parentId) { return; }
