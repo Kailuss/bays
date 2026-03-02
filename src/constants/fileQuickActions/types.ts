@@ -12,11 +12,8 @@ export type FileActionContext = {
   debugMode?: boolean;
 }
 
-/**
- * Acción contextual asociada a un tipo de archivo.
- * Para añadir una nueva acción, registrarla en FileActionRegistry.register().
- */
-export type FileAction = {
+/** Quick action shown for specific file types. */
+export type FileQuickAction = {
   id: string;
   icon: string;
   tooltip: string;
@@ -26,22 +23,17 @@ export type FileAction = {
   execute: (uri: vscode.Uri) => Promise<void>;
 }
 
-/**
- * Acción con resolución dinámica según contexto.
- * Usado para acciones toggle como Markdown preview/source.
- */
-export type DynamicFileAction = {
+/** Dynamic quick action - resolved based on bay context (toggle actions). */
+export type DynamicFileQuickAction = {
   id: string;
   setFocus?: boolean;
   match: (fileName: string, uri: vscode.Uri) => boolean;
-  resolve: (context?: FileActionContext) => { icon: string; tooltip: string; actionId: string };
+  resolve: (context? : FileActionContext) => { icon: string; tooltip: string; actionId: string };
   execute: (uri: vscode.Uri, context?: FileActionContext) => Promise<void>;
 }
 
-/**
- * Resultado resuelto para renderizado HTML.
- */
-export type ResolvedFileAction = {
+/** Resolved quick action for HTML rendering. */
+export type ResolvedQuickAction = {
   id       : string;
   icon     : string;
   tooltip  : string;

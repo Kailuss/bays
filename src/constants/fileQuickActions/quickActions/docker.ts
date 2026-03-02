@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byPattern } from '../matchers';
 
-export const DOCKER_ACTIONS: FileAction[] = [
+export const DOCKER_ACTIONS: FileQuickAction[] = [
 
   //· Dockerfile: build
   {

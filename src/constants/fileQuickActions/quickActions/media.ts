@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byExtension } from '../matchers';
 
-export const MEDIA_ACTIONS: FileAction[] = [
+export const MEDIA_ACTIONS: FileQuickAction[] = [
 
   //· Abrir con app externa por defecto
   {

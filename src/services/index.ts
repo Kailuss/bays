@@ -20,4 +20,4 @@ export { CopilotService } from './integration/CopilotService';
 
 // Registry services - Extensibilidad
 export { FileActionRegistry } from './registry/FileActionRegistry';
-export type { FileAction, ResolvedFileAction } from './registry/FileActionRegistry';
+export type { FileQuickAction, ResolvedQuickAction } from './registry/FileActionRegistry';

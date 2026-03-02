@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byName, byPattern } from '../matchers';
 
-export const CONFIGURATION_ACTIONS: FileAction[] = [
+export const CONFIGURATION_ACTIONS: FileQuickAction[] = [
 
   //· package.json: ejecutar scripts
   {

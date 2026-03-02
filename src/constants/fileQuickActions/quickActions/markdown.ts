@@ -1,12 +1,10 @@
 import * as vscode from 'vscode';
 import { VSCODE_COMMANDS } from '../../commands';
-import type { DynamicFileAction } from '../types';
+import type { DynamicFileQuickAction } from '../types';
 import { byExtension } from '../matchers';
 
-/**
- * Acción dinámica para Markdown: toggle entre preview y source.
- */
-export const MARKDOWN_TOGGLE_ACTION: DynamicFileAction = {
+/** Markdown toggle: preview ↔ source. */
+export const MARKDOWN_TOGGLE_ACTION: DynamicFileQuickAction = {
   id: 'toggleMarkdownPreview',
   setFocus: true,
   match: byExtension('.md', '.mdx', '.markdown'),

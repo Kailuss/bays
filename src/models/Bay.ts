@@ -24,10 +24,7 @@ export type DiffStats = {
   conflictSections?: number; // Number of conflict sections
 };
 
-/**
- * Contexto de acción dinámico para tabs.
- * Define el estado actual de visualización y edición.
- */
+/** Dynamic action context (view/edit state). */
 export type ActionContext = {
   viewMode?: BayViewMode;                        // How the bay is visualized
   editMode?: EditMode;                           // Edit capability state
@@ -36,9 +33,7 @@ export type ActionContext = {
   debugMode?: boolean;                           // In debug mode
 }
 
-/**
- * Estado de operaciones asíncronas en progreso.
- */
+/** Async operation state. */
 export type OperationState = {
   isProcessing: boolean;           // Operation in progress
   currentOperation?: string;       // Operation name (close, save, etc)
@@ -46,10 +41,7 @@ export type OperationState = {
   progress?: number;               // Progress 0-100 (if applicable)
 }
 
-/**
- * Permisos granulares para operaciones de archivo.
- * Más específico que capabilities - define qué está permitido.
- */
+/** Granular file operation permissions. */
 export type BayPermissions = {
   canRename: boolean;              // Can rename file
   canDelete: boolean;              // Can delete file
@@ -59,9 +51,7 @@ export type BayPermissions = {
   restrictedActions?: string[];    // IDs of blocked actions
 }
 
-/**
- * Estado de integración con servicios externos.
- */
+/** External service integration state. */
 export type BayIntegrations = {
   copilot?: {
     inContext: boolean;            // In Copilot chat context
@@ -75,9 +65,7 @@ export type BayIntegrations = {
   };
 }
 
-/**
- * Acción personalizada definida por usuario o extensión.
- */
+/** User/extension-defined action. */
 export type CustomBayAction = {
   id: string;
   label: string;
@@ -87,9 +75,7 @@ export type CustomBayAction = {
   execute: (metadata: BayMetadata, state: BayState) => Promise<void>;
 }
 
-/**
- * Atajos de teclado personalizados para acciones.
- */
+/** Custom keybindings for actions. */
 export type BayShortcuts = {
   quickPin?: string;               // Quick pin/unpin
   quickClose?: string;             // Quick close
@@ -97,10 +83,7 @@ export type BayShortcuts = {
   quickReveal?: string;            // Quick reveal in explorer
 }
 
-/**
- * Immutable metadata describing a bay.
- * Computed once at creation and should not change during bay lifetime.
- */
+/** Immutable metadata - computed once at creation. */
 export type BayMetadata = {
   //: IDENTITY
   id            : string;        // Unique identifier (uri-based for file tabs, label-based for webview tabs).
@@ -150,12 +133,7 @@ export type BayMetadata = {
   customData?   : Record<string, any>;  // Extension-specific metadata
 }
 
-/**
- * Bay capabilities - Simplified to 5 core capabilities.
- * Other capabilities computed on-demand from state/metadata.
- * 
- * @see services/core/AGENT.md for capability computation patterns
- */
+/** 5 core capabilities (other computed on-demand). @see services/core/AGENT.md */
 export type BayCapabilities = {
   canClose            : boolean; // Can be closed
   canPin              : boolean; // Can be pinned
@@ -226,23 +204,11 @@ export type BayState = {
 }
 
 /**
- * Representa una pestaña en la barra lateral de Bays.
- * En pocas palabras: guarda la información que mostramos (nombre, ruta, icono)
- * y ofrece métodos para las acciones que el usuario puede realizar (abrir, cerrar, pinear...).
- * Los métodos de acción están definidos en BayActions (herencia).
- * 
- * @remarks
- * ARQUITECTURA: Bay es responsable de la representación visual y estado de UI.
- * Para gestión compleja de metadata de documentos y versiones (diffs, snapshots),
- * Bay delega a DocumentModel a través del campo `metadata.documentId`.
- * 
- * Relación con DocumentModel:
- * - Parent bays con URI: pueden tener un DocumentModel asociado
- * - Child bays (diffs): su metadata está en VersionMetadata del DocumentModel parent
- * - DocumentManager gestiona el ciclo de vida y búsqueda de DocumentModels
- * 
- * @see DocumentModel for complete document metadata
- * @see DocumentManager for document lifecycle management
+ * Tab representation in Bays sidebar.
+ * Delegates to DocumentModel for complex document metadata (diffs, snapshots).
+ *
+ * @see DocumentModel
+ * @see DocumentManager
  */
 export class Bay extends BayActions {
   constructor(

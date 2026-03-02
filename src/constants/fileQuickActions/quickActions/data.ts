@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byExtension, byPattern } from '../matchers';
 
-export const DATA_ACTIONS: FileAction[] = [
+export const DATA_ACTIONS: FileQuickAction[] = [
 
   //· Lock files: abrir npm scripts / audit
   {

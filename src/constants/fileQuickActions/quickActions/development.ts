@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byExtension, byPattern } from '../matchers';
 
-export const DEVELOPMENT_ACTIONS: FileAction[] = [
+export const DEVELOPMENT_ACTIONS: FileQuickAction[] = [
 
   //· Tests: ejecutar archivo de test
   {

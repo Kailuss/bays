@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from '../types';
+import type { FileQuickAction } from '../types';
 import { byExtension } from '../matchers';
 
-export const WEB_ACTIONS: FileAction[] = [
+export const WEB_ACTIONS: FileQuickAction[] = [
 
   {
     id      : 'previewHtml',
