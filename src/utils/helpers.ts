@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { fileIconMap } from './fileIconMap';
 
 /**
  * Devuelve un `ThemeIcon` genérico según la extensión del archivo.
@@ -7,19 +8,7 @@ import * as path from 'path';
  */
 export function getFileIcon(uri: vscode.Uri): vscode.ThemeIcon {
   const ext = uri.fsPath.split('.').pop()?.toLowerCase();
-
-  const iconMap: Record<string, string> = {
-    ts: 'file-code',
-    js: 'file-code',
-    json: 'json',
-    md: 'markdown',
-    css: 'file-code',
-    html: 'file-code',
-    py: 'file-code',
-    java: 'file-code',
-  };
-
-  return new vscode.ThemeIcon(iconMap[ext || ''] || 'file');
+  return new vscode.ThemeIcon(fileIconMap[ext || ''] || 'file');
 }
 
 /**

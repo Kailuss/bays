@@ -125,9 +125,8 @@ export class BayHeadService {
     // Check if parent already exists in the array
     const existingParent = allBays.find(t => t.metadata.id === parentId);
     if (existingParent) {
-      // Inherit state from parent
-      this.hierarchyService.inheritState(variant, existingParent);
-      return; // Parent exists, all good
+      this.hierarchyService.inheritState(variant, existingParent); // Inherit state from parent
+      return;
     }
 
     // Parent doesn't exist - we need to find or create it
