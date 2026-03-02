@@ -10,17 +10,8 @@ import { Logger } from '../../../utils/logger';
 /**
  * BayEventService - Gestión de Eventos de VS Code
  * 
- * Responsabilidades:
- * - Registrar event listeners de VS Code (tabGroups, activeTextEditor, diagnostics)
- * - Procesar eventos de apertura/cierre/cambio de tabs
- * - Invocar servicios especializados según el tipo de evento
- * 
- * Delegación:
- * - BayHeadService: Asegurar existencia de parents para variants
- * - ActiveStateService: Actualizar estado activo después de cambios
- * - BayStateService: Añadir/remover/actualizar tabs en el estado
- * - BayHierarchyService: Registrar relaciones parent-child
- * - DocumentManager: Crear y asociar DocumentModels con tabs
+ * Registra y procesa eventos de VS Code (tabs, editores, diagnósticos).
+ * Delega a servicios especializados según el tipo de evento.
  */
 export class BayEventService {
   private disposables: vscode.Disposable[] = [];
@@ -34,27 +25,23 @@ export class BayEventService {
   ) {}
 
   /**
-   * Registra todos los event listeners necesarios para mantener
-   * el estado sincronizado con VS Code.
+   * Registra todos los event listeners necesarios.
    */
   activate(): void {
     Logger.log('[BayEvent] Activating event listeners');
 
-    // 1. Bay changes (opened/closed)
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabs(async (event) => {
         await this.handleTabChanges(event);
       })
     );
 
-    // 2. Bay group changes (created/closed)
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabGroups(() => {
         this.handleGroupChanges();
       })
     );
 
-    // 3. Active text editor changes
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => {
         const { hasChanges } = this.activeStateService.syncActiveState();
@@ -64,11 +51,6 @@ export class BayEventService {
       })
     );
 
-    // 4. Diagnostic changes (errors/warnings)
-    // Note: Diagnostic handling is delegated to BaySyncService's updateTabDiagnostics()
-    // which is triggered by VS Code's onDidChangeDiagnostics event
-
-    // 5. Text editor selection changes (for cursor position sync)
     this.disposables.push(
       vscode.window.onDidChangeTextEditorSelection((event) => {
         const uri = event.textEditor.document.uri;
@@ -87,35 +69,22 @@ export class BayEventService {
   }
 
   /**
-   * Maneja cambios en bays (opened/closed).
-   * 
-   * Flujo:
-   * 1. Opened bays: Convertir a Bay, asegurar parent si es variant, añadir al estado
-   * 2. Closed bays: Remover del estado, notificar cambio
-   * 3. Changed bays: Actualizar estado (preview, pinned, dirty)
-   * 
-   * Delegación:
-   * - BayHeadService.ensureParentExists(): Si el bay es variant
-   * - ActiveStateService.syncActiveState(): Después de añadir/remover
-   * - BayHierarchyService.registerChild(): Si el bay tiene parentId
+   * Maneja cambios en bays (opened/closed/changed).
+   * Asegura que los variants tengan parents y actualiza el estado.
    */
   private async handleTabChanges(event: vscode.TabChangeEvent): Promise<void> {
     let hasChanges = false;
 
-    // Handle opened tabs
     for (const bay of event.opened) {
       const st = convertToBay(bay, this.gitSyncService);
       if (!st) { continue; }
 
-      // If it's a variant bay, ensure parent exists first
       if (st.metadata.parentId) {
         await this.bayHeadService.ensureParentExists(st, bay);
       }
 
-      // Add bay to state
       this.stateService.addBay(st);
 
-      // Register in hierarchy if it has a parent
       if (st.metadata.parentId) {
         this.hierarchyService.registerChild(st.metadata.id, st.metadata.parentId);
       }
@@ -123,7 +92,6 @@ export class BayEventService {
       hasChanges = true;
     }
 
-    // Handle closed tabs
     for (const bay of event.closed) {
       const id = this.generateIdFromTab(bay);
       if (!id) { continue; }
@@ -135,7 +103,6 @@ export class BayEventService {
       }
     }
 
-    // Handle changed bays (preview, pinned, dirty state changes)
     for (const bay of event.changed) {
       const id = this.generateIdFromTab(bay);
       if (!id) { continue; }
@@ -144,19 +111,16 @@ export class BayEventService {
       if (existingBay) {
         let bayChanged = false;
         
-        // Update preview state
         if (existingBay.state.isPreview !== bay.isPreview) {
           existingBay.state.isPreview = bay.isPreview;
           bayChanged = true;
         }
         
-        // Update pinned state
         if (existingBay.state.isPinned !== bay.isPinned) {
           existingBay.state.isPinned = bay.isPinned;
           bayChanged = true;
         }
         
-        // Update dirty state
         if (existingBay.state.isDirty !== bay.isDirty) {
           existingBay.state.isDirty = bay.isDirty;
           bayChanged = true;
@@ -168,7 +132,6 @@ export class BayEventService {
       }
     }
 
-    // Sync active state after processing all changes
     if (hasChanges) {
       const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
       if (activeChanges || hasChanges) {
@@ -179,7 +142,6 @@ export class BayEventService {
 
   /**
    * Maneja cambios en grupos de editores.
-   * Simplemente dispara una sincronización completa del estado activo.
    */
   private handleGroupChanges(): void {
     const { hasChanges } = this.activeStateService.syncActiveState();
@@ -189,8 +151,7 @@ export class BayEventService {
   }
 
   /**
-   * Genera un ID desde un native bay sin crear un Bay completo.
-   * Usado para identificar tabs en eventos de cierre/cambio.
+   * Genera un ID desde un native tab sin crear un Bay completo.
    */
   private generateIdFromTab(bay: vscode.Tab): string | undefined {
     const input = bay.input;
@@ -205,7 +166,6 @@ export class BayEventService {
     }
     
     if (input instanceof vscode.TabInputWebview) {
-      // For webviews, use viewType if available, fallback to generic identifier
       const viewType = (input as any).viewType || 'webview';
       return `webview:${viewType}-${viewColumn}`;
     }

@@ -309,40 +309,40 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
 }
 
 /**
- * Extrae un ID ligero de una bay nativa — evita conversión completa a Bay.
+ * Extrae un ID ligero de una tab nativa — evita conversión completa a Bay.
  * Usado por removeOrphanedTabs y syncActiveState para mejor performance.
  * 
- * @param bay Bay nativa de VS Code
- * @returns ID de la bay o null si no se puede generar
+ * @param VSTab Tab nativa de VS Code
+ * @returns ID de la tab o null si no se puede generar
  */
-export function generateIdFromNativeTab(bay: vscode.Tab): string | null {
+export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
   let uri: vscode.Uri | undefined;
   let label: string;
   let tabType: BayType;
 
-  if (bay.input instanceof vscode.TabInputText) {
-    uri = bay.input.uri;
+  if (VSTab.input instanceof vscode.TabInputText) {
+    uri = VSTab.input.uri;
     label = path.basename(uri.fsPath);
     tabType = 'file';
-  } else if (bay.input instanceof vscode.TabInputTextDiff) {
-    uri = bay.input.modified;
-    label = bay.label;
+  } else if (VSTab.input instanceof vscode.TabInputTextDiff) {
+    uri = VSTab.input.modified;
+    label = VSTab.label;
     tabType = 'file'; // Variants are file type with parentId
-  } else if (bay.input instanceof vscode.TabInputWebview) {
-    label = bay.label;
+  } else if (VSTab.input instanceof vscode.TabInputWebview) {
+    label = VSTab.label;
     tabType = 'webview';
-  } else if (bay.input instanceof vscode.TabInputCustom) {
-    uri = bay.input.uri;
-    label = path.basename(uri.fsPath) || bay.label || 'Custom';
+  } else if (VSTab.input instanceof vscode.TabInputCustom) {
+    uri = VSTab.input.uri;
+    label = path.basename(uri.fsPath) || VSTab.label || 'Custom';
     tabType = 'custom';
-  } else if (bay.input instanceof vscode.TabInputNotebook) {
-    uri = bay.input.uri;
-    label = path.basename(uri.fsPath);
+  } else if (VSTab.input instanceof vscode.TabInputNotebook) {
+    uri = VSTab.input.uri;
+    label = path.basename(uri.fsPath) || VSTab.label || 'Notebook';
     tabType = 'notebook';
   } else {
-    label = bay.label;
+    label = VSTab.label;
     tabType = 'file'; // Fallback to file type
   }
 
-  return generateId(label, uri, bay.group.viewColumn, tabType);
+  return generateId(label, uri, VSTab.group.viewColumn, tabType);
 }

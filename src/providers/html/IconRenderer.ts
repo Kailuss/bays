@@ -8,11 +8,7 @@ import { TabIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
 import { Logger } from '../../utils/logger';
-import {
-  IconData,
-  // VSCODE_FILE_EXTENSIONS,  // Comentado: ya no se usan iconos especiales de VS Code
-  // VSCODE_FILE_PATTERNS,    // Comentado: ya no se usan iconos especiales de VS Code
-} from './types';
+import { IconData } from './types';
 
 export class IconRenderer {
   constructor(
@@ -36,11 +32,6 @@ export class IconRenderer {
       return this.renderFallback(fileType);
     }
 
-    // Archivos de VS Code: comentado, ahora usan iconos del tema activo
-    // if (this.isVSCodeFile(fileName)) {
-    //   return this.renderCodicon('vscode', '#2196f3');
-    // }
-
     // Intentar resolver icono del tema
     const iconData = await this.resolveIconData(fileName);
     if (iconData) {
@@ -63,32 +54,6 @@ export class IconRenderer {
 
     return label || null;
   }
-
-  /**
-   * Verifica si el archivo es relacionado con VS Code.
-   * Comentado: ahora todos los archivos usan iconos del tema activo
-   */
-  /*
-  private isVSCodeFile(fileName: string): boolean {
-    const lower = fileName.toLowerCase();
-
-    // Verificar extensiones exactas
-    for (const ext of VSCODE_FILE_EXTENSIONS) {
-      if (lower.endsWith(ext) || lower === ext) {
-        return true;
-      }
-    }
-
-    // Verificar patrones
-    for (const pattern of VSCODE_FILE_PATTERNS) {
-      if (lower.includes(pattern)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-  */
 
   /**
    * Resuelve los datos del icono desde el IconManager.
