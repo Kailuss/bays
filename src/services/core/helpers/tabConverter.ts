@@ -26,11 +26,11 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
     const uri = input.uri;
     return {
       uri,
-      label: path.basename(uri.fsPath),
-      description: formatFilePath(uri, { useWorkspaceRelative: true }),
-      tooltip: uri.fsPath,
-      fileType: path.extname(uri.fsPath),
-      tabType: 'file',
+      label       : path.basename(uri.fsPath),
+      description : formatFilePath(uri, { useWorkspaceRelative: true }),
+      tooltip     : uri.fsPath,
+      fileType    : path.extname(uri.fsPath),
+      tabType     : 'file',
     };
   }
 
@@ -42,39 +42,40 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
     if (uri) {
       return {
         uri,
-        label: VSTab.label,
-        description: formatFilePath(uri, { useWorkspaceRelative: true }),
-        tooltip: `${originalUri?.fsPath || '?'} ↔ ${uri.fsPath}`,
-        fileType: path.extname(uri.fsPath),
-        tabType: 'file',
+        label       : VSTab.label,
+        description : formatFilePath(uri, { useWorkspaceRelative: true }),
+        tooltip     : `${originalUri?.fsPath || '?'} ↔ ${uri.fsPath}`,
+        fileType    : path.extname(uri.fsPath),
+        tabType     : 'file',
         originalUri,
         modifiedUri,
       };
     }
+
     return {
-      uri: undefined,
-      label: VSTab.label,
-      description: undefined,
-      tooltip: VSTab.label,
-      fileType: '',
-      tabType: 'file',
+      uri         : undefined,
+      label       : VSTab.label,
+      description : undefined,
+      tooltip     : VSTab.label,
+      fileType    : '',
+      tabType     : 'file',
       originalUri,
       modifiedUri,
     };
   }
-  
+
   if (input instanceof vscode.TabInputWebview) {
     return {
-      uri: undefined,
-      label: VSTab.label,
-      description: undefined,
-      tooltip: VSTab.label,
-      fileType: '',
-      tabType: 'webview',
-      viewType: input.viewType,
+      uri         : undefined,
+      label       : VSTab.label,
+      description : undefined,
+      tooltip     : VSTab.label,
+      fileType    : '',
+      tabType     : 'webview',
+      viewType    : input.viewType,
     };
   }
-  
+
   if (input instanceof vscode.TabInputCustom) {
     const uri = input.uri;
     return {
@@ -87,7 +88,7 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
       viewType    : input.viewType,
     };
   }
-  
+
   if (input instanceof vscode.TabInputNotebook) {
     const uri = input.uri;
     return {
@@ -99,7 +100,7 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
       tabType     : 'notebook',
     };
   }
-  
+
   return {
     uri         : undefined,
     label       : VSTab.label,
@@ -135,8 +136,8 @@ export function convertToBay(
       const statsMatch = VSTab.label.match(/[+](\d+)[-](\d+)/);
       if (statsMatch) {
         diffStats = {
-          linesAdded: parseInt(statsMatch[1], 10),
-          linesRemoved: parseInt(statsMatch[2], 10),
+          linesAdded   : parseInt(statsMatch[1], 10),
+          linesRemoved : parseInt(statsMatch[2], 10),
         };
       }
     }
@@ -166,68 +167,67 @@ export function convertToBay(
   const metadata = BayHelpers.enrichMetadata(baseMetadata);
 
   const baseState = {
-    isActive: VSTab.isActive,
-    isDirty: VSTab.isDirty,
-    isPinned: VSTab.isPinned,
-    isPreview: VSTab.isPreview,
-    groupId: viewColumn,
+    isActive           : VSTab.isActive,
+    isDirty            : VSTab.isDirty,
+    isPinned           : VSTab.isPinned,
+    isPreview          : VSTab.isPreview,
+    groupId            : viewColumn,
     viewColumn,
-    indexInGroup: index ?? 0,
-    gitStatus: uri ? gitService.getGitStatus(uri) : null,
-    diagnosticSeverity: uri ? getDiagnosticSeverity(uri) : null,
+    indexInGroup       : index ?? 0,
+    gitStatus          : uri ? gitService.getGitStatus(uri) : null,
+    diagnosticSeverity : uri ? getDiagnosticSeverity(uri) : null,
   };
 
-  const defaultState = BayHelpers.createDefaultState();
+  const defaultState      = BayHelpers.createDefaultState();
   const stateWithDefaults = { ...defaultState, ...baseState };
-  const capabilities = BayHelpers.computeCapabilities(metadata, stateWithDefaults);
-  const viewMode = BayHelpers.mapPreviewModeToViewMode(false);
-
-  const state: BayState = {
+  const capabilities      = BayHelpers.computeCapabilities(metadata, stateWithDefaults);
+  const viewMode          = BayHelpers.mapPreviewModeToViewMode(false);
+  const state: BayState   = {
 
     // VS CODE NATIVE STATE
-    isActive: VSTab.isActive,
-    isDirty: VSTab.isDirty,
-    isPinned: VSTab.isPinned,
-    isPreview: VSTab.isPreview,
+    isActive       : VSTab.isActive,
+    isDirty        : VSTab.isDirty,
+    isPinned       : VSTab.isPinned,
+    isPreview      : VSTab.isPreview,
 
     // LOCATION
-    groupId: viewColumn,
+    groupId        : viewColumn,
     viewColumn,
-    indexInGroup: index ?? 0,
+    indexInGroup   : index ?? 0,
 
     // VISUALIZATION MODE
     viewMode,
 
-    actionContext: stateWithDefaults.actionContext!,
-    operationState: stateWithDefaults.operationState!,
+    actionContext  : stateWithDefaults.actionContext!,
+    operationState : stateWithDefaults.operationState!,
 
     capabilities,
-    permissions: stateWithDefaults.permissions!,
+    permissions    : stateWithDefaults.permissions!,
 
-    hasChildren: false,
-    isChild: !!parentId, // Variants have parentId set
-    childrenCount: 0,
+    hasChildren    : false,
+    isChild        : !!parentId, // Variants have parentId set
+    childrenCount  : 0,
 
-    isLoading: false,
-    hasError: false,
-    errorMessage: undefined,
-    isHighlighted: false,
+    isLoading      : false,
+    hasError       : false,
+    errorMessage   : undefined,
+    isHighlighted  : false,
 
-    lastAccessTime: Date.now(),
-    syncVersion: 0,
+    lastAccessTime : Date.now(),
+    syncVersion    : 0,
 
-    gitStatus: uri ? gitService.getGitStatus(uri) : null,
-    diagnosticSeverity: uri ? getDiagnosticSeverity(uri) : null,
+    gitStatus      : uri ? gitService.getGitStatus(uri) : null,
+    diagnosticSeverity : uri ? getDiagnosticSeverity(uri) : null,
 
-    isTransient: false,
-    isProtected: false,
+    isTransient    : false,
+    isProtected    : false,
 
-    integrations: stateWithDefaults.integrations!,
+    integrations   : stateWithDefaults.integrations!,
 
     diffStats,
 
-    customActions: stateWithDefaults.customActions,
-    shortcuts: stateWithDefaults.shortcuts,
+    customActions  : stateWithDefaults.customActions,
+    shortcuts      : stateWithDefaults.shortcuts,
   };
 
   return new Bay(metadata, state);
@@ -240,16 +240,16 @@ export function convertToBay(
 let diffIdCounter = 0;
 
 export function generateId(
-  label: string,
-  uri: vscode.Uri | undefined,
-  viewColumn: vscode.ViewColumn,
-  tabType: BayType,
-  isDiff?: boolean,
+  label      : string,
+  uri        : vscode.Uri | undefined,
+  viewColumn : vscode.ViewColumn,
+  tabType    : BayType,
+  isDiff?    : boolean,
 ): string {
   if (uri) {
     if (isDiff) {
-      const timestamp = Date.now();
-      const counter = diffIdCounter++;
+      const timestamp        = Date.now();
+      const counter          = diffIdCounter++;
       const safeLabelSegment = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
       return `diff:${uri.toString()}-${safeLabelSegment}-${timestamp}-${counter}-${viewColumn}`;
     }
