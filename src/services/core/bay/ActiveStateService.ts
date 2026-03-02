@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { BayStateService } from '../BayStateService';
+import { generateIdFromNativeTab } from '../helpers/tabConverter';
 import { Logger } from '../../../utils/logger';
 
 /**
@@ -23,10 +24,9 @@ export class ActiveStateService {
     const nativeIds = new Set<string>();
     const activeTabPerGroup = new Map<vscode.ViewColumn, string>();
     
-    // First pass: collect native IDs and active tabs per group
     for (const group of vscode.window.tabGroups.all) {
       for (const bay of group.tabs) {
-        const id = this.generateIdFromNativeTab(bay);
+        const id = generateIdFromNativeTab(bay);
         if (id) {
           nativeIds.add(id);
           if (bay.isActive) {
@@ -36,7 +36,6 @@ export class ActiveStateService {
       }
     }
 
-    // Second pass: update active state for all bays in state
     for (const st of this.stateService.getAllBays()) {
       const id = st.metadata.id;
       const viewColumn = st.state.viewColumn;
@@ -63,14 +62,13 @@ export class ActiveStateService {
     const nativeIds = new Set<string>();
     for (const group of vscode.window.tabGroups.all) {
       for (const bay of group.tabs) {
-        const id = this.generateIdFromNativeTab(bay);
+        const id = generateIdFromNativeTab(bay);
         if (id) {
           nativeIds.add(id);
         }
       }
     }
 
-    // Find orphaned bays
     const allBays = this.stateService.getAllBays();
     const orphanedIds: string[] = [];
     
@@ -86,33 +84,5 @@ export class ActiveStateService {
     }
 
     return { removedCount: orphanedIds.length };
-  }
-
-  /**
-   * Genera un ID desde un native tab sin crear un Bay completo.
-   * Para comparación rápida de existencia.
-   */
-  private generateIdFromNativeTab(bay: vscode.Tab): string | undefined {
-    const input = bay.input;
-    const viewColumn = bay.group.viewColumn;
-
-    if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputNotebook) {
-      return `${input.uri.toString()}-${viewColumn}`;
-    }
-
-    if (input instanceof vscode.TabInputTextDiff) {
-      return `${input.original.toString()}-${viewColumn}`;
-    }
-
-    if (input instanceof vscode.TabInputWebview) {
-      const viewType = (input as any).viewType || 'webview';
-      return `webview:${viewType}-${viewColumn}`;
-    }
-
-    if (input instanceof vscode.TabInputCustom) {
-      return `${input.uri.toString()}-${viewColumn}`;
-    }
-
-    return undefined;
   }
 }

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { convertToBay } from '../helpers/tabConverter';
+import { convertToBay, generateIdFromNativeTab } from '../helpers/tabConverter';
 import { BayStateService } from '../BayStateService';
 import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
@@ -93,7 +93,7 @@ export class BayEventService {
     }
 
     for (const bay of event.closed) {
-      const id = this.generateIdFromTab(bay);
+      const id = generateIdFromNativeTab(bay);
       if (!id) { continue; }
 
       const existingBay = this.stateService.getBayById(id);
@@ -104,7 +104,7 @@ export class BayEventService {
     }
 
     for (const bay of event.changed) {
-      const id = this.generateIdFromTab(bay);
+      const id = generateIdFromNativeTab(bay);
       if (!id) { continue; }
 
       const existingBay = this.stateService.getBayById(id);
@@ -148,33 +148,6 @@ export class BayEventService {
     if (hasChanges) {
       this.stateService.notifyChange();
     }
-  }
-
-  /**
-   * Genera un ID desde un native tab sin crear un Bay completo.
-   */
-  private generateIdFromTab(bay: vscode.Tab): string | undefined {
-    const input = bay.input;
-    const viewColumn = bay.group.viewColumn;
-
-    if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputNotebook) {
-      return `${input.uri.toString()}-${viewColumn}`;
-    }
-    
-    if (input instanceof vscode.TabInputTextDiff) {
-      return `${input.original.toString()}-${viewColumn}`;
-    }
-    
-    if (input instanceof vscode.TabInputWebview) {
-      const viewType = (input as any).viewType || 'webview';
-      return `webview:${viewType}-${viewColumn}`;
-    }
-    
-    if (input instanceof vscode.TabInputCustom) {
-      return `${input.uri.toString()}-${viewColumn}`;
-    }
-
-    return undefined;
   }
 
   /**
