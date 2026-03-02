@@ -56,20 +56,20 @@ export type DocumentManagerConfig = {
  * Bay mantiene solo referencias (documentModelId) y datos visuales.
  * 
  * Patrón de uso:
- * 1. TabSyncService detecta nuevo documento/diff
+ * 1. BaySyncService detecta nuevo documento/diff
  * 2. Llama a DocumentManagerService.getOrCreateDocument()
  * 3. Registra versiones con registerDocumentVersion()
  * 4. BayHierarchyService consulta stats via getDocumentStats()
  * 5. UI consulta metadata via getDocument()
  * 
  * @see DocumentModel for data structure
- * @see TabSyncService for integration
+ * @see BaySyncService for integration
  */
 export class DocumentManagerService {
   private documents: Map<string, DocumentModel> = new Map();
   private cleanupTimers: Map<string, NodeJS.Timeout> = new Map();
   private config: DocumentManagerConfig;
-  
+
   constructor(
     private tabStateService: BayStateService,
     config?: Partial<DocumentManagerConfig>
@@ -80,10 +80,10 @@ export class DocumentManagerService {
       maxCachedDocuments: config?.maxCachedDocuments ?? 100,
       persistSnapshots: config?.persistSnapshots ?? true,
     };
-    
+
     Logger.log(`[DocumentManager] Initialized with config: ${JSON.stringify(this.config)}`);
   }
-  
+
   /**
    * Obtiene un documento por su URI base.
    * 
@@ -93,15 +93,15 @@ export class DocumentManagerService {
   getDocument(baseUri: vscode.Uri): DocumentModel | undefined {
     const key = this.normalizeUri(baseUri);
     const document = this.documents.get(key);
-    
+
     if (document) {
       touchDocument(document);
       this.resetCleanupTimer(key);
     }
-    
+
     return document;
   }
-  
+
   /**
    * Obtiene un documento por su ID.
    * 
@@ -121,7 +121,7 @@ export class DocumentManagerService {
   getAllDocuments(): DocumentModel[] {
     return Array.from(this.documents.values());
   }
-  
+
   /**
    * Crea un nuevo documento o retorna el existente.
    * 
@@ -131,32 +131,32 @@ export class DocumentManagerService {
   getOrCreateDocument(options: CreateDocumentModelOptions): DocumentModel {
     const key = this.normalizeUri(options.baseUri);
     let document = this.documents.get(key);
-    
+
     if (document) {
       // Update references if needed
       if (options.parentBayId && !document.parentBayId) {
         document.parentBayId = options.parentBayId;
       }
-      
+
       touchDocument(document);
       this.resetCleanupTimer(key);
-      
+
       Logger.log(`[DocumentManager] Retrieved existing document: ${document.fileName}`);
       return document;
     }
-    
+
     // Create new document
     document = createDocumentModel(options);
     this.documents.set(key, document);
-    
+
     // Check cache size
     this.enforceMaxCacheSize();
-    
+
     Logger.log(`[DocumentManager] Created new document: ${document.fileName} (id: ${document.documentId})`);
-    
+
     return document;
   }
-  
+
   /**
    * Registra una nueva versión (diff) en un documento.
    * 

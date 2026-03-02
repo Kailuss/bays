@@ -4,42 +4,26 @@ import { Bay } from '../../../models/Bay';
 import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers } from '../../../models/BayHelpers';
 import type { GitSyncService } from '../../integration/GitSyncService';
-import { formatFilePath } from '../../../utils/helpers';
+import { formatFilePath } from '../../../utils/pathFormatters';
 import { classifyDiffType, determineParentId } from './tabClassifier';
 
 /**
- * Funciones puras para convertir tabs nativas de VS Code a Bays.
- * 
- * Separado de TabSyncService para:
- * - Facilitar testing (funciones puras, sin estado)
- * - Reducir complejidad de TabSyncService
- * - Reutilización en otros módulos
- * 
- * IMPORTANTE:
- * - Las tabs de webview (Settings, Extensions) tienen uri: undefined
- * - NUNCA crear URIs falsas (untitled:, bays://) → causa [UriError]
- * - Todas las 4 TabInput types deben ser soportadas
- * 
- * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
- */
-
-/**
- * Convierte una bay nativa de VS Code a nuestro modelo Bay.
+ * Convierte una tab nativa de VS Code a nuestro modelo Bay.
  * 
  * Explicación simple:
  * - Si es un archivo (texto, editor custom, notebook) recoge la uri, el nombre
  *   del archivo, la ruta relativa y la extensión.
- * - Si es una bay webview (Settings, Extensions, Welcome), NO crea una URI
+ * - Si es una tab webview (Settings, Extensions, Welcome), NO crea una URI
  *   falsa; deja uri sin definir y genera un id estable basado en la etiqueta.
  * - El método solo transforma datos y devuelve un Bay listo para la UI.
  * 
- * @param bay Bay nativa de VS Code
+ * @param VSTab Tab nativa de VS Code
  * @param gitService Servicio de Git para obtener git status
  * @param index Índice opcional en el grupo
  * @returns Bay o null si el tipo no es soportado
  */
 export function convertToBay(
-  bay: vscode.Tab,
+  VSTab: vscode.Tab,
   gitService: GitSyncService,
   index?: number
 ): Bay | null {
@@ -55,57 +39,57 @@ export function convertToBay(
   let originalUri: vscode.Uri | undefined;
   let modifiedUri: vscode.Uri | undefined;
 
-  if (bay.input instanceof vscode.TabInputText) {
-    uri = bay.input.uri;
+  if (VSTab.input instanceof vscode.TabInputText) {
+    uri = VSTab.input.uri;
     label = path.basename(uri.fsPath);
     description = formatFilePath(uri, { useWorkspaceRelative: true });
     tooltip = uri.fsPath;
     fileType = path.extname(uri.fsPath);
     tabType = 'file';
   }
-  else if (bay.input instanceof vscode.TabInputTextDiff) {
+  else if (VSTab.input instanceof vscode.TabInputTextDiff) {
     // Tabs diff (Working Tree, Staged Changes, Snapshots, Compares, etc.)
     // Usar la URI modificada como URI primaria (lado derecho del diff)
-    originalUri = bay.input.original;
-    modifiedUri = bay.input.modified;
+    originalUri = VSTab.input.original;
+    modifiedUri = VSTab.input.modified;
     uri = modifiedUri;
     
     if (uri) {
-      label = bay.label;
+      label = VSTab.label;
       description = formatFilePath(uri, { useWorkspaceRelative: true });
       tooltip = `${originalUri?.fsPath || '?'} ↔ ${uri.fsPath}`;
       fileType = path.extname(uri.fsPath);
     } else {
       // Caso raro donde el diff no tiene URI modificada
-      label = bay.label;
+      label = VSTab.label;
       description = undefined;
-      tooltip = bay.label;
+      tooltip = VSTab.label;
       fileType = '';
     }
     tabType = 'file'; // Variants are file type with parentId
   }
-  else if (bay.input instanceof vscode.TabInputWebview) {
+  else if (VSTab.input instanceof vscode.TabInputWebview) {
     // Tabs webview: Settings, Extensions, etc.
     // CRÍTICO: NO crear URIs falsas → uri permanece undefined
     uri = undefined;
-    label = bay.label;
+    label = VSTab.label;
     description = undefined;
-    tooltip = bay.label;
+    tooltip = VSTab.label;
     fileType = '';
     tabType = 'webview';
-    viewType = bay.input.viewType;
+    viewType = VSTab.input.viewType;
   }
-  else if (bay.input instanceof vscode.TabInputCustom) {
-    uri = bay.input.uri;
-    label = path.basename(uri.fsPath) || bay.label || 'Custom';
+  else if (VSTab.input instanceof vscode.TabInputCustom) {
+    uri = VSTab.input.uri;
+    label = path.basename(uri.fsPath) || VSTab.label || 'Custom';
     description = formatFilePath(uri, { useWorkspaceRelative: true });
     tooltip = uri.fsPath;
     fileType = path.extname(uri.fsPath);
     tabType = 'custom';
-    viewType = bay.input.viewType;
+    viewType = VSTab.input.viewType;
   }
-  else if (bay.input instanceof vscode.TabInputNotebook) {
-    uri = bay.input.uri;
+  else if (VSTab.input instanceof vscode.TabInputNotebook) {
+    uri = VSTab.input.uri;
     label = path.basename(uri.fsPath);
     description = formatFilePath(uri, { useWorkspaceRelative: true });
     tooltip = uri.fsPath;
@@ -115,13 +99,13 @@ export function convertToBay(
   else {
     // Tipo desconocido - capturar como fallback
     uri = undefined;
-    label = bay.label;
+    label = VSTab.label;
     description = undefined;
-    tooltip = bay.label;
+    tooltip = VSTab.label;
     tabType = 'file'; // Fallback to file type
   }
 
-  const viewColumn = bay.group.viewColumn;
+  const viewColumn = VSTab.group.viewColumn;
 
   // Calcular parentId y diffType para tabs diff (vincular al bay de archivo correspondiente)
   let parentId: string | undefined;
@@ -129,13 +113,13 @@ export function convertToBay(
   let diffStats: import('../../../models/Bay').DiffStats | undefined;
   
   // Caso 1: Tabs diff (TabInputTextDiff) - identified by having originalUri
-  if (bay.input instanceof vscode.TabInputTextDiff && uri) {
+  if (VSTab.input instanceof vscode.TabInputTextDiff && uri) {
     // Clasificar el tipo de diff basándose en el label y URIs
     diffType = classifyDiffType(label, originalUri, modifiedUri);
     
     // Si es una edición de Copilot, extraer stats del label aquí
     if (diffType === 'edit') {
-      const statsMatch = bay.label.match(/[+](\d+)[-](\d+)/);
+      const statsMatch = VSTab.label.match(/[+](\d+)[-](\d+)/);
       if (statsMatch) {
         diffStats = {
           linesAdded: parseInt(statsMatch[1], 10),
@@ -170,15 +154,15 @@ export function convertToBay(
     viewType,
   };
 
-  // ✨ FASE 2: Enriquecer metadata con propiedades computadas
+  // ✨ FASE 2: Enriquece metadata con propiedades derivadas (sin acceder a estado aún)
   const metadata = BayHelpers.enrichMetadata(baseMetadata);
 
-  // Construir estado base desde bay de VS Code
+  // Construir estado base desde tab de VS Code
   const baseState = {
-    isActive: bay.isActive,
-    isDirty: bay.isDirty,
-    isPinned: bay.isPinned,
-    isPreview: bay.isPreview,
+    isActive: VSTab.isActive,
+    isDirty: VSTab.isDirty,
+    isPinned: VSTab.isPinned,
+    isPreview: VSTab.isPreview,
     groupId: viewColumn,
     viewColumn,
     indexInGroup: index ?? 0,
@@ -201,10 +185,10 @@ export function convertToBay(
   // Construir estado final con todas las propiedades requeridas
   const state: BayState = {
     // VS CODE NATIVE STATE
-    isActive: bay.isActive,
-    isDirty: bay.isDirty,
-    isPinned: bay.isPinned,
-    isPreview: bay.isPreview,
+    isActive: VSTab.isActive,
+    isDirty: VSTab.isDirty,
+    isPinned: VSTab.isPinned,
+    isPreview: VSTab.isPreview,
     
     // LOCATION
     groupId: viewColumn,

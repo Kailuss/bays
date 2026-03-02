@@ -1,3 +1,14 @@
+import * as vscode from 'vscode';
+
+/**
+ * Devuelve un `ThemeIcon` genérico según la extensión del archivo.
+ * Uso: únicamente como opción de reserva cuando el tema de iconos no encuentra uno.
+ */
+export function getFileIcon(uri: vscode.Uri): vscode.ThemeIcon {
+  const ext = uri.fsPath.split('.').pop()?.toLowerCase();
+  return new vscode.ThemeIcon(fileIconMap[ext || ''] || 'file');
+}
+
 /**
  * Mapa de extensiones de archivo a iconos de codicon.
  * Usado como opción de reserva cuando el tema de iconos no proporciona uno.
@@ -20,7 +31,7 @@ export const fileIconMap: Record<string, string> = {
   less   : 'file-code',
   vue    : 'file-code',
   svelte : 'file-code',
-  
+
   // Data/Config
   json   : 'json',
   jsonc  : 'json',
@@ -31,13 +42,13 @@ export const fileIconMap: Record<string, string> = {
   xml    : 'file-code',
   ini    : 'file-code',
   env    : 'file-code',
-  
+
   // Documentation
   md     : 'markdown',
   mdx    : 'markdown',
   txt    : 'file',
   rst    : 'file-code',
-  
+
   // Programming Languages
   py     : 'file-code',
   java   : 'file-code',
@@ -57,7 +68,7 @@ export const fileIconMap: Record<string, string> = {
   scala  : 'file-code',
   r      : 'file-code',
   lua    : 'file-code',
-  
+
   // Shell/Scripts
   sh     : 'terminal',
   bash   : 'terminal',
@@ -65,17 +76,17 @@ export const fileIconMap: Record<string, string> = {
   ps1    : 'terminal',
   bat    : 'terminal',
   cmd    : 'terminal',
-  
+
   // Database
   sql    : 'database',
   sqlite : 'database',
   db     : 'database',
-  
+
   // Build/Config Files
   gradle : 'file-code',
   cmake  : 'file-code',
   make   : 'file-code',
-  
+
   // Images
   png    : 'file-media',
   jpg    : 'file-media',
@@ -84,7 +95,7 @@ export const fileIconMap: Record<string, string> = {
   svg    : 'file-media',
   ico    : 'file-media',
   webp   : 'file-media',
-  
+
   // Binary/Archive
   zip    : 'file-zip',
   tar    : 'file-zip',
@@ -94,7 +105,7 @@ export const fileIconMap: Record<string, string> = {
   exe    : 'file-binary',
   dll    : 'file-binary',
   so     : 'file-binary',
-  
+
   // Others
   pdf    : 'file-pdf',
   log    : 'output',

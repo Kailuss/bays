@@ -2,17 +2,6 @@ import * as vscode from 'vscode';
 import type { DiffType } from '../../../models/Bay';
 
 /**
- * Funciones puras para clasificar tipos de diff y determinar relaciones parent-child.
- * 
- * Separado de TabSyncService para:
- * - Facilitar testing (funciones puras, sin estado)
- * - Reducir complejidad de TabSyncService
- * - Reutilización en otros módulos
- * 
- * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
- */
-
-/**
  * Clasifica un bay diff basándose en su label y URIs.
  * Retorna el tipo específico de diff para mostrar el icono y stats apropiados.
  * 

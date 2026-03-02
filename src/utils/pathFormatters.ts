@@ -1,28 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { fileIconMap } from './fileIconMap';
-
-/**
- * Devuelve un `ThemeIcon` genérico según la extensión del archivo.
- * Uso: únicamente como opción de reserva cuando el tema de iconos no encuentra uno.
- */
-export function getFileIcon(uri: vscode.Uri): vscode.ThemeIcon {
-  const ext = uri.fsPath.split('.').pop()?.toLowerCase();
-  return new vscode.ThemeIcon(fileIconMap[ext || ''] || 'file');
-}
-
-/**
- * Formatea un tamaño en bytes a una cadena legible (B / KB / MB).
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * Opciones de formateo para rutas de archivo.
