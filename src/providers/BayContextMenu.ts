@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
 import { SideTab } from '../models/SideTab';
-import { TabStateService } from '../services/core/TabStateService';
+import { BayStateService } from '../services/core/BayStateService';
 import { CopilotService } from '../services/integration/CopilotService';
 
 /**
  * Maneja el menú contextual de las pestañas.
  * Separado del provider para mantener responsabilidades claras.
  */
-export class TabContextMenu {
+export class BayContextMenu {
   constructor(
-    private readonly stateService: TabStateService,
+    private readonly stateService: BayStateService,
     private readonly copilotService: CopilotService
   ) {}
 

@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { TabIconManager } from '../../services/ui/TabIconManager';
+import { TabIconManager } from '../../services/ui/BayIconManager';
 import { SideTab } from '../../models/SideTab';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
 import { Logger } from '../../utils/logger';
@@ -106,7 +106,7 @@ export class IconRenderer {
         return this.parseIconString(iconData);
       }
     } catch (error) {
-      Logger.error(`[TabsLover] Icon resolution failed for ${fileName}`, error);
+      Logger.error(`[Bays] Icon resolution failed for ${fileName}`, error);
     }
 
     return null;

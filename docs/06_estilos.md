@@ -1,4 +1,4 @@
-# Guía de Estilos - Tabs Lover
+# Guía de Estilos - Bays
 
 ## Índice
 1. [Arquitectura de Estilos](#arquitectura-de-estilos)
@@ -161,7 +161,7 @@ src/styles/
 - `codicon-arrow-down`: Incoming
 - `codicon-arrow-right`: Current
 
-**Renderizado**: `TabsLoverHtmlBuilder.renderChildTab()`
+**Renderizado**: `BaysHtmlBuilder.renderChildTab()`
 
 ---
 
@@ -369,7 +369,7 @@ type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'nuevo-tipo';
 
 2. **Agregar icono** en HTML:
 ```typescript
-// En TabsLoverHtmlBuilder.renderChildTab()
+// En BaysHtmlBuilder.renderChildTab()
 case 'nuevo-tipo':
   iconHtml = '<span class="codicon codicon-mi-icono"></span>';
   break;
@@ -454,7 +454,7 @@ La propiedad `font` shorthand sobrescribe cualquier `font-size` definido en `.ta
 ```
 
 ```typescript
-// En TabsLoverHtmlBuilder.renderChildTab()
+// En BaysHtmlBuilder.renderChildTab()
 const newBadge = tab.metadata.isNew ? ' new' : '';
 return `<div class="tab child-tab${activeClass}${newBadge}" ...>`;
 ```
@@ -463,5 +463,5 @@ return `<div class="tab child-tab${activeClass}${newBadge}" ...>`;
 
 **Ver también**:
 - [Arquitectura](./02_arquitectura.md) → Componentes de renderizado
-- [Implementación](./04_implementacion.md) → TabsLoverHtmlBuilder
+- [Implementación](./04_implementacion.md) → BaysHtmlBuilder
 - [INDEX](./INDEX.md) → Documentación completa

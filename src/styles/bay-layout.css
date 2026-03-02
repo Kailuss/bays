@@ -1,0 +1,32 @@
+/* ===================================================================
+   NORMAL BAYS - Layout principal de bays (no VARIANTS)
+   =================================================================== */
+
+/* Bay Base Layout */
+.bay {
+  display: flex;
+  align-items: center;
+  height: 39px;
+  padding: 0 8px 0 4px;
+  background: var(--vscode-tab-inactiveBackground, transparent);
+  color: var(--vscode-tab-inactiveForeground, var(--vscode-foreground));
+  border-left: 4px solid transparent;
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--vscode-panel-border, rgba(128,128,128,0.35)));
+  cursor: pointer;
+  position: relative;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
+}
+
+/* Compact mode */
+.bay.compact {
+  height: 29px;
+}
+
+/* Text Layout */
+
+/* Inline path in compact mode (inside .bay-name) */
+.bay-path-inline {
+  opacity    : 0.55;
+  font-size  : 0.9em;
+  margin-left: 4px;
+}

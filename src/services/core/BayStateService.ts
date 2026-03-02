@@ -1,20 +1,21 @@
 import * as vscode      from 'vscode';
-import { SideTab }      from '../../models/SideTab';
+import { SideTab, Bay }      from '../../models/SideTab';
 import { SideTabGroup } from '../../models/SideTabGroup';
 import { Logger }       from '../../utils/logger';
-import type { TabHierarchyService } from './TabHierarchyService';
+import type { BayHierarchyService } from './BayHierarchyService';
 import type { DocumentManager } from './DocumentManager';
 
 /**
- * Almacén en memoria de pestañas y grupos — la "fuente de la verdad" para la UI.
- * - `onDidChangeState`: cuando cambia la estructura (abrir/cerrar/mover pestañas).
- * - `onDidChangeStateSilent`: cambios ligeros (ej. solo `isActive`) que no necesitan
- *   una recarga completa del webview.
+ * In-memory store for Bays and groups — the "source of truth" for the UI.
+ * - `onDidChangeState`: structural changes (open/close/move bays).
+ * - `onDidChangeStateSilent`: lightweight changes (e.g. only `isActive`) that don't need
+ *   a full webview rebuild.
  * 
  * REFACTORIZACIÓN: Añadido soporte para hierarchy service.
  * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
+ * @see services/core/AGENT.md
  */
-export class TabStateService {
+export class BayStateService {
   private tabs   : Map<string, SideTab>      = new Map();
   private groups : Map<number, SideTabGroup> = new Map();
   private _isBulkLoading                     = false;
@@ -26,14 +27,14 @@ export class TabStateService {
   readonly onDidChangeTabState               = this._onDidChangeTabState.event;
   
   // Hierarchy service (injected to avoid circular dependency)
-  private hierarchyService?: TabHierarchyService;
+  private hierarchyService?: BayHierarchyService;
   
   // Document manager (injected to avoid circular dependency)
   private documentManager?: DocumentManager;
 
   /** 
-   * ID de la última tab que activó el Markdown Preview.
-   * Se usa para saber qué tab debe mostrarse como activa cuando el preview está visible.
+   * ID de la última bay que activó el Markdown Preview.
+   * Se usa para saber qué bay debe mostrarse como activa cuando el preview está visible.
    */
   private _lastMarkdownPreviewTabId: string | null = null;
 
@@ -47,23 +48,23 @@ export class TabStateService {
 
   /**
    * Inyecta el hierarchy service para evitar dependencia circular.
-   * Llamado desde TabSyncService después de crear TabHierarchyService.
+   * Llamado desde BaySyncService después de crear BayHierarchyService.
    */
-  setHierarchyService(service: TabHierarchyService): void {
+  setHierarchyService(service: BayHierarchyService): void {
     this.hierarchyService = service;
   }
   
   /**
    * Inyecta el document manager para gestión centralizada de documentos.
-   * Llamado desde TabSyncService después de crear DocumentManager.
+   * Llamado desde BaySyncService después de crear DocumentManager.
    */
   setDocumentManager(manager: DocumentManager): void {
     this.documentManager = manager;
   }
 
-  //- Tab management
+  //- Bay management
 
-  // Add a tab (or update if it already exists in the group).
+  // Add a bay (or update if it already exists in the group).
   addTab(tab: SideTab): void {
     this.tabs.set(tab.metadata.id, tab);
 
@@ -75,7 +76,7 @@ export class TabStateService {
       }
     }
     
-    // Create/update document if this is a parent tab with URI
+    // Create/update document if this is a parent bay with URI
     if (this.documentManager && tab.metadata.uri && !tab.metadata.parentId) {
       const document = this.documentManager.getOrCreateDocument(
         tab.metadata.uri,
@@ -86,7 +87,7 @@ export class TabStateService {
       this.documentManager.associateParentTab(document.documentId, tab.metadata.id);
     }
     
-    // Associate child tab with document if parent exists
+    // Associate child bay with document if parent exists
     if (this.documentManager && tab.metadata.parentId && tab.metadata.uri) {
       const parentTab = this.tabs.get(tab.metadata.parentId);
       if (parentTab?.metadata.uri) {
@@ -100,7 +101,7 @@ export class TabStateService {
     if (!this._isBulkLoading) { this._onDidChangeState.fire(); }
   }
 
-  // Remove a tab by id and clean it from its group.
+  // Remove a bay by id and clean it from its group.
   // ✅ NUEVO: Desregistra children del parent si es necesario
   removeTab(id: string): void {
     const tab = this.tabs.get(id);
@@ -108,12 +109,12 @@ export class TabStateService {
       return;
     }
     
-    // Si es child tab, desregistrar del parent
+    // Si es child bay, desregistrar del parent
     if (tab.metadata.parentId && this.hierarchyService) {
       this.hierarchyService.unregisterChild(id, tab.metadata.parentId);
     }
     
-    // Si es parent tab con children, eliminar children primero
+    // Si es parent bay con children, eliminar children primero
     if (tab.state.hasChildren && this.hierarchyService) {
       const children = this.hierarchyService.getChildren(id);
       for (const child of children) {
@@ -136,7 +137,7 @@ export class TabStateService {
       // Cleanup document associations
       if (this.documentManager) {
         if (tab.metadata.parentId) {
-          // Desasociar child tab del documento
+          // Desasociar child bay del documento
           const parentTab = this.tabs.get(tab.metadata.parentId);
           if (parentTab?.metadata.uri) {
             const document = this.documentManager.getDocumentByUri(parentTab.metadata.uri);
@@ -145,7 +146,7 @@ export class TabStateService {
             }
           }
         } else if (tab.metadata.uri) {
-          // Desasociar parent tab del documento
+          // Desasociar parent bay del documento
           const document = this.documentManager.getDocumentByUri(tab.metadata.uri);
           if (document) {
             this.documentManager.dissociateParentTab(document.documentId);
@@ -158,7 +159,7 @@ export class TabStateService {
     }
   }
 
-  // Update a tab in-place (both the map and its group array).
+  // Update a bay in-place (both the map and its group array).
   updateTab(tab: SideTab): void {
     this.tabs.set(tab.metadata.id, tab);
 
@@ -173,7 +174,7 @@ export class TabStateService {
     this._onDidChangeState.fire();
   }
 
-  // Update a tab without triggering tree refresh (for silent state updates like isActive).
+  // Update a bay without triggering tree refresh (for silent state updates like isActive).
   updateTabSilent(tab: SideTab): void {
     this.tabs.set(tab.metadata.id, tab);
 
@@ -187,7 +188,7 @@ export class TabStateService {
     this._onDidChangeStateSilent.fire();
   }
 
-  // Update a tab's diagnostic/git state and notify for animation.
+  // Update a bay's diagnostic/git state and notify for animation.
   updateTabStateWithAnimation(tab: SideTab): void {
     this.tabs.set(tab.metadata.id, tab);
 
@@ -204,6 +205,17 @@ export class TabStateService {
     this._onDidChangeTabState.fire(tab.metadata.id);
   }
 
+  /**
+   * Fetch a bay by ID (canonical method name per AGENT.md).
+   * @returns Bay instance or undefined if not found
+   */
+  fetchBayById(id: string): Bay | undefined {
+    return this.tabs.get(id);
+  }
+
+  /**
+   * @deprecated Use fetchBayById() for consistency with AGENT.md
+   */
   getTab(id: string): SideTab | undefined {
     return this.tabs.get(id);
   }
@@ -217,12 +229,12 @@ export class TabStateService {
     return group ? [...group.tabs] : [];
   }
 
-  // Replace all tabs with a new set (used during full sync).
+  // Replace all bays with a new set (used during full sync).
   replaceTabs(tabs: SideTab[]): void {
     this._isBulkLoading = true;
     this.tabs.clear();
 
-    // Clear tabs from all groups
+    // Clear bays from all groups
     this.groups.forEach(group => {
       group.tabs = [];
     });
@@ -261,7 +273,7 @@ export class TabStateService {
 
   //- Search
 
-  // Buscar una pestaña por su URI; opcionalmente limitar al grupo indicado.
+  // Buscar una bay por su URI; opcionalmente limitar al grupo indicado.
   findTabByUri(uri: vscode.Uri, groupId?: number): SideTab | undefined {
     const uriString = uri.toString();
 
@@ -279,8 +291,8 @@ export class TabStateService {
   //- Pin / unpin reordering
 
   /**
-   * Reordena una tab después de pin/unpin.
-   * Mueve la tab justo después de la última tab pinneada en su grupo.
+   * Reordena una bay después de pin/unpin.
+   * Mueve la bay justo después de la última bay pinneada en su grupo.
    */
   private reorderAfterPinChange(tabId: string): void {
     const tab = this.tabs.get(tabId);
@@ -289,12 +301,12 @@ export class TabStateService {
     const group = this.groups.get(tab.state.groupId);
     if (!group) { return; }
 
-    // Remove the tab from its current position
+    // Remove the bay from its current position
     const idx = group.tabs.findIndex(t => t.metadata.id === tabId);
     if (idx === -1) { return; }
     group.tabs.splice(idx, 1);
 
-    // Find the insertion point: after the last pinned tab
+    // Find the insertion point: after the last pinned bay
     let insertAt = 0;
     for (let i = 0; i < group.tabs.length; i++) {
       if (group.tabs[i].state.isPinned) { insertAt = i + 1; }
@@ -305,16 +317,16 @@ export class TabStateService {
   }
 
   /**
-   * Moves a tab to just after the last pinned tab in its group.
-   * Called after the tab is pinned so it visually moves up.
+   * Moves a bay to just after the last pinned bay in its group.
+   * Called after the bay is pinned so it visually moves up.
    */
   reorderOnPin(tabId: string): void {
     this.reorderAfterPinChange(tabId);
   }
 
   /**
-   * Moves a tab to the first position among non-pinned tabs in its group.
-   * Called after the tab is unpinned.
+   * Moves a bay to the first position among non-pinned bays in its group.
+   * Called after the bay is unpinned.
    */
   reorderOnUnpin(tabId: string): void {
     this.reorderAfterPinChange(tabId);

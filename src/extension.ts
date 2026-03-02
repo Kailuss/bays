@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { TabsLoverWebviewProvider } from './providers/TabsLoverWebviewProvider';
-import { TabStateService } from './services/core/TabStateService';
+import { BaysWebviewProvider } from './providers/BaysWebviewProvider';
+import { BayStateService } from './services/core/BayStateService';
 import { TabSyncService } from './services/core/TabSyncService';
-import { TabDragDropService } from './services/ui/TabDragDropService';
+import { BayDragDropService } from './services/ui/BayDragDropService';
 import { FileActionRegistry } from './services/registry/FileActionRegistry';
-import { TabIconManager } from './services/ui/TabIconManager';
+import { TabIconManager } from './services/ui/BayIconManager';
 import { ThemeService } from './services/ui/ThemeService';
 import { CopilotService } from './services/integration/CopilotService';
 import { registerTabCommands } from './commands/tabCommands';
@@ -13,13 +13,13 @@ import { Logger } from './utils/logger';
 
 export async function activate(context: vscode.ExtensionContext) {
   Logger.initialize();
-  Logger.log('Activating Tabs Lover…');
+  Logger.log('Activating Bays…');
 
   try {
     // Core services
-    const stateService  = new TabStateService();
+    const stateService  = new BayStateService();
     const syncService   = new TabSyncService(stateService);
-    const dragDropService = new TabDragDropService(stateService);
+    const dragDropService = new BayDragDropService(stateService);
     const fileActionRegistry = new FileActionRegistry();
     const iconManager   = new TabIconManager();
     const themeService  = new ThemeService();
@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await iconManager.initialize(context);
     
     // WebviewView provider
-    const provider = new TabsLoverWebviewProvider(
+    const provider = new BaysWebviewProvider(
       context.extensionUri,
       stateService,
       syncService,
@@ -43,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider(
-        TabsLoverWebviewProvider.viewType,
+        BaysWebviewProvider.viewType,
         provider,
       ),
     );
@@ -51,7 +51,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Configuration reload
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('tabsLover')) { provider.refresh(); }
+        if (e.affectsConfiguration('bays')) { provider.refresh(); }
       }),
     );
 
@@ -67,7 +67,7 @@ export async function activate(context: vscode.ExtensionContext) {
     registerCopilotCommands(context, copilotService, stateService);
 
     context.subscriptions.push(
-      vscode.commands.registerCommand('tabsLover.refresh', () => provider.refresh()),
+      vscode.commands.registerCommand('bays.refresh', () => provider.refresh()),
     );
 
     // Refresh on theme change
@@ -76,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Refresh when icons are reloaded (e.g., theme change)
     iconManager.onDidInitialize(() => provider.refresh());
 
-    Logger.log('Tabs Lover activated successfully');
+    Logger.log('Bays activated successfully');
   } catch (error) {
     Logger.error('Activation failed', error);
     throw error;

@@ -23,7 +23,7 @@ import {
   getDocumentSummary,
 } from '../../models/DocumentModel';
 import type { DiffType, DiffStats } from '../../models/SideTab';
-import type { TabStateService } from './TabStateService';
+import type { BayStateService } from './BayStateService';
 import { Logger } from '../../utils/logger';
 
 /**
@@ -59,7 +59,7 @@ export type DocumentManagerConfig = {
  * 1. TabSyncService detecta nuevo documento/diff
  * 2. Llama a DocumentManagerService.getOrCreateDocument()
  * 3. Registra versiones con registerDocumentVersion()
- * 4. TabHierarchyService consulta stats via getDocumentStats()
+ * 4. BayHierarchyService consulta stats via getDocumentStats()
  * 5. UI consulta metadata via getDocument()
  * 
  * @see DocumentModel for data structure
@@ -71,7 +71,7 @@ export class DocumentManagerService {
   private config: DocumentManagerConfig;
   
   constructor(
-    private tabStateService: TabStateService,
+    private tabStateService: BayStateService,
     config?: Partial<DocumentManagerConfig>
   ) {
     this.config = {

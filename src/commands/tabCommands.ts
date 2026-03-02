@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TabStateService } from '../services/core/TabStateService';
+import { BayStateService } from '../services/core/BayStateService';
 import { VSCODE_COMMANDS } from '../constants/commands';
 
 /**
@@ -8,83 +8,83 @@ import { VSCODE_COMMANDS } from '../constants/commands';
  */
 export function registerTabCommands(
   context: vscode.ExtensionContext,
-  stateService: TabStateService
+  stateService: BayStateService
 ): void {
   const resolve = (arg: unknown) => {
-    if (typeof arg === 'string') { return stateService.getTab(arg); }
+    if (typeof arg === 'string') { return stateService.fetchBayById(arg); }
     return undefined;
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('tabsLover.openTab', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.openTab', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.activate(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.closeTab', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.closeTab', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.close(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.closeOthers', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.closeOthers', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.closeOthers(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.closeToRight', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.closeToRight', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.closeToRight(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.closeAll', async () => {
+    vscode.commands.registerCommand('bays.closeAll', async () => {
       await vscode.commands.executeCommand(VSCODE_COMMANDS.CLOSE_ALL_EDITORS);
     }),
 
-    vscode.commands.registerCommand('tabsLover.saveAll', async () => {
+    vscode.commands.registerCommand('bays.saveAll', async () => {
       await vscode.workspace.saveAll(false);
     }),
 
-    vscode.commands.registerCommand('tabsLover.reorder', () => {
+    vscode.commands.registerCommand('bays.reorder', () => {
       vscode.window.showInformationMessage('Reorder: Coming soon');
     }),
 
-    vscode.commands.registerCommand('tabsLover.toggleCompactMode', async () => {
-      const cfg = vscode.workspace.getConfiguration('tabsLover');
+    vscode.commands.registerCommand('bays.toggleCompactMode', async () => {
+      const cfg = vscode.workspace.getConfiguration('bays');
       const current = cfg.get<boolean>('compactMode', false);
       await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
     }),
 
-    vscode.commands.registerCommand('tabsLover.pinTab', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.pinTab', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.pin(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.unpinTab', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.unpinTab', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.unpin(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.revealInExplorer', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.revealInExplorer', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.revealInExplorer(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.copyRelativePath', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.copyRelativePath', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.copyRelativePath(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.copyFileContents', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.copyFileContents', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.copyFileContents(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.compareWithActive', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.compareWithActive', async (arg: unknown) => {
       const tab = resolve(arg);
       if (tab) { await tab.compareWithActive(); }
     }),
 
-    vscode.commands.registerCommand('tabsLover.moveToGroup', async (arg: unknown) => {
+    vscode.commands.registerCommand('bays.moveToGroup', async (arg: unknown) => {
       const tab = resolve(arg);
       if (!tab) { return; }
 

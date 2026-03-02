@@ -17,7 +17,7 @@ import { classifyDiffType, determineParentId } from './tabClassifier';
  * 
  * IMPORTANTE:
  * - Las tabs de webview (Settings, Extensions) tienen uri: undefined
- * - NUNCA crear URIs falsas (untitled:, tabslover://) → causa [UriError]
+ * - NUNCA crear URIs falsas (untitled:, bays://) → causa [UriError]
  * - Todas las 4 TabInput types deben ser soportadas
  * 
  * @see docs/PLAN_OPTIMIZACION_TABSYNC.md

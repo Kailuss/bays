@@ -9,7 +9,7 @@
  */
 
 import * as vscode from 'vscode';
-import { TabIconManager } from '../services/ui/TabIconManager';
+import { TabIconManager } from '../services/ui/BayIconManager';
 import type { DocumentManager } from '../services/core/DocumentManager';
 import { SideTab } from '../models/SideTab';
 import { SideTabGroup } from '../models/SideTabGroup';
@@ -18,7 +18,7 @@ import { getStateIndicator } from '../utils/stateIndicator';
 import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris } from './html';
 import { getDiffTypeDisplay, getDiffTypeBadgeHtml } from '../constants/diffTypes';
 
-export class TabsLoverHtmlBuilder {
+export class BaysHtmlBuilder {
   private readonly iconRenderer: IconRenderer;
   private readonly stylesBuilder: StylesBuilder;
 

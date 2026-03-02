@@ -3,50 +3,50 @@ import { getConfiguration }         from '../constants/styles';
 import { TIMINGS }                  from '../constants/timings';
 import { SideTab }                  from '../models/SideTab';
 import type { TabViewMode }         from '../models/SideTab';
-import { TabStateService }          from '../services/core/TabStateService';
-import { TabIconManager }           from '../services/ui/TabIconManager';
+import { BayStateService }          from '../services/core/BayStateService';
+import { TabIconManager }           from '../services/ui/BayIconManager';
 import { CopilotService }           from '../services/integration/CopilotService';
-import { TabDragDropService }       from '../services/ui/TabDragDropService';
+import { BayDragDropService }       from '../services/ui/BayDragDropService';
 import { FileActionRegistry }       from '../services/registry/FileActionRegistry';
 import { Logger }                   from '../utils/logger';
-import { TabsLoverHtmlBuilder }     from './TabsLoverHtmlBuilder';
-import { TabContextMenu }           from './TabContextMenu';
+import { BaysHtmlBuilder }          from './BaysHtmlBuilder';
+import { BayContextMenu }           from './BayContextMenu';
 
 /**
  * Proveedor del Webview que coordina la vista de pestañas.
  * Gestiona el ciclo de vida del webview, mensajes y eventos.
- * La generación de HTML se delega a `TabsLoverHtmlBuilder`.
+ * La generación de HTML se delega a `BaysHtmlBuilder`.
  */
-export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider { 
-  public static readonly viewType = 'tabsLover';
+export class BaysWebviewProvider implements vscode.WebviewViewProvider { 
+  public static readonly viewType = 'bays';
 
   private _view?: vscode.WebviewView;
   private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private _fullRefreshPending = false;
   private _initialLoadComplete = false;
-  private readonly htmlBuilder: TabsLoverHtmlBuilder;
-  private readonly contextMenu: TabContextMenu;
+  private readonly htmlBuilder: BaysHtmlBuilder;
+  private readonly contextMenu: BayContextMenu;
 
   constructor(
     private readonly _extensionUri  : vscode.Uri,
-    private readonly stateService   : TabStateService,
+    private readonly stateService   : BayStateService,
     private readonly syncService    : any, // TabSyncService (any para evitar import cíclico)
     private readonly copilotService : CopilotService,
     private readonly iconManager    : TabIconManager,
     private readonly context        : vscode.ExtensionContext,
-    private readonly dragDropService: TabDragDropService,
+    private readonly dragDropService: BayDragDropService,
     private readonly fileActionRegistry: FileActionRegistry,
   ) {
     // Get DocumentManager from syncService if available
     const documentManager = this.syncService?.getDocumentManager?.();
-    this.htmlBuilder = new TabsLoverHtmlBuilder(_extensionUri, iconManager, context, fileActionRegistry, documentManager);
-    this.contextMenu = new TabContextMenu(stateService, copilotService);
+    this.htmlBuilder = new BaysHtmlBuilder(_extensionUri, iconManager, context, fileActionRegistry, documentManager);
+    this.contextMenu = new BayContextMenu(stateService, copilotService);
     // Full rebuild on structural changes
     stateService.onDidChangeState(() => this.refresh());
     // Partial update for lightweight changes (active tab only)
     stateService.onDidChangeStateSilent(() => this.refreshSilent());
     // Notify tab state changes for animation
-    stateService.onDidChangeTabState((tabId) => this.notifyTabStateChanged(tabId));
+    stateService.onDidChangeTabState((tabId: string) => this.notifyTabStateChanged(tabId));
     // Rebuild when workspace folders change (updates header title)
     vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh());
   }
@@ -82,7 +82,7 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
    * Pequeño debounce para evitar repintados repetidos cuando cambian muchos eventos.
    */
   refresh(): void {
-    Logger.log('[TabsLover] refresh() called, view exists: ' + !!this._view);
+    Logger.log('[Bays] refresh() called, view exists: ' + !!this._view);
     if (!this._view) { return; }
     this._fullRefreshPending = true;
     if (this._debounceTimer) { clearTimeout(this._debounceTimer); }
@@ -95,7 +95,7 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
       const groups       = this.stateService.getGroups();
       const copilotReady = this.copilotService.isAvailable();
       
-      Logger.log('[TabsLover] Building HTML, groups: ' + groups.length);
+      Logger.log('[Bays] Building HTML, groups: ' + groups.length);
 
       this._view.webview.html = await this.htmlBuilder.buildHtml({
         webview        : this._view.webview,
@@ -114,7 +114,7 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
       // Also update the native VS Code panel title
       this._view.title = this.getWorkspaceName();
       
-      Logger.log('[TabsLover] HTML assigned to webview');
+      Logger.log('[Bays] HTML assigned to webview');
     }, TIMINGS.WEBVIEW_REFRESH_DEBOUNCE);
   }
 
@@ -175,7 +175,7 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
 
         const tab = this.findTab(msg.tabId);
         if (!tab) {
-          Logger.warn('[TabsLover] Tab not found for activation (likely closed): ' + msg.tabId);
+          Logger.warn('[Bays] Tab not found for activation (likely closed): ' + msg.tabId);
           // La tab ya no existe - hacer refresh inmediato para limpiar
           this.refresh();
           return;
@@ -190,14 +190,14 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
           await tab.activate();
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : String(err);
-          Logger.error('[TabsLover] Failed to activate tab: ' + tab.metadata.label, err);
+          Logger.error('[Bays] Failed to activate tab: ' + tab.metadata.label, err);
 
           // Si el error indica que la tab no existe o no corresponde al documento activo,
           // hacer refresh para limpiar
           if (errorMsg.includes('not found') || 
               errorMsg.includes('no longer exists') ||
               errorMsg.includes('does not correspond')) {
-            Logger.log('[TabsLover] Tab was closed/removed or mismatch, refreshing to sync state');
+            Logger.log('[Bays] Tab was closed/removed or mismatch, refreshing to sync state');
             this.refresh();
           }
         }
@@ -305,7 +305,7 @@ export class TabsLoverWebviewProvider implements vscode.WebviewViewProvider {
         break;
       }
       case 'toggleCompactMode': {
-        const cfg = vscode.workspace.getConfiguration('tabsLover');
+        const cfg = vscode.workspace.getConfiguration('bays');
         const current = cfg.get<boolean>('compactMode', false);
         await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
         break;

@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "tabs-lover" extension will be documented in this file.
+All notable changes to the "bays" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
@@ -8,7 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 - **Cursor Position Synchronization**: New experimental feature to sync cursor position between parent tabs and their children (diffs, snapshots, etc.)
-  - Enable with `tabsLover.syncCursorPosition` setting
+  - Enable with `bays.syncCursorPosition` setting
   - When moving cursor in parent, all children update to same line/column
   - When moving cursor in child, parent and siblings sync automatically
   - Works bidirectionally between any member of a tab family

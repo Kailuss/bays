@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { TabStateService } from '../core/TabStateService';
+import { BayStateService } from '../core/BayStateService';
 import type { GitStatus } from '../../models/SideTab';
 
 /**
@@ -12,7 +12,7 @@ export class GitSyncService {
   private _gitRepoListeners = new Set<string>();
   private _gitOpenRepoListenerAttached = false;
 
-  constructor(private stateService: TabStateService) {}
+  constructor(private stateService: BayStateService) {}
 
   activate(context: vscode.ExtensionContext): void {
     this._gitApi = this.resolveGitApi();

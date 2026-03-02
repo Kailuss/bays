@@ -232,7 +232,7 @@ async function showImageInfo(tab: SideTab): Promise<void> {
  * Demuestra uso dinámico de Permissions.
  */
 export function updateImagePermissions(allTabs: SideTab[]): void {
-  const config = vscode.workspace.getConfiguration('tabsLover.imageOptimization');
+  const config = vscode.workspace.getConfiguration('bays.imageOptimization');
   const allowOptimization = config.get<boolean>('enabled', true);
   const protectedExtensions = config.get<string[]>('protectedExtensions', ['.svg']);
 

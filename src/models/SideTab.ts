@@ -12,6 +12,10 @@ export type EditMode = 'readonly' | 'editable';
 //: Diff type for child tabs (diff visualizations)
 export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'unknown';
 
+// Bay nomenclature aliases (future architecture)
+//: Bay type simplified (4 types: file, webview, custom, notebook)
+export type BayType = 'file' | 'webview' | 'custom' | 'notebook';
+
 /**
  * Diff statistics for child tabs
  */
@@ -192,6 +196,19 @@ export type SideTabCapabilities = {
   supportsDiagnostics : boolean; // Has diagnostics (errors/warnings)
 };
 
+// Bay nomenclature aliases (future architecture - simplified capabilities)
+/**
+ * Bay capabilities - Simplified to 5 core capabilities.
+ * Other capabilities computed on-demand from state/metadata.
+ */
+export type BayCapabilities = {
+  canClose            : boolean; // Can be closed
+  canPin              : boolean; // Can be pinned
+  canRevealInExplorer : boolean; // Has physical file to reveal
+  canTogglePreview    : boolean; // Can toggle source ↔ preview (MD, SVG...)
+  canHaveChildren     : boolean; // Can have child tabs (variants)
+};
+
 //: Mutable runtime state of a tab.
 export type SideTabState = {
   //: VS CODE NATIVE STATE (synchronized)
@@ -253,8 +270,12 @@ export type SideTabState = {
   shortcuts?         : TabShortcuts;         // Custom keybindings
 }
 
+// Bay nomenclature aliases (future architecture)
+export type BayMetadata = SideTabMetadata;
+export type BayState = SideTabState;
+
 /**
- * Representa una pestaña en la barra lateral de Tabs Lover.
+ * Representa una pestaña en la barra lateral de Bays.
  * En pocas palabras: guarda la información que mostramos (nombre, ruta, icono)
  * y ofrece métodos para las acciones que el usuario puede realizar (abrir, cerrar, pinear...).
  * Los métodos de acción están definidos en SideTabActions (herencia).
@@ -280,3 +301,6 @@ export class SideTab extends SideTabActions {
     super();
   }
 }
+
+// Bay nomenclature alias (future architecture) - TYPE ONLY
+export type Bay = SideTab;

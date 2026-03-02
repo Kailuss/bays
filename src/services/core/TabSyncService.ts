@@ -1,7 +1,7 @@
 import * as vscode                                             from 'vscode';
-import { TabStateService }                                     from './TabStateService';
+import { BayStateService }                                     from './BayStateService';
 import { GitSyncService }                                      from '../integration/GitSyncService';
-import { TabHierarchyService }                                 from './TabHierarchyService';
+import { BayHierarchyService }                                 from './BayHierarchyService';
 import { DocumentManager }                                     from './DocumentManager';
 import { SideTab }                                             from '../../models/SideTab';
 import { createTabGroup }                                      from '../../models/SideTabGroup';
@@ -23,16 +23,16 @@ import { Logger }                                              from '../../utils
 export class TabSyncService {
   private disposables: vscode.Disposable[] = [];
   private gitSyncService: GitSyncService;
-  private hierarchyService: TabHierarchyService;
+  private hierarchyService: BayHierarchyService;
   private documentManager: DocumentManager;
   
   // Map para relacionar IDs de tabs con versionIds únicos del DocumentModel
   // Esto permite rastrear qué version del documento corresponde a cada child tab
   private readonly tabIdToVersionId: Map<string, string> = new Map();
 
-  constructor(private stateService: TabStateService) {
+  constructor(private stateService: BayStateService) {
     this.gitSyncService = new GitSyncService(this.stateService);
-    this.hierarchyService = new TabHierarchyService(this.stateService);
+    this.hierarchyService = new BayHierarchyService(this.stateService);
     this.documentManager = new DocumentManager({
       autoCleanup: true,
       cleanupInterval: 300000, // 5 minutes

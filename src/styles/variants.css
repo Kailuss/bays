@@ -1,0 +1,232 @@
+/* VARIANTS - bays hijas (diffs, comparisons) adjuntas a un parent */
+
+/* Bay BLOCK WRAPPER */
+/* Contenedor que agrupa una Bay padre con sus VARIANTS.
+   Es la unidad de D&D: el alto total (parent + children) se obtiene
+   de forma natural con getBoundingClientRect() sobre este elemento. */
+.bay-block {
+  position: relative;
+  display: block;
+}
+
+/* BASE STRUCTURE */
+.bay.child-bay {
+
+  /* Layout */
+  height: 22px;
+  padding: 0 11px 0 32px;
+
+  /* Text */
+  font-weight: 300;
+
+  /* Visual */
+  background: inherit;
+  border-left: 4px solid transparent;
+  border-bottom: 1px solid var(--vscode-tab-border, #444);
+  opacity: 1;
+
+  /* Flexbox */
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+}
+
+/* Interactive States */
+.bay.child-bay:hover {
+  opacity: 1;
+}
+
+.bay.child-bay.active {
+  opacity: 1;
+  background: var(--vscode-list-activeSelectionBackground, #5a5d5e40);
+  border-left: 4px solid var(--vscode-focusBorder, #007acc);
+}
+
+.bay.child-bay.active:hover {
+  background: var(--vscode-list-activeSelectionBackground, rgba(90,93,94,0.3));
+}
+
+/* Spacing */
+.bay.child-bay:last-of-type {
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, hsla(0, 0%, 8%, 0.8));
+}
+
+/* ICONS */
+.bay.child-bay .bay-icon {
+  width: 14px;
+  min-width: 14px;
+  height: 20px;
+  margin: 0 6px 0 0;
+}
+
+.bay.child-bay .bay-icon .codicon {
+  font-size: 14px;
+}
+
+.bay.child-bay .bay-icon img {
+  width: 14px;
+  height: 14px;
+}
+
+/* DIFF TYPE COLORS */
+/* Working Tree */
+.bay.child-bay.diff-working-tree .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+/* Staged */
+.bay.child-bay.diff-staged .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+/* Snapshot */
+.bay.child-bay.diff-snapshot .bay-icon .codicon {
+  color: var(--vscode-charts-purple, #b180d7);
+}
+
+/* Commit */
+.bay.child-bay.diff-commit .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-submoduleResourceForeground, #8db9e2);
+}
+
+/* Edit (AI) */
+.bay.child-bay.diff-edit .bay-icon .codicon {
+  color: var(--vscode-editorWarning-foreground, #ffcc00);
+}
+
+/* Merge Conflict */
+.bay.child-bay.diff-conflict .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}
+
+/* Incoming */
+.bay.child-bay.diff-incoming .bay-icon .codicon {
+  color: var(--vscode-editorInfo-foreground, #3794ff);
+}
+
+/* Current */
+.bay.child-bay.diff-current .bay-icon .codicon {
+  color: var(--vscode-foreground, #cccccc);
+}
+
+/* Incoming-Current */
+.bay.child-bay.diff-merge .bay-icon .codicon {
+  color: var(--vscode-editorWarning-foreground, #eca700);
+}
+
+/* Unknown */
+.bay.child-bay.diff-compare .bay-icon .codicon {
+  color: var(--vscode-charts-orange, #cccccc80);
+}
+
+/* LABELS & STATS */
+.child-type-label {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.9;
+  flex-shrink: 0;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.bay.child-bay.active .child-type-label {
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Stats */
+.child-stats {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    opacity: 0.82;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-weight: 500;
+}
+
+.stats-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+.stats-removed {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+}
+
+.child-stats.conflict {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}
+
+/* Hide stats on hover to show actions */
+.bay.child-bay:hover .child-stats {
+  display: none;
+}
+
+/* ACTION BUTTONS */
+.bay.child-bay .bay-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.bay.child-bay:hover .bay-actions {
+  display: flex;
+}
+
+.bay.child-bay .bay-actions button {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  opacity: 0.7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+}
+
+.bay.child-bay .bay-actions button:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.2));
+}
+
+.bay.child-bay .bay-actions button:active {
+  transform: scale(0.95);
+}
+
+.bay.child-bay .bay-actions button img {
+  width: 11px;
+  height: 11px;
+  object-fit: contain;
+}
+
+/* STATE INDICATORS */
+.bay.child-bay .state-indicator-error,
+.bay.child-bay .state-indicator-warning,
+.bay.child-bay .state-indicator-conflict {
+  font-size: 12px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.bay.child-bay .state-indicator-error {
+  color: var(--vscode-editorError-foreground, #f48771);
+}
+
+.bay.child-bay .state-indicator-warning {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.bay.child-bay .state-indicator-conflict {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}

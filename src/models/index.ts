@@ -1,17 +1,21 @@
 /**
- * Barrel export for all models in Tabs Lover extension.
+ * Barrel export for all models in Bays extension.
  * Provides centralized access to data structures and helper functions.
  */
 
 // SideTab - Tab representation and actions
-export { SideTab } from './SideTab';
+export { SideTab, Bay } from './SideTab';
 export { SideTabActions } from './SideTabActions';
 export { SideTabHelpers } from './SideTabHelpers';
 export type {
   SideTabType,
+  BayType,
   SideTabMetadata,
+  BayMetadata,
   SideTabState,
+  BayState,
   SideTabCapabilities,
+  BayCapabilities,
   GitStatus,
   TabViewMode,
   EditMode,

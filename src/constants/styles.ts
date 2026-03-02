@@ -49,8 +49,8 @@ export const STYLE_CONSTANTS = {
   },
 } as const;
 
-/** Configuration shape for tabsLover settings */
-export type TabsLoverConfiguration = {
+/** Configuration shape for bays settings */
+export type BaysConfiguration = {
   showFilePath       : boolean;
   compactMode        : boolean;
   iconSize           : number;
@@ -60,11 +60,11 @@ export type TabsLoverConfiguration = {
 };
 
 /**
- * Lee la configuración `tabsLover` del workspace y devuelve valores con los
+ * Lee la configuración `bays` del workspace y devuelve valores con los
  * valores por defecto ya aplicados.
  */
-export function getConfiguration(): TabsLoverConfiguration {
-  const config = vscode.workspace.getConfiguration('tabsLover');
+export function getConfiguration(): BaysConfiguration {
+  const config = vscode.workspace.getConfiguration('bays');
 
   return {
     showFilePath       : config.get('showFilePath'      ,true)                         ,

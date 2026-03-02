@@ -1,0 +1,44 @@
+/* Bay Interactive States */
+.bay.active {
+  border-left-color: var(--vscode-focusBorder, #007acc);
+  background: var(--vscode-tab-activeBackground, var(--vscode-editor-background));
+  color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
+}
+
+/* Drag & Drop States */
+
+/* Bloque siendo arrastrado */
+.bay-block.drag-clone {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.92;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  border-radius: 4px;
+  will-change: transform;
+  transition: none;
+  transform: scale(0.9);
+}
+
+/* Placeholder invisible */
+.bay-block.drag-placeholder {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Bloques reordenándose */
+.bay-block.drag-shifting {
+  transition: transform 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  pointer-events: none;
+}
+
+/* Body durante drag */
+body.drag-active {
+  user-select: none;
+  cursor: default;
+}
+
+/* Bloques pinned no interactivos durante drag */
+body.drag-active .bay-block[data-pinned="true"] {
+  pointer-events: none;
+}

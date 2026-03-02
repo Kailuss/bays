@@ -1,13 +1,13 @@
-# Tabs Lover 💙
+# Bays 💙
 
 **Your tabs, beautifully organized in the sidebar.**
 
-Tabs Lover gives you a clean, vertical tab list that replaces VS Code's native horizontal tab bar. All your open files in one elegant sidebar panel — no more horizontal scrolling or lost tabs.
+Bays gives you a clean, vertical tab list that replaces VS Code's native horizontal tab bar. All your open files in one elegant sidebar panel — no more horizontal scrolling or lost tabs.
 
 ## 🚀 Getting Started
 
 1. **Install** the extension from the VS Code Marketplace
-2. **Open** the Tabs Lover panel from the Activity Bar (look for the icon on the left)
+2. **Open** the Bays panel from the Activity Bar (look for the icon on the left)
 3. **Enjoy** your organized tabs!
 
 That's it. No configuration needed — it works great out of the box.
@@ -42,7 +42,7 @@ That's it. No configuration needed — it works great out of the box.
 - **Send** HTTP requests from `.http` files
 
 ### 👥 Multi-Window Support
-When you split your editor, Tabs Lover groups your tabs automatically. Each group gets its own header so you always know what's where.
+When you split your editor, Bays groups your tabs automatically. Each group gets its own header so you always know what's where.
 
 ### 🔄 Parent-Child Hierarchy
 Diffs, snapshots, and comparisons are organized as children under their source file. Keep your workspace tidy even when reviewing multiple versions of the same file.
@@ -50,7 +50,7 @@ Diffs, snapshots, and comparisons are organized as children under their source f
 ### 🎯 Cursor Position Sync (New!)
 **Experimental**: Synchronize cursor position between parent files and their diffs/snapshots. When enabled, moving your cursor in one view automatically updates all related tabs to the same line and column — perfect for comparing changes at specific locations.
 
-*Enable with:* `"tabsLover.syncCursorPosition": true` (default: off)
+*Enable with:* `"bays.syncCursorPosition": true` (default: off)
 
 ## Requirements
 
@@ -58,7 +58,7 @@ Diffs, snapshots, and comparisons are organized as children under their source f
 
 ## ⚙️ Customize It Your Way
 
-Open VS Code Settings (`Ctrl+,` or `Cmd+,`) and search for "Tabs Lover":
+Open VS Code Settings (`Ctrl+,` or `Cmd+,`) and search for "Bays":
 
 - **Show file paths** — See where each file lives in your project  
   *Default: On*
@@ -83,7 +83,7 @@ Open VS Code Settings (`Ctrl+,` or `Cmd+,`) and search for "Tabs Lover":
 
 ## 🎮 Quick Commands
 
-Open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) and type "Tabs Lover":
+Open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`) and type "Bays":
 
 - **Refresh** — Reload the tab list if something looks off
 - **Close All** — Clear all open editors at once
@@ -93,7 +93,7 @@ Most actions are just a right-click away in the tab list!
 
 ## 🛠️ For Developers
 
-Want to contribute or customize Tabs Lover? See the documentation index in [docs/INDEX.md](docs/INDEX.md) (secciones didácticas en español).
+Want to contribute or customize Bays? See the documentation index in [docs/INDEX.md](docs/INDEX.md) (secciones didácticas en español).
 
 **Quick start:**
 ```bash

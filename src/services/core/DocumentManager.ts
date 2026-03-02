@@ -58,10 +58,10 @@ export type DocumentManagerOptions = {
  * 
  * @remarks
  * Este servicio es la fuente de verdad para metadata de documentos.
- * TabStateService y TabSyncService delegan la gestión de documentos aquí.
+ * BayStateService y TabSyncService delegan la gestión de documentos aquí.
  * 
  * @see DocumentModel for data structure
- * @see TabStateService for tab state management
+ * @see BayStateService for tab state management
  */
 export class DocumentManager {
   private documents = new Map<string, DocumentModel>();

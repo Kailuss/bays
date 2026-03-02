@@ -8,7 +8,7 @@
 ## 🎯 Filosofía de Diseño
 
 ### Principio Fundamental
-En Tabs Lover, **cada SideTab representa un documento único**. Las tabs nativas de VS Code pueden tener múltiples visualizaciones del mismo documento (diff, compare, snapshot, changes), pero en nuestra extensión consolidamos todo en una estructura jerárquica:
+En Bays, **cada SideTab representa un documento único**. Las tabs nativas de VS Code pueden tener múltiples visualizaciones del mismo documento (diff, compare, snapshot, changes), pero en nuestra extensión consolidamos todo en una estructura jerárquica:
 
 - **Parent Tab** → El documento en sí (archivo fuente)
 - **Child Tabs** → Diferentes visualizaciones del mismo documento (Working Tree, Staged, Snapshot, etc.)
@@ -32,7 +32,7 @@ Cada child se identifica con:
 ## ✨ Sincronización de Posición de Cursor (NUEVO)
 
 ### Funcionalidad
-Desde la versión 0.3.3, Tabs Lover soporta la **sincronización automática de la posición del cursor** entre tabs parent y sus children. Cuando esta funcionalidad está habilitada:
+Desde la versión 0.3.3, Bays soporta la **sincronización automática de la posición del cursor** entre tabs parent y sus children. Cuando esta funcionalidad está habilitada:
 
 - Al mover el cursor en un parent tab, todos sus children se actualizan a la misma línea/columna
 - Al mover el cursor en un child tab, el parent y todos los siblings se sincronizan
@@ -41,7 +41,7 @@ Desde la versión 0.3.3, Tabs Lover soporta la **sincronización automática de 
 ### Configuración
 ```json
 {
-  "tabsLover.syncCursorPosition": false  // Default: deshabilitado
+  "bays.syncCursorPosition": false  // Default: deshabilitado
 }
 ```
 
@@ -106,7 +106,7 @@ private inheritParentState(childTab: SideTab, parentTab: SideTab): void {
 
 #### 3. Renderizado Jerárquico
 ```typescript
-// TabsLoverHtmlBuilder.ts líneas 146-186
+// BaysHtmlBuilder.ts líneas 146-186
 const parentTabs = tabs.filter(t => !t.metadata.parentId);
 const childTabs = tabs.filter(t => t.metadata.parentId);
 
@@ -206,7 +206,7 @@ this.stateService.addTab(st);
 **Problema:** La lógica de parent-child está dispersa:
 - `TabSyncService` maneja la creación y herencia
 - `TabStateService` almacena sin conocer la jerarquía
-- `TabsLoverHtmlBuilder` agrupa para renderizar
+- `BaysHtmlBuilder` agrupa para renderizar
 
 **Impacto:**
 - Difícil mantener consistencia
@@ -680,7 +680,7 @@ type TabTreeNode = {
 ### Archivos Modificados
 1. 🔧 `src/services/core/TabSyncService.ts` - Refactorizado, de ~1000 → ~300 líneas
 2. 🔧 `src/services/core/TabStateService.ts` - Añadir awareness de jerarquía
-3. 🔧 `src/providers/TabsLoverHtmlBuilder.ts` - Renderizado de jerarquía parent-child
+3. 🔧 `src/providers/BaysHtmlBuilder.ts` - Renderizado de jerarquía parent-child
 
 ### Beneficios
 
