@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
-import { BaysWebviewProvider } from './providers/BaysWebviewProvider';
-import { BayStateService } from './services/core/BayStateService';
-import { BaySyncService } from './services/core/BaySyncService';
-import { BayDragDropService } from './services/ui/BayDragDropService';
-import { FileActionRegistry } from './services/registry/FileActionRegistry';
-import { BayIconManager } from './services/ui/BayIconManager';
-import { ThemeService } from './services/ui/ThemeService';
-import { CopilotService } from './services/integration/CopilotService';
-import { registerBayCommands } from './commands/bayCommands';
+import { BaysWebviewProvider     } from './providers/BaysWebviewProvider';
+import { BayStateService         } from './services/core/BayStateService';
+import { BaySyncService          } from './services/core/BaySyncService';
+import { BayDragDropService      } from './services/ui/BayDragDropService';
+import { FileActionRegistry      } from './services/registry/FileActionRegistry';
+import { BayIconManager          } from './services/ui/BayIconManager';
+import { ThemeService            } from './services/ui/ThemeService';
+import { CopilotService          } from './services/integration/CopilotService';
+import { registerBayCommands     } from './commands/bayCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
-import { Logger } from './utils/logger';
+import { Logger                  } from './utils/logger';
 
 export async function activate(context: vscode.ExtensionContext) {
   Logger.initialize();
@@ -17,13 +17,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
   try {
     // Core services
-    const stateService  = new BayStateService();
-    const syncService   = new BaySyncService(stateService);
-    const dragDropService = new BayDragDropService(stateService);
+    const stateService       = new BayStateService();
+    const syncService        = new BaySyncService(stateService);
+    const dragDropService    = new BayDragDropService(stateService);
     const fileActionRegistry = new FileActionRegistry();
-    const iconManager   = new BayIconManager();
-    const themeService  = new ThemeService();
-    const copilotService = new CopilotService();
+    const iconManager        = new BayIconManager();
+    const themeService       = new ThemeService();
+    const copilotService     = new CopilotService();
 
     // Initialise icon manager (loads icon map)
     // We await this to ensure icons are ready before first render
@@ -48,21 +48,21 @@ export async function activate(context: vscode.ExtensionContext) {
       ),
     );
 
-    // Configuration reload
+    //· Configuration reload
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('bays')) { provider.refresh(); }
       }),
     );
 
-    // Activate services
+    //· Activate services
     syncService.activate(context);
     themeService.activate(context);
 
-    // Preload icons for all open bays in background
+    //· Preload icons for all open bays in background
     iconManager.preloadIconsInBackground(context);
 
-    // Register commands
+    //· Register commands
     registerBayCommands(context, stateService);
     registerCopilotCommands(context, copilotService, stateService);
 
@@ -70,10 +70,10 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.commands.registerCommand('bays.refresh', () => provider.refresh()),
     );
 
-    // Refresh on theme change
+    //· Refresh on theme change
     themeService.onDidChangeTheme(() => provider.refresh());
 
-    // Refresh when icons are reloaded (e.g., theme change)
+    //· Refresh when icons are reloaded (e.g., theme change)
     iconManager.onDidInitialize(() => provider.refresh());
 
     Logger.log('Bays activated successfully');
@@ -81,8 +81,4 @@ export async function activate(context: vscode.ExtensionContext) {
     Logger.error('Activation failed', error);
     throw error;
   }
-}
-
-export function deactivate() {
-  // nothing to clean up — disposables handled via context.subscriptions
 }
