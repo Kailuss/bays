@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { SideTab, Bay, DiffStats } from '../../models/SideTab';
+import type { SideTab, Bay, DiffStats } from '../../models/Bay';
 import type { BayStateService } from './BayStateService';
 import type { DocumentManager } from './DocumentManager';
 import { Logger } from '../../utils/logger';
@@ -55,9 +55,7 @@ export class BayHierarchyService {
     // Update parent state
     parent.state.hasChildren = true;
     parent.state.childrenCount++;
-    
-    // Update capabilities to allow expansion
-    parent.state.capabilities.canExpand = true;
+    // Note: canExpand computed on-demand, not stored in capabilities
 
     this.stateService.updateTab(parent);
     
@@ -84,7 +82,7 @@ export class BayHierarchyService {
     // Update hasChildren if no more children
     if (parent.state.childrenCount === 0) {
       parent.state.hasChildren = false;
-      parent.state.capabilities.canExpand = false;
+      // Note: canExpand computed on-demand from hasChildren
     }
 
     this.stateService.updateTab(parent);
@@ -131,7 +129,7 @@ export class BayHierarchyService {
           parent.state.hasChildren !== (actualCount > 0)) {
         parent.state.childrenCount = actualCount;
         parent.state.hasChildren = actualCount > 0;
-        parent.state.capabilities.canExpand = actualCount > 0;
+        // Note: canExpand computed on-demand from hasChildren state
         
         this.stateService.updateTab(parent);
         updated++;

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DiffType, DiffStats } from './SideTab';
+import type { DiffType, DiffStats } from './Bay';
 
 /**
  * Metadata de una versión específica del documento.

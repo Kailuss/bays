@@ -22,7 +22,7 @@ import {
   touchDocument,
   getDocumentSummary,
 } from '../../models/DocumentModel';
-import type { DiffType, DiffStats } from '../../models/SideTab';
+import type { DiffType, DiffStats } from '../../models/Bay';
 import type { BayStateService } from './BayStateService';
 import { Logger } from '../../utils/logger';
 

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Logger } from '../utils/logger';
 import { VSCODE_COMMANDS } from '../constants/commands';
-import type { SideTabMetadata, SideTabState, SideTabCapabilities, TabViewMode, SideTabType } from './SideTab';
+import type { BayMetadata, BayState, BayCapabilities, BayViewMode as BayViewMode, BayType } from './Bay';
 
 /**
  * Constantes para identificación de tabs especiales.
@@ -14,7 +14,7 @@ const MARKDOWN_PREVIEW_VIEWTYPE = 'markdown.preview';
  * Utilidades auxiliares para interactuar con pestañas nativas de VS Code.
  * Separado de SideTabActions para mantener responsabilidades claras.
  */
-export class SideTabHelpers {
+export class BayHelpers {
   /** Maps label keywords to VS Code commands for built-in editor tabs. */
   private static readonly WEBVIEW_COMMANDS: Record<string, string> = {
     'settings':                'workbench.action.openSettings2',
@@ -39,13 +39,13 @@ export class SideTabHelpers {
   /**
    * Detecta si una tab es un Markdown Preview basándose en su metadata.
    */
-  static isMarkdownPreview(metadata: SideTabMetadata): boolean {
+  static isMarkdownPreview(metadata: BayMetadata): boolean {
     // Método 1: Detectar por viewType (más confiable)
     if (metadata.viewType === MARKDOWN_PREVIEW_VIEWTYPE) {
       return true;
     }
     // Método 2: Detectar por label pattern (fallback para webviews)
-    if (metadata.tabType === 'webview' && 
+    if (metadata.bayType === 'webview' && 
         metadata.label.startsWith(MARKDOWN_PREVIEW_PREFIX)) {
       return true;
     }
@@ -56,7 +56,7 @@ export class SideTabHelpers {
    * Focuses the editor group that contains this tab.
    */
   static async focusGroup(viewColumn: vscode.ViewColumn): Promise<void> {
-    const cmd = SideTabHelpers.FOCUS_GROUP_CMDS[viewColumn];
+    const cmd = BayHelpers.FOCUS_GROUP_CMDS[viewColumn];
     if (cmd) {
       await vscode.commands.executeCommand(cmd);
     }
@@ -75,11 +75,11 @@ export class SideTabHelpers {
    * Se manejan como estado toggle (viewMode) en la tab del archivo fuente.
    */
   static async activateByNativeTab(
-    metadata: SideTabMetadata,
-    state: SideTabState
+    metadata: BayMetadata,
+    state: BayState
   ): Promise<void> {
     // Siempre re-buscar la tab nativa para obtener el estado más reciente
-    const nativeTab = SideTabHelpers.findNativeTab(metadata, state);
+    const nativeTab = BayHelpers.findNativeTab(metadata, state);
 
     // Best approach for any tab: focus its group, then open by native index.
     // This works reliably for diff tabs, webviews, unknown-input tabs, etc.
@@ -87,24 +87,24 @@ export class SideTabHelpers {
       const tabIndex = nativeTab.group.tabs.indexOf(nativeTab);
       if (tabIndex !== -1) {
         try {
-          Logger.log(`[TabHelper] Activating by index: ${metadata.label}, index: ${tabIndex}, isPreview: ${nativeTab.isPreview}`);
-          await SideTabHelpers.focusGroup(state.viewColumn);
+          Logger.log(`[BayHelper] Activating by index: ${metadata.label}, index: ${tabIndex}, isPreview: ${nativeTab.isPreview}`);
+          await BayHelpers.focusGroup(state.viewColumn);
           await vscode.commands.executeCommand(VSCODE_COMMANDS.OPEN_EDITOR_AT_INDEX, tabIndex);
           return;
         } catch (err) {
-          Logger.error('[TabHelper] Failed to activate by index: ' + metadata.label, err);
+          Logger.error('[BayHelper] Failed to activate by index: ' + metadata.label, err);
           /* fall through */
         }
       }
     } else {
-      Logger.warn('[TabHelper] Native tab not found for activation: ' + metadata.label);
+      Logger.warn('[BayHelper] Native tab not found for activation: ' + metadata.label);
       // Tab doesn't exist anymore - throw error so caller can handle it
       throw new Error(`Native tab not found: ${metadata.label}`);
     }
 
     // Fallback for known built-in editor commands (Settings, Welcome, etc.)
     const label = metadata.label.toLowerCase();
-    for (const [keyword, cmd] of Object.entries(SideTabHelpers.WEBVIEW_COMMANDS)) {
+    for (const [keyword, cmd] of Object.entries(BayHelpers.WEBVIEW_COMMANDS)) {
       if (label.includes(keyword)) {
         try { await vscode.commands.executeCommand(cmd); return; } catch { /* tab may be gone */ }
       }
@@ -112,24 +112,27 @@ export class SideTabHelpers {
   }
 
   /**
-   * Checks if a native VS Code tab matches this SideTab's metadata.
+   * Checks if a native VS Code tab matches this Bay's metadata.
    */
-  static matchesNative(t: vscode.Tab, metadata: SideTabMetadata): boolean {
+  static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
     // Webview tabs: match by label (no URI available)
     if (t.input instanceof vscode.TabInputWebview) {
       return t.label === metadata.label;
     }
     // Unknown-input tabs (Settings, Extensions…): also match by label
     if (!t.input) {
-      return metadata.tabType === 'unknown' && t.label === metadata.label;
+      // Webviews without URI match by label
+      return metadata.bayType === 'webview' && !metadata.uri && t.label === metadata.label;
     }
-    // Diff tabs: match by modified URI and tab type
+    // Diff tabs: match by modified URI and parentId presence
     if (t.input instanceof vscode.TabInputTextDiff) {
-      return metadata.tabType === 'diff'
+      return !!metadata.parentId
         && metadata.uri?.toString() === t.input.modified.toString();
     }
     // A diff SideTab must only match TabInputTextDiff (handled above)
-    if (metadata.tabType === 'diff') { return false; }
+    // Variants (bays with parentId) can still have preview mode
+    // but typically they don't support toggle preview
+    if (metadata.parentId) { return false; }
     // URI-based tabs
     const uri = metadata.uri;
     if (!uri) { return false; }
@@ -142,9 +145,9 @@ export class SideTabHelpers {
   /**
    * Finds the native VS Code tab that corresponds to this SideTab.
    */
-  static findNativeTab(metadata: SideTabMetadata, state: SideTabState): vscode.Tab | undefined {
-    const group = SideTabHelpers.nativeGroup(state.viewColumn);
-    return group?.tabs.find(t => SideTabHelpers.matchesNative(t, metadata));
+  static findNativeTab(metadata: BayMetadata, state: BayState): vscode.Tab | undefined {
+    const group = BayHelpers.nativeGroup(state.viewColumn);
+    return group?.tabs.find(t => BayHelpers.matchesNative(t, metadata));
   }
 
   /**
@@ -163,39 +166,39 @@ export class SideTabHelpers {
    * @param metadata - Base metadata to enrich
    * @returns New metadata object with enriched properties (immutable)
    */
-  static enrichMetadata(metadata: SideTabMetadata): SideTabMetadata {
+  static enrichMetadata(metadata: BayMetadata): BayMetadata {
     const enriched = { ...metadata };
 
     // Extract file information from URI
     if (metadata.uri) {
       const uri = metadata.uri;
       const fsPath = uri.fsPath;
-      
+
       // fileName: full name with extension
       enriched.fileName = path.basename(fsPath);
-      
+
       // baseName: name without extension
       const ext = path.extname(fsPath);
       enriched.baseName = ext ? path.basename(fsPath, ext) : path.basename(fsPath);
-      
+
       // dirPath: parent directory path
       enriched.dirPath = path.dirname(fsPath);
-      
+
       // scheme: URI scheme (file, untitled, vscode-remote, etc.)
       enriched.scheme = uri.scheme;
-      
+
       // isRemote: SSH, WSL, containers, etc.
       enriched.isRemote = uri.scheme !== 'file' && uri.scheme !== 'untitled';
-      
+
       // isUntitled: unsaved new file
       enriched.isUntitled = uri.scheme === 'untitled';
-      
+
       // isBinary: common binary extensions
       const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.pdf', '.zip', '.exe', '.dll'];
       enriched.isBinary = binaryExts.includes(metadata.fileExtension.toLowerCase());
-      
+
       // category: semantic categorization
-      enriched.category = SideTabHelpers.categorizeFile(metadata.fileName || metadata.label, metadata.fileExtension, metadata.dirPath);
+      enriched.category = BayHelpers.categorizeFile(metadata.fileName || metadata.label, metadata.fileExtension, metadata.dirPath);
     } else {
       // Non-file tabs (webviews, unknown)
       enriched.fileName = undefined;
@@ -205,9 +208,9 @@ export class SideTabHelpers {
       enriched.isRemote = false;
       enriched.isUntitled = false;
       enriched.isBinary = false;
-      
+
       // Categorize webviews/unknown tabs
-      enriched.category = SideTabHelpers.categorizeNonFileTab(metadata.tabType, metadata.label);
+      enriched.category = BayHelpers.categorizeNonFileTab(metadata.bayType, metadata.label);
     }
 
     return enriched;
@@ -271,8 +274,8 @@ export class SideTabHelpers {
   /**
    * Categorizes non-file tabs (webviews, unknown).
    */
-  private static categorizeNonFileTab(tabType: SideTabType, label: string): string {
-    if (tabType === 'webview') {
+  private static categorizeNonFileTab(bayType: BayType, label: string): string {
+    if (bayType === 'webview') {
       const lower = label.toLowerCase();
       if (lower.includes('settings')) { return 'settings'; }
       if (lower.includes('extension')) { return 'extensions'; }
@@ -280,9 +283,9 @@ export class SideTabHelpers {
       if (lower.includes('output')) { return 'output'; }
       return 'webview';
     }
-    if (tabType === 'diff') { return 'diff'; }
-    if (tabType === 'notebook') { return 'notebook'; }
-    return 'unknown';
+    // Variants are 'file' type with parentId - not a separate type
+    if (bayType === 'notebook') { return 'notebook'; }
+    return 'file'; // Default fallback
   }
 
   /**
@@ -293,12 +296,12 @@ export class SideTabHelpers {
    * @param state - Tab state
    * @returns Computed capabilities object
    */
-  static computeCapabilities(metadata: SideTabMetadata, state: Partial<SideTabState>): SideTabCapabilities {
+  static computeCapabilities(metadata: BayMetadata, state: Partial<BayState>): BayCapabilities {
     const hasUri = !!metadata.uri;
-    const isFile = metadata.tabType === 'file';
-    const isDiff = metadata.tabType === 'diff';
-    const isWebview = metadata.tabType === 'webview';
-    const isNotebook = metadata.tabType === 'notebook';
+    const isFile = metadata.bayType === 'file';
+    const isDiff = !!metadata.parentId; // Variants/diffs have parentId
+    const isWebview = metadata.bayType === 'webview';
+    const isNotebook = metadata.bayType === 'notebook';
     const isReadOnly = metadata.isReadOnly || false;
     const isBinary = metadata.isBinary || false;
     const isRemote = metadata.isRemote || false;
@@ -317,43 +320,14 @@ export class SideTabHelpers {
     const ext = metadata.fileExtension.toLowerCase();
     const supportsPreview = ['.md', '.svg', '.html', '.htm'].includes(ext);
 
+    // Bay architecture: Only 5 core capabilities stored
+    // Other capabilities computed on-demand when needed
     return {
-      // BASIC ACTIONS
       canClose: true, // All tabs can be closed
-      canPin: !state.isPinned && !isDiff, // Can't pin if already pinned or is a diff
-      canUnpin: state.isPinned || false,
-      canSplit: hasUri && !isDiff, // Can split if has URI and not a diff
-      canRename: isFile && !isReadOnly && !isRemote && permissions.canRename,
-
-      // NAVIGATION
+      canPin: !state.isPinned && !isDiff, // Can't pin if already pinned or is a variant
       canRevealInExplorer: hasUri && metadata.scheme === 'file',
-      canCopyPath: hasUri && permissions.canShare,
-      canOpenInTerminal: hasUri && metadata.scheme === 'file' && !!metadata.dirPath,
-
-      // COMPARISON
-      canCompare: isFile && hasUri,
-      canCompareWith: isFile && hasUri,
-
-      // VISUALIZATION
       canTogglePreview: supportsPreview && hasUri,
-      canReload: isWebview,
-      canZoom: isBinary, // Images, PDFs
-
-      // EDITING
-      canEdit: !isReadOnly && !isBinary && (isFile || isNotebook),
-      canFormat: !isReadOnly && !isBinary && isFile,
-      canSave: state.isDirty || false,
-
-      // HIERARCHY
-      canHaveChildren: isFile && hasUri, // File tabs can have diffs as children
-      canBeChild: isDiff,
-      canExpand: state.hasChildren || false,
-
-      // ADVANCED
-      canDragDrop: !state.isPinned && !isDiff && permissions.canMove, // Pinned and diff tabs can't be dragged
-      canProtect: !state.isProtected || false,
-      supportsGit: hasUri && metadata.scheme === 'file',
-      supportsDiagnostics: isFile && hasUri,
+      canHaveChildren: isFile && hasUri, // File tabs can have variants as children
     };
   }
 
@@ -363,7 +337,7 @@ export class SideTabHelpers {
    * 
    * @returns Partial state with default values for new properties
    */
-  static createDefaultState(): Partial<SideTabState> {
+  static createDefaultState(): Partial<BayState> {
     return {
       // VISUALIZATION MODE
       viewMode: 'source', // Default to source view
@@ -383,7 +357,7 @@ export class SideTabHelpers {
       },
       
       // CAPABILITIES (will be computed separately)
-      capabilities: SideTabHelpers.createEmptyCapabilities(),
+      capabilities: BayHelpers.createEmptyCapabilities(),
       
       // PERMISSIONS (NEW)
       permissions: {
@@ -437,32 +411,15 @@ export class SideTabHelpers {
   /**
    * Creates an empty capabilities object with all flags set to false.
    * Used as placeholder before real capabilities are computed.
+   * Bay architecture: Only 5 core capabilities stored.
    */
-  private static createEmptyCapabilities(): SideTabCapabilities {
+  private static createEmptyCapabilities(): BayCapabilities {
     return {
       canClose: false,
       canPin: false,
-      canUnpin: false,
-      canSplit: false,
-      canRename: false,
       canRevealInExplorer: false,
-      canCopyPath: false,
-      canOpenInTerminal: false,
-      canCompare: false,
-      canCompareWith: false,
       canTogglePreview: false,
-      canReload: false,
-      canZoom: false,
-      canEdit: false,
-      canFormat: false,
-      canSave: false,
       canHaveChildren: false,
-      canBeChild: false,
-      canExpand: false,
-      canDragDrop: false,
-      canProtect: false,
-      supportsGit: false,
-      supportsDiagnostics: false,
     };
   }
 
@@ -470,9 +427,9 @@ export class SideTabHelpers {
    * Maps legacy previewMode boolean to new viewMode enum.
    * 
    * @param previewMode - Legacy boolean preview mode
-   * @returns Corresponding TabViewMode
+   * @returns Corresponding BayViewMode
    */
-  static mapPreviewModeToViewMode(previewMode: boolean): TabViewMode {
+  static mapPreviewModeToViewMode(previewMode: boolean): BayViewMode {
     return previewMode ? 'preview' : 'source';
   }
 
@@ -482,7 +439,7 @@ export class SideTabHelpers {
    * @param viewMode - Current view mode
    * @returns Boolean preview mode
    */
-  static mapViewModeToPreviewMode(viewMode: TabViewMode): boolean {
+  static mapViewModeToPreviewMode(viewMode: BayViewMode): boolean {
     return viewMode === 'preview';
   }
 }

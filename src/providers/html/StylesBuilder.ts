@@ -19,7 +19,7 @@ export class StylesBuilder {
   buildCriticalCSS(): string {
     return `
 /* Critical CSS to prevent FOUC */
-.tab-icon-wrapper {
+.bay-icon-wrapper {
   width: 22px;
   height: 22px;
   display: flex;
@@ -27,17 +27,17 @@ export class StylesBuilder {
   justify-content: center;
   flex-shrink: 0;
 }
-.tab-icon {
+.bay-icon {
   width: 22px;
   height: 22px;
   object-fit: contain;
   display: block;
 }
-.child-tab .tab-icon-wrapper {
+.variant .bay-icon-wrapper {
   width: 14px;
   height: 14px;
 }
-.child-tab .tab-icon {
+.variant .bay-icon {
   width: 14px;
   height: 14px;
 }

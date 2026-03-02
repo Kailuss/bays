@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { getConfiguration }         from '../constants/styles';
 import { TIMINGS }                  from '../constants/timings';
-import { SideTab }                  from '../models/SideTab';
-import type { TabViewMode }         from '../models/SideTab';
+import { SideTab }                  from '../models/Bay';
+import type { BayViewMode }         from '../models/Bay';
 import { BayStateService }          from '../services/core/BayStateService';
 import { TabIconManager }           from '../services/ui/BayIconManager';
 import { CopilotService }           from '../services/integration/CopilotService';
@@ -255,7 +255,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
           if (isMarkdownToggle) {
             // Simply toggle the viewMode state for THIS tab only
             // Each tab remembers its own preference (preview vs source)
-            const newViewMode: TabViewMode = tab.state.viewMode === 'preview' ? 'source' : 'preview';
+            const newViewMode: BayViewMode = tab.state.viewMode === 'preview' ? 'source' : 'preview';
             tab.state.viewMode = newViewMode;
             Logger.log(`[WebviewProvider] Toggled viewMode for: ${tab.metadata.label} → ${tab.state.viewMode}`);
             

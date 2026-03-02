@@ -4,7 +4,7 @@
  * Define iconos codicon y labels descriptivos para cada tipo.
  */
 
-import type { DiffType } from '../models/SideTab';
+import type { DiffType } from '../models/Bay';
 
 /**
  * Información de visualización para un tipo de diff

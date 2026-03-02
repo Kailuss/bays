@@ -4,34 +4,34 @@
  */
 
 // SideTab - Tab representation and actions
-export { SideTab, Bay } from './SideTab';
-export { SideTabActions } from './SideTabActions';
-export { SideTabHelpers } from './SideTabHelpers';
+export { SideTab, Bay } from './Bay';
+export { SideTabActions } from './BayActions';
+export { BayHelpers as SideTabHelpers } from './BayHelpers';
 export type {
-  SideTabType,
+  BayType as SideTabType,
   BayType,
-  SideTabMetadata,
+  BayMetadata as SideTabMetadata,
   BayMetadata,
-  SideTabState,
+  BayState as SideTabState,
   BayState,
-  SideTabCapabilities,
+  BayCapabilities as SideTabCapabilities,
   BayCapabilities,
   GitStatus,
-  TabViewMode,
+  BayViewMode as TabViewMode,
   EditMode,
   DiffType,
   DiffStats,
   ActionContext,
   OperationState,
-  TabPermissions,
-  TabIntegrations,
-  CustomTabAction,
-  TabShortcuts,
-} from './SideTab';
+  BayPermissions as TabPermissions,
+  BayIntegrations as TabIntegrations,
+  CustomBayAction as CustomTabAction,
+  BayShortcuts as TabShortcuts,
+} from './Bay';
 
 // SideTabGroup - Tab grouping
-export { createTabGroup } from './SideTabGroup';
-export type { SideTabGroup } from './SideTabGroup';
+export { createTabGroup } from './BayGroup';
+export type { BayGroup as SideTabGroup } from './BayGroup';
 
 // DocumentModel - Document metadata management
 export {

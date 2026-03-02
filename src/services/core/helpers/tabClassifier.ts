@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DiffType } from '../../../models/SideTab';
+import type { DiffType } from '../../../models/Bay';
 
 /**
  * Funciones puras para clasificar tipos de diff y determinar relaciones parent-child.

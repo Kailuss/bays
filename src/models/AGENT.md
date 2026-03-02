@@ -818,9 +818,9 @@ Result:
 **Logger patterns in models:**
 ```typescript
 // activationActions.ts
-Logger.log('[TabAction] Activating tab: ' + label + ', isPreview: ' + isPreview);
-Logger.log('[TabAction] Using native activation by index');
-Logger.log('[TabAction] Activation failed, retrying...');
+Logger.log('[BayAction] Activating tab: ' + label + ', isPreview: ' + isPreview);
+Logger.log('[BayAction] Using native activation by index');
+Logger.log('[BayAction] Activation failed, retrying...');
 
 // nativeTabHelper.ts
 Logger.warn('[TabHelper] Native tab not found for activation: ' + label);

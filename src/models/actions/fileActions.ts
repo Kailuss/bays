@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { SideTabMetadata, SideTabState } from '../SideTab';
+import type { BayMetadata, BayState } from '../Bay';
 
 /**
  * File manipulation actions - Duplicar, comparar, split, mover
  */
 
 export async function duplicateFile(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -58,8 +58,8 @@ export async function duplicateFile(
 }
 
 export async function compareWithActive(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -76,14 +76,14 @@ export async function compareWithActive(
   );
 }
 
-export async function openChanges(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
+export async function openChanges(metadata: BayMetadata, state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
   await vscode.commands.executeCommand('git.openChange', metadata.uri);
 }
 
-export async function splitRight(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
+export async function splitRight(metadata: BayMetadata, state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
@@ -94,8 +94,8 @@ export async function splitRight(metadata: SideTabMetadata, state: SideTabState)
 }
 
 export async function moveToNewWindow(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -104,8 +104,8 @@ export async function moveToNewWindow(
 }
 
 export async function moveToGroup(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   target: vscode.ViewColumn,
   closeFn: () => Promise<void>
 ): Promise<void> {

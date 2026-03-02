@@ -1,6 +1,6 @@
 import * as vscode      from 'vscode';
-import { SideTab, Bay }      from '../../models/SideTab';
-import { SideTabGroup } from '../../models/SideTabGroup';
+import { SideTab, Bay }      from '../../models/Bay';
+import { BayGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
 import type { DocumentManager } from './DocumentManager';
@@ -17,7 +17,7 @@ import type { DocumentManager } from './DocumentManager';
  */
 export class BayStateService {
   private tabs   : Map<string, SideTab>      = new Map();
-  private groups : Map<number, SideTabGroup> = new Map();
+  private groups : Map<number, BayGroup> = new Map();
   private _isBulkLoading                     = false;
   private _onDidChangeState                  = new vscode.EventEmitter<void>();
   readonly onDidChangeState                  = this._onDidChangeState.event;
@@ -70,9 +70,9 @@ export class BayStateService {
 
     const group = this.groups.get(tab.state.groupId);
     if (group) {
-      const existsInGroup = group.tabs.find(t => t.metadata.id === tab.metadata.id);
+      const existsInGroup = group.bays.find(t => t.metadata.id === tab.metadata.id);
       if (!existsInGroup) {
-        group.tabs.push(tab);
+        group.bays.push(tab);
       }
     }
     
@@ -131,7 +131,7 @@ export class BayStateService {
     if (tab) {
       const group = this.groups.get(tab.state.groupId);
       if (group) {
-        group.tabs = group.tabs.filter(t => t.metadata.id !== id);
+        group.bays = group.bays.filter(t => t.metadata.id !== id);
       }
       
       // Cleanup document associations
@@ -165,9 +165,9 @@ export class BayStateService {
 
     const group = this.groups.get(tab.state.groupId);
     if (group) {
-      const index = group.tabs.findIndex(t => t.metadata.id === tab.metadata.id);
+      const index = group.bays.findIndex(t => t.metadata.id === tab.metadata.id);
       if (index !== -1) {
-        group.tabs[index] = tab;
+        group.bays[index] = tab;
       }
     }
 
@@ -180,9 +180,9 @@ export class BayStateService {
 
     const group = this.groups.get(tab.state.groupId);
     if (group) {
-      const index = group.tabs.findIndex(t => t.metadata.id === tab.metadata.id);
+      const index = group.bays.findIndex(t => t.metadata.id === tab.metadata.id);
       if (index !== -1) {
-        group.tabs[index] = tab;
+        group.bays[index] = tab;
       }
     }
     this._onDidChangeStateSilent.fire();
@@ -194,9 +194,9 @@ export class BayStateService {
 
     const group = this.groups.get(tab.state.groupId);
     if (group) {
-      const index = group.tabs.findIndex(t => t.metadata.id === tab.metadata.id);
+      const index = group.bays.findIndex(t => t.metadata.id === tab.metadata.id);
       if (index !== -1) {
-        group.tabs[index] = tab;
+        group.bays[index] = tab;
       }
     }
     
@@ -226,7 +226,7 @@ export class BayStateService {
 
   getTabsInGroup(groupId: number): SideTab[] {
     const group = this.groups.get(groupId);
-    return group ? [...group.tabs] : [];
+    return group ? [...group.bays] : [];
   }
 
   // Replace all bays with a new set (used during full sync).
@@ -236,7 +236,7 @@ export class BayStateService {
 
     // Clear bays from all groups
     this.groups.forEach(group => {
-      group.tabs = [];
+      group.bays = [];
     });
 
     tabs.forEach(tab => this.addTab(tab));
@@ -246,7 +246,7 @@ export class BayStateService {
 
   //- Group management
 
-  addGroup(group: SideTabGroup): void {
+  addGroup(group: BayGroup): void {
     this.groups.set(group.id, group);
     this._onDidChangeState.fire();
   }
@@ -256,11 +256,11 @@ export class BayStateService {
     this._onDidChangeState.fire();
   }
 
-  getGroup(id: number): SideTabGroup | undefined {
+  getGroup(id: number): BayGroup | undefined {
     return this.groups.get(id);
   }
 
-  getGroups(): SideTabGroup[] {
+  getGroups(): BayGroup[] {
     return Array.from(this.groups.values());
   }
 
@@ -302,17 +302,17 @@ export class BayStateService {
     if (!group) { return; }
 
     // Remove the bay from its current position
-    const idx = group.tabs.findIndex(t => t.metadata.id === tabId);
+    const idx = group.bays.findIndex(t => t.metadata.id === tabId);
     if (idx === -1) { return; }
-    group.tabs.splice(idx, 1);
+    group.bays.splice(idx, 1);
 
     // Find the insertion point: after the last pinned bay
     let insertAt = 0;
-    for (let i = 0; i < group.tabs.length; i++) {
-      if (group.tabs[i].state.isPinned) { insertAt = i + 1; }
+    for (let i = 0; i < group.bays.length; i++) {
+      if (group.bays[i].state.isPinned) { insertAt = i + 1; }
     }
 
-    group.tabs.splice(insertAt, 0, tab);
+    group.bays.splice(insertAt, 0, tab);
     this._onDidChangeState.fire();
   }
 

@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { SideTab } from '../../../models/SideTab';
-import type { SideTabMetadata, SideTabState, SideTabType } from '../../../models/SideTab';
-import { SideTabHelpers } from '../../../models/SideTabHelpers';
+import { SideTab } from '../../../models/Bay';
+import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
+import { BayHelpers } from '../../../models/BayHelpers';
 import type { GitSyncService } from '../../integration/GitSyncService';
 import { formatFilePath } from '../../../utils/helpers';
 import { classifyDiffType, determineParentId } from './tabClassifier';
@@ -48,7 +48,7 @@ export function convertToSideTab(
   let description: string | undefined;
   let tooltip: string;
   let fileType: string = '';
-  let tabType: SideTabType = 'file';
+  let tabType: BayType = 'file';
   let viewType: string | undefined;
   
   // Guardar URIs original y modificado para tabs diff (necesario para clasificación)
@@ -82,7 +82,7 @@ export function convertToSideTab(
       tooltip = tab.label;
       fileType = '';
     }
-    tabType = 'diff';
+    tabType = 'file'; // Variants are file type with parentId
   }
   else if (tab.input instanceof vscode.TabInputWebview) {
     // Tabs webview: Settings, Extensions, etc.
@@ -118,18 +118,18 @@ export function convertToSideTab(
     label = tab.label;
     description = undefined;
     tooltip = tab.label;
-    tabType = 'unknown';
+    tabType = 'file'; // Fallback to file type
   }
 
   const viewColumn = tab.group.viewColumn;
 
   // Calcular parentId y diffType para tabs diff (vincular al tab de archivo correspondiente)
   let parentId: string | undefined;
-  let diffType: import('../../../models/SideTab').DiffType | undefined;
-  let diffStats: import('../../../models/SideTab').DiffStats | undefined;
+  let diffType: import('../../../models/Bay').DiffType | undefined;
+  let diffStats: import('../../../models/Bay').DiffStats | undefined;
   
-  // Caso 1: Tabs diff (TabInputTextDiff)
-  if (tabType === 'diff' && uri) {
+  // Caso 1: Tabs diff (TabInputTextDiff) - identified by having originalUri
+  if (tab.input instanceof vscode.TabInputTextDiff && uri) {
     // Clasificar el tipo de diff basándose en el label y URIs
     diffType = classifyDiffType(label, originalUri, modifiedUri);
     
@@ -150,8 +150,6 @@ export function convertToSideTab(
   // Caso 2: Tabs de snapshot como TabInputText (ej: "BaiaState.cs (Snapshot)" desde Copilot)
   else if (tabType === 'file' && uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     // Es un snapshot de Copilot abierto como documento de texto
-    // CRÍTICO: Cambiar tabType a 'diff' para que generateId() use timestamp+contador
-    tabType = 'diff';
     diffType = 'snapshot';
     // El parent es el archivo real (convertir path del snapshot a file:// URI)
     const parentUri = vscode.Uri.file(uri.path);
@@ -159,8 +157,8 @@ export function convertToSideTab(
   }
 
   // Construir metadata base
-  const baseMetadata: SideTabMetadata = {
-    id: generateId(label, uri, viewColumn, tabType),
+  const baseMetadata: BayMetadata = {
+    id: generateId(label, uri, viewColumn, tabType, !!parentId),
     parentId,
     diffType,
     uri,
@@ -168,12 +166,12 @@ export function convertToSideTab(
     detailLabel: description,
     tooltipText: tooltip,
     fileExtension: fileType,
-    tabType,
+    bayType: tabType,
     viewType,
   };
 
   // ✨ FASE 2: Enriquecer metadata con propiedades computadas
-  const metadata = SideTabHelpers.enrichMetadata(baseMetadata);
+  const metadata = BayHelpers.enrichMetadata(baseMetadata);
 
   // Construir estado base desde tab de VS Code
   const baseState = {
@@ -189,19 +187,19 @@ export function convertToSideTab(
   };
 
   // ✨ FASE 3: Obtener valores por defecto para nuevas propiedades
-  const defaultState = SideTabHelpers.createDefaultState();
+  const defaultState = BayHelpers.createDefaultState();
 
   // Merge defaults + base (base sobrescribe defaults)
   const stateWithDefaults = { ...defaultState, ...baseState };
 
   // ✨ FASE 3: Calcular capabilities basándose en metadata + state
-  const capabilities = SideTabHelpers.computeCapabilities(metadata, stateWithDefaults);
+  const capabilities = BayHelpers.computeCapabilities(metadata, stateWithDefaults);
 
   // ✨ FASE 4: Mapear legacy previewMode a nuevo viewMode
-  const viewMode = SideTabHelpers.mapPreviewModeToViewMode(false); // Default a source
+  const viewMode = BayHelpers.mapPreviewModeToViewMode(false); // Default a source
 
   // Construir estado final con todas las propiedades requeridas
-  const state: SideTabState = {
+  const state: BayState = {
     // VS CODE NATIVE STATE
     isActive: tab.isActive,
     isDirty: tab.isDirty,
@@ -226,7 +224,7 @@ export function convertToSideTab(
     
     // HIERARCHY
     hasChildren: false, // Se calculará después cuando se detecten children
-    isChild: tabType === 'diff',
+    isChild: !!parentId, // Variants have parentId set
     childrenCount: 0,
     
     // UI STATE
@@ -281,12 +279,13 @@ export function generateId(
   label: string,
   uri: vscode.Uri | undefined,
   viewColumn: vscode.ViewColumn,
-  tabType: SideTabType,
+  tabType: BayType,
+  isDiff?: boolean,
 ): string {
   if (uri) {
-    // Para diff tabs, usar timestamp + contador incremental para garantizar unicidad absoluta
+    // Para diff tabs (variants), usar timestamp + contador incremental para garantizar unicidad absoluta
     // Esto previene colisiones incluso si se abren múltiples diffs del mismo archivo
-    if (tabType === 'diff') {
+    if (isDiff) {
       const timestamp = Date.now();
       const counter = diffIdCounter++;
       const safeLabelSegment = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
@@ -294,7 +293,7 @@ export function generateId(
     }
     return `${uri.toString()}-${viewColumn}`;
   }
-  // Tabs webview / unknown no tienen URI — usar label sanitizado
+  // Tabs webview no tienen URI — usar label sanitizado
   const safe = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
   return `${tabType}:${safe}-${viewColumn}`;
 }
@@ -335,7 +334,7 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
 export function generateIdFromNativeTab(tab: vscode.Tab): string | null {
   let uri: vscode.Uri | undefined;
   let label: string;
-  let tabType: SideTabType;
+  let tabType: BayType;
 
   if (tab.input instanceof vscode.TabInputText) {
     uri = tab.input.uri;
@@ -344,7 +343,7 @@ export function generateIdFromNativeTab(tab: vscode.Tab): string | null {
   } else if (tab.input instanceof vscode.TabInputTextDiff) {
     uri = tab.input.modified;
     label = tab.label;
-    tabType = 'diff';
+    tabType = 'file'; // Variants are file type with parentId
   } else if (tab.input instanceof vscode.TabInputWebview) {
     label = tab.label;
     tabType = 'webview';
@@ -358,7 +357,7 @@ export function generateIdFromNativeTab(tab: vscode.Tab): string | null {
     tabType = 'notebook';
   } else {
     label = tab.label;
-    tabType = 'unknown';
+    tabType = 'file'; // Fallback to file type
   }
 
   return generateId(label, uri, tab.group.viewColumn, tabType);

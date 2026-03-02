@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { TabIconManager } from '../../services/ui/BayIconManager';
-import { SideTab } from '../../models/SideTab';
+import { SideTab } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
 import { Logger } from '../../utils/logger';
 import {
@@ -24,10 +24,10 @@ export class IconRenderer {
    * Genera el HTML del icono para una tab.
    */
   async render(tab: SideTab): Promise<string> {
-    const { tabType, viewType, label, uri, fileExtension: fileType } = tab.metadata;
+    const { bayType: tabType, viewType, label, uri, fileExtension: fileType } = tab.metadata;
 
-    // Webviews y tabs desconocidas usan codicons con color estándar
-    if (tabType === 'webview' || tabType === 'unknown') {
+    // Webviews use codicons with standard color
+    if (tabType === 'webview') {
       return this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6');
     }
 
@@ -54,9 +54,10 @@ export class IconRenderer {
    * Resuelve el nombre del archivo desde la tab.
    */
   private resolveFileName(tab: SideTab): string | null {
-    const { tabType, uri, label } = tab.metadata;
+    const { bayType: tabType, uri, label, parentId } = tab.metadata;
 
-    if (tabType === 'diff' && uri) {
+    // Variants have parentId set
+    if (parentId && uri) {
       return uri.path.split('/').pop() || label;
     }
 

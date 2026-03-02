@@ -1,33 +1,33 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState } from '../SideTab';
-import { SideTabHelpers } from '../SideTabHelpers';
+import type { BayMetadata, BayState } from '../Bay';
+import { BayHelpers } from '../BayHelpers';
 
 /**
  * Close actions - Cerrar tabs y grupos
  */
 
-export async function close(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
+export async function close(metadata: BayMetadata, state: BayState): Promise<void> {
   if (!state.capabilities.canClose) {
     vscode.window.showWarningMessage('This tab cannot be closed');
     return;
   }
-  const t = SideTabHelpers.findNativeTab(metadata, state);
+  const t = BayHelpers.findNativeTab(metadata, state);
   if (t) {
     await vscode.window.tabGroups.close(t);
   }
 }
 
 export async function closeOthers(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
   await activateFn();
   await vscode.commands.executeCommand('workbench.action.closeOtherEditors');
 }
 
-export async function closeGroup(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
-  const group = SideTabHelpers.nativeGroup(state.viewColumn);
+export async function closeGroup(metadata: BayMetadata, state: BayState): Promise<void> {
+  const group = BayHelpers.nativeGroup(state.viewColumn);
   if (!group) {
     return;
   }
@@ -35,15 +35,15 @@ export async function closeGroup(metadata: SideTabMetadata, state: SideTabState)
 }
 
 export async function closeToRight(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
-  const group = SideTabHelpers.nativeGroup(state.viewColumn);
+  const group = BayHelpers.nativeGroup(state.viewColumn);
   if (!group) {
     return;
   }
 
-  const idx = group.tabs.findIndex((t) => SideTabHelpers.matchesNative(t, metadata));
+  const idx = group.tabs.findIndex((t) => BayHelpers.matchesNative(t, metadata));
   if (idx === -1) {
     return;
   }

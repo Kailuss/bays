@@ -11,8 +11,8 @@
 import * as vscode from 'vscode';
 import { TabIconManager } from '../services/ui/BayIconManager';
 import type { DocumentManager } from '../services/core/DocumentManager';
-import { SideTab } from '../models/SideTab';
-import { SideTabGroup } from '../models/SideTabGroup';
+import { SideTab } from '../models/Bay';
+import { BayGroup } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
 import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris } from './html';
@@ -108,7 +108,7 @@ export class BaysHtmlBuilder {
   //= RENDERIZADO DE TABS
 
   private async renderAllTabs(
-    groups: SideTabGroup[],
+    groups: BayGroup[],
     getTabsInGroup: (groupId: number) => SideTab[],
     showPath: boolean,
     copilotReady: boolean,
@@ -131,7 +131,7 @@ export class BaysHtmlBuilder {
     return html;
   }
 
-  private renderGroupHeader(group: SideTabGroup): string {
+  private renderGroupHeader(group: BayGroup): string {
     const marker = group.isActive ? ' ●' : '';
     return `<div class="group-header" data-groupid="${group.id}">
       <span class="codicon codicon-files files"></span>
@@ -171,12 +171,12 @@ export class BaysHtmlBuilder {
       return 0;
     });
 
-    // Render parents with their children inside a shared .tab-block wrapper.
+    // Render parents with their children inside a shared .bay-block wrapper.
     // The wrapper is the D&D unit: height, cloning and positioning operate on it.
     const rendered: string[] = [];
     for (const parent of sortedParents) {
       const children = childrenByParent.get(parent.metadata.id) || [];
-      const blockClass = children.length > 0 ? 'tab-block has-children' : 'tab-block';
+      const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
 
       let block = `<div class="${blockClass}" data-tabid="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
       block += await this.renderTab(parent, showPath, copilotReady, enableDragDrop, compactMode);
@@ -191,7 +191,7 @@ export class BaysHtmlBuilder {
     for (const child of childTabs) {
       if (!parentTabs.some(p => p.metadata.id === child.metadata.parentId)) {
         const orphanHtml = await this.renderOrphanChildTab(child, showPath, copilotReady, compactMode);
-        rendered.push(`<div class="tab-block" data-tabid="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
+        rendered.push(`<div class="bay-block" data-tabid="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
     
@@ -228,11 +228,11 @@ export class BaysHtmlBuilder {
       ? `<button data-action="closeTab" data-tabid="${this.esc(tab.metadata.id)}" title="Close"><span class="codicon codicon-close"></span></button>`
       : '';
 
-    return `<div class="tab child-tab${activeClass}${diffTypeClass}" data-tabid="${this.esc(tab.metadata.id)}" ${dataParentId}>
-      <span class="tab-icon">${iconHtml}</span>
+    return `<div class="bay variant${activeClass}${diffTypeClass}" data-tabid="${this.esc(tab.metadata.id)}" ${dataParentId}>
+      <span class="bay-icon">${iconHtml}</span>
       <span class="child-type-label">${labelHtml}</span>
       ${statsHtml}
-      <span class="tab-actions">${closeBtn}</span>
+      <span class="bay-actions">${closeBtn}</span>
     </div>`;
   }
 
@@ -309,7 +309,7 @@ export class BaysHtmlBuilder {
     _enableDragDrop: boolean,
     compactMode: boolean,
   ): Promise<string> {
-    // data-tabid only — data-pinned and data-groupid live on the parent .tab-block
+    // data-tabid only — data-pinned and data-groupid live on the parent .bay-block
     const activeClass = tab.state.isActive ? ' active' : '';
     const stateIndicator = getStateIndicator(tab);
 
@@ -337,15 +337,15 @@ export class BaysHtmlBuilder {
     // Compact mode: same layout as normal, single-line text (name + inline path)
     if (compactMode) {
       const pathSuffix = showPath && tab.metadata.detailLabel
-        ? `<span class="tab-path-inline">${this.esc(tab.metadata.detailLabel)}</span>`
+        ? `<span class="bay-path-inline">${this.esc(tab.metadata.detailLabel)}</span>`
         : '';
-      return `<div class="tab compact${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
-      <span class="tab-icon">${iconHtml}</span>
-      <div class="tab-text">
-        <div class="tab-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}${pathSuffix}</div>
+      return `<div class="bay compact${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
+      <span class="bay-icon">${iconHtml}</span>
+      <div class="bay-text">
+        <div class="bay-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}${pathSuffix}</div>
       </div>
       ${stateIndicator.html}
-      <span class="tab-actions">
+      <span class="bay-actions">
         ${fileActionBtn}${chatBtn}${closeBtn}
       </span>
     </div>`;
@@ -353,17 +353,17 @@ export class BaysHtmlBuilder {
 
     // Normal mode: two-line layout
     const pathHtml = showPath && tab.metadata.detailLabel
-      ? `<div class="tab-path">${this.esc(tab.metadata.detailLabel)}</div>`
+      ? `<div class="bay-path">${this.esc(tab.metadata.detailLabel)}</div>`
       : '';
 
-    return `<div class="tab${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
-      <span class="tab-icon">${iconHtml}</span>
-      <div class="tab-text">
-        <div class="tab-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}</div>
+    return `<div class="bay${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
+      <span class="bay-icon">${iconHtml}</span>
+      <div class="bay-text">
+        <div class="bay-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}</div>
         ${pathHtml}
       </div>
       ${stateIndicator.html}
-      <span class="tab-actions">
+      <span class="bay-actions">
         ${fileActionBtn}${chatBtn}${closeBtn}
       </span>
     </div>`;
@@ -450,4 +450,5 @@ export class BaysHtmlBuilder {
     return nonce;
   }
 }
+
 

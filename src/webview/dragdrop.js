@@ -1,8 +1,8 @@
-// Drag & Drop script for the tabs webview.
+// Drag & Drop script for the bays webview.
 // Served as a static resource via webview.asWebviewUri().
 // Only loaded when drag & drop is enabled in settings.
 //
-// Unit de arrastre: .tab-block (contiene la tab parent + sus child tabs).
+// Unit de arrastre: .bay-block (contiene la bay parent + sus child bays).
 // Un cloneNode(true) del bloque captura todo el contenido de una vez,
 // sin necesidad de gestionar clones hijos por separado.
 
@@ -11,9 +11,9 @@ const DRAG_THRESHOLD = 5;   // Pixels antes de iniciar el drag
 let isDragging         = false;
 let startY             = 0;
 let startMouseY        = 0;
-let sourceEl           = null;  // .tab-block original que se arrastra
+let sourceEl           = null;  // .bay-block original que se arrastra
 let cloneEl            = null;  // clon flotante del bloque completo
-let siblings           = [];    // .tab-block reordenables (excluye pinned y el arrastrado)
+let siblings           = [];    // .bay-block reordenables (excluye pinned y el arrastrado)
 let originalOrder      = [];    // rect.top y altura de cada sibling al iniciar
 let currentInsertIndex = -1;    // índice de inserción actual (en siblings)
 let sourceIndex        = -1;    // índice original del bloque arrastrado
@@ -23,13 +23,13 @@ let blockHeight        = 0;     // Alto total del bloque (parent + children auto
 // --- Mousedown: preparar un posible drag ---
 document.addEventListener('mousedown', e => {
   if (e.button !== 0) { return; }
-  const block = e.target.closest('.tab-block');
+  const block = e.target.closest('.bay-block');
   if (!block) { return; }
   if (e.target.closest('button')) { return; }
 
-  // Los child tabs no actúan como handle — sólo la fila padre inicia el drag
-  const clickedTab = e.target.closest('.tab');
-  if (clickedTab && clickedTab.classList.contains('child-tab')) { return; }
+  // Los child bays no actúan como handle — sólo la fila padre inicia el drag
+  const clickedTab = e.target.closest('.bay');
+  if (clickedTab && clickedTab.classList.contains('variant')) { return; }
 
   if (block.dataset.pinned === 'true') { return; }
 
@@ -77,11 +77,11 @@ function beginDrag() {
   const rect = sourceEl.getBoundingClientRect();
 
   // blockHeight = alto real del bloque completo (parent + todos sus children)
-  // getBoundingClientRect() ya lo calcula porque .tab-block los contiene
+  // getBoundingClientRect() ya lo calcula porque .bay-block los contiene
   blockHeight = Math.round(rect.height) + 1;
 
   // Todos los bloques arrastrables del mismo grupo (excluir pinned)
-  const allBlocks      = Array.from(document.querySelectorAll('.tab-block[data-groupid="' + tabGroupId + '"]'));
+  const allBlocks      = Array.from(document.querySelectorAll('.bay-block[data-groupid="' + tabGroupId + '"]'));
   const draggable      = allBlocks.filter(b => b.dataset.pinned !== 'true');
   sourceIndex          = draggable.indexOf(sourceEl);
   currentInsertIndex   = sourceIndex;
@@ -135,17 +135,17 @@ function commitDrop() {
   if (currentInsertIndex !== sourceIndex) {
     let targetTabId, insertPosition;
     if (currentInsertIndex < originalOrder.length) {
-      targetTabId    = originalOrder[currentInsertIndex].el.dataset.tabid;
+      targetTabId    = originalOrder[currentInsertIndex].el.dataset.bayid;
       insertPosition = 'before';
     } else {
-      targetTabId    = originalOrder[originalOrder.length - 1].el.dataset.tabid;
+      targetTabId    = originalOrder[originalOrder.length - 1].el.dataset.bayid;
       insertPosition = 'after';
     }
 
     // Enviar mensaje primero para que el rebuild del HTML empiece ya
     vscode.postMessage({
       type           : 'dropTab',
-      sourceTabId    : sourceEl.dataset.tabid,
+      sourceTabId    : sourceEl.dataset.bayid,
       targetTabId    : targetTabId,
       insertPosition : insertPosition,
       sourceGroupId  : parseInt(tabGroupId, 10),

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SideTab } from '../models/SideTab';
+import { SideTab } from '../models/Bay';
 import { BayStateService } from '../services/core/BayStateService';
 import { CopilotService } from '../services/integration/CopilotService';
 

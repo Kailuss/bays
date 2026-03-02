@@ -3,8 +3,8 @@
  */
 
 import * as vscode from 'vscode';
-import { SideTab } from '../../models/SideTab';
-import { SideTabGroup } from '../../models/SideTabGroup';
+import { SideTab } from '../../models/Bay';
+import { BayGroup } from '../../models/BayGroup';
 
 //= OPCIONES DE RENDERIZADO
 
@@ -14,7 +14,7 @@ export const FALLBACK_FILE_ICON = 'font-icon:\\E023:#d4d7d6';
 /** Opciones para construir el HTML del webview */
 export type BuildHtmlOptions = {
   webview: vscode.Webview;
-  groups: SideTabGroup[];
+  groups: BayGroup[];
   getTabsInGroup: (groupId: number) => SideTab[];
   workspaceName: string;
   compactMode: boolean;

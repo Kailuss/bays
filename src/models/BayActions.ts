@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState, ActionContext, TabIntegrations, CustomTabAction } from './SideTab';
+import type { BayMetadata, BayState, ActionContext, BayIntegrations, CustomBayAction } from './Bay';
 import * as actions from './actions';
 
 /**
@@ -9,8 +9,8 @@ import * as actions from './actions';
  * All actions receive `metadata` (immutable) and mutate `state` in place.
  */
 export abstract class SideTabActions {
-  abstract readonly metadata: SideTabMetadata;
-  abstract state: SideTabState;
+  abstract readonly metadata: BayMetadata;
+  abstract state: BayState;
 
   //- CLOSE ACTIONS
 
@@ -134,13 +134,13 @@ export abstract class SideTabActions {
     actions.removeFromCopilotContext(this.state);
   }
 
-  updateGitIntegration(gitInfo: Partial<TabIntegrations['git']>): void {
+  updateGitIntegration(gitInfo: Partial<BayIntegrations['git']>): void {
     actions.updateGitIntegration(this.state, gitInfo);
   }
 
   //- CUSTOM ACTIONS
 
-  addCustomAction(action: CustomTabAction): void {
+  addCustomAction(action: CustomBayAction): void {
     actions.addCustomAction(this.state, action);
   }
 

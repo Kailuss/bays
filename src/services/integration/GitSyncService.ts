@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { BayStateService } from '../core/BayStateService';
-import type { GitStatus } from '../../models/SideTab';
+import type { GitStatus } from '../../models/Bay';
 
 /**
  * Encapsula toda la sincronización con Git (status + listeners de repositorio).

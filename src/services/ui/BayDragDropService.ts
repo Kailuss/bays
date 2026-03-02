@@ -1,5 +1,5 @@
 import { BayStateService } from '../core/BayStateService';
-import { SideTab, Bay }    from '../../models/SideTab';
+import { SideTab, Bay }    from '../../models/Bay';
 import { Logger }          from '../../utils/logger';
 
 /**
@@ -46,11 +46,11 @@ export class BayDragDropService {
     if (!group) { return false; }
 
     // Calculate index of last pinned bay
-    const lastPinnedIndex = this.findLastPinnedIndex(group.tabs);
+    const lastPinnedIndex = this.findLastPinnedIndex(group.bays);
 
     // Find current indices
-    const sourceIndex = group.tabs.findIndex(t => t.metadata.id === sourceBayId);
-    const targetIndex = group.tabs.findIndex(t => t.metadata.id === targetBayId);
+    const sourceIndex = group.bays.findIndex(t => t.metadata.id === sourceBayId);
+    const targetIndex = group.bays.findIndex(t => t.metadata.id === targetBayId);
 
     if (sourceIndex === -1 || targetIndex === -1) { return false; }
 
@@ -73,17 +73,17 @@ export class BayDragDropService {
     }
 
     // Perform reordering
-    group.tabs.splice(sourceIndex, 1);
+    group.bays.splice(sourceIndex, 1);
 
     // Adjust insertIndex if needed (if we removed before insertion point)
     if (sourceIndex < insertIndex) {
       insertIndex--;
     }
 
-    group.tabs.splice(insertIndex, 0, sourceBay);
+    group.bays.splice(insertIndex, 0, sourceBay);
 
     // Update indexInGroup for all bays in the group
-    group.tabs.forEach((bay, idx) => {
+    group.bays.forEach((bay, idx) => {
       bay.state.indexInGroup = idx;
     });
 

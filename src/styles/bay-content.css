@@ -9,18 +9,18 @@
 }
 
 /* NORMAL BAYS: larger icons */
-.bay:not(.child-bay) .bay-icon {
+.bay:not(.variant) .bay-icon {
   width: 22px;
   min-width: 22px;
   height: 22px;
   margin: 0 8px 0 0;
 }
 
-.bay:not(.child-bay) .bay-icon .codicon {
+.bay:not(.variant) .bay-icon .codicon {
   font-size: 16px;
 }
 
-.bay:not(.child-bay) .bay-icon img {
+.bay:not(.variant) .bay-icon img {
   width: 18px;
   height: 18px;
   object-fit: contain;

@@ -1,23 +1,20 @@
 import * as vscode from 'vscode';
-import { SideTabActions } from './SideTabActions';
+import { SideTabActions as BayActionManager } from './BayActions';
 
-//: The kind of editor input the tab represents.
-export type SideTabType = 'file' | 'diff' | 'webview' | 'custom' | 'notebook' | 'unknown';
-//: Git decoration status for a file
-export type GitStatus   = 'modified' | 'added' | 'deleted' | 'untracked' | 'ignored' | 'conflict' | null;
-//: View mode for tabs that support multiple visualizations
-export type TabViewMode = 'source' | 'preview' | 'split';
-//: Edit mode for tabs
-export type EditMode = 'readonly' | 'editable';
-//: Diff type for child tabs (diff visualizations)
-export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'unknown';
-
-// Bay nomenclature aliases (future architecture)
-//: Bay type simplified (4 types: file, webview, custom, notebook)
+//: Bay type - 4 core types according to Bay architecture
 export type BayType = 'file' | 'webview' | 'custom' | 'notebook';
 
+//: Git decoration status for a file
+export type GitStatus   = 'modified' | 'added' | 'deleted' | 'untracked' | 'ignored' | 'conflict' | null;
+//: View mode for bays that support multiple visualizations
+export type BayViewMode = 'source' | 'preview' | 'split';
+//: Edit mode for bays
+export type EditMode = 'readonly' | 'editable';
+//: Diff type for child bays (diff visualizations)
+export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'unknown';
+
 /**
- * Diff statistics for child tabs
+ * Diff statistics for child bays
  */
 export type DiffStats = {
   linesAdded?: number;      // Lines added (for working tree, staged)
@@ -32,7 +29,7 @@ export type DiffStats = {
  * Define el estado actual de visualización y edición.
  */
 export type ActionContext = {
-  viewMode?: TabViewMode;                        // How the tab is visualized
+  viewMode?: BayViewMode;                        // How the tab is visualized
   editMode?: EditMode;                           // Edit capability state
   splitOrientation?: 'horizontal' | 'vertical';  // Split view orientation
   compareMode?: boolean;                         // In diff/compare mode
@@ -53,7 +50,7 @@ export type OperationState = {
  * Permisos granulares para operaciones de archivo.
  * Más específico que capabilities - define qué está permitido.
  */
-export type TabPermissions = {
+export type BayPermissions = {
   canRename: boolean;              // Can rename file
   canDelete: boolean;              // Can delete file
   canMove: boolean;                // Can move to other location
@@ -65,7 +62,7 @@ export type TabPermissions = {
 /**
  * Estado de integración con servicios externos.
  */
-export type TabIntegrations = {
+export type BayIntegrations = {
   copilot?: {
     inContext: boolean;            // In Copilot chat context
     lastAddedTime?: number;        // When added to context
@@ -81,19 +78,19 @@ export type TabIntegrations = {
 /**
  * Acción personalizada definida por usuario o extensión.
  */
-export type CustomTabAction = {
+export type CustomBayAction = {
   id: string;
   label: string;
   icon: string;
   tooltip: string;
   keybinding?: string;
-  execute: (metadata: SideTabMetadata, state: SideTabState) => Promise<void>;
+  execute: (metadata: BayMetadata, state: BayState) => Promise<void>;
 }
 
 /**
  * Atajos de teclado personalizados para acciones.
  */
-export type TabShortcuts = {
+export type BayShortcuts = {
   quickPin?: string;               // Quick pin/unpin
   quickClose?: string;             // Quick close
   quickDuplicate?: string;         // Quick duplicate
@@ -101,14 +98,14 @@ export type TabShortcuts = {
 }
 
 /**
- * Immutable metadata describing a tab.
- * Computed once at creation and should not change during tab lifetime.
+ * Immutable metadata describing a bay.
+ * Computed once at creation and should not change during bay lifetime.
  */
-export type SideTabMetadata = {
+export type BayMetadata = {
   //: IDENTITY
   id            : string;        // Unique identifier (uri-based for file tabs, label-based for webview tabs).
   parentId?     : string;        // ID of parent tab (for diff tabs that belong to a file tab).
-  tabType       : SideTabType;   // What kind of VS Code tab input this wraps.
+  bayType       : BayType;   // What kind of VS Code tab input this wraps.
   diffType?     : DiffType;      // Type of diff (for child tabs only)
   
   //: DOCUMENT LINK (NEW)
@@ -154,52 +151,10 @@ export type SideTabMetadata = {
 }
 
 /**
- * Capabilities define what actions can be performed on a tab.
- * Computed from metadata and state to enable/disable UI actions.
- */
-export type SideTabCapabilities = {
-  //: BASIC ACTIONS
-  canClose            : boolean; // Can be closed
-  canPin              : boolean; // Can be pinned
-  canUnpin            : boolean; // Can be unpinned
-  canSplit            : boolean; // Can be opened in split view
-  canRename           : boolean; // Can be renamed (files vs webviews)
-
-  //: NAVIGATION
-  canRevealInExplorer : boolean; // Has physical file to reveal
-  canCopyPath         : boolean; // Has copyable path
-  canOpenInTerminal   : boolean; // Can open terminal in directory
-
-  //: COMPARISON
-  canCompare          : boolean; // Can be compared (diff)
-  canCompareWith      : boolean; // Can be selected for comparison
-
-  //: VISUALIZATION
-  canTogglePreview    : boolean; // Can toggle source ↔ preview (MD, SVG...)
-  canReload           : boolean; // Can be reloaded (webviews)
-  canZoom             : boolean; // Has zoom capability (images, PDFs)
-
-  //: EDITING
-  canEdit             : boolean; // Is editable
-  canFormat           : boolean; // Can be formatted
-  canSave             : boolean; // Can be saved
-
-  //: HIERARCHY
-  canHaveChildren     : boolean; // Can have child tabs
-  canBeChild          : boolean; // Can be a child tab
-  canExpand           : boolean; // Can be expanded (if has children)
-
-  //: ADVANCED
-  canDragDrop         : boolean; // Can be dragged/reordered
-  canProtect          : boolean; // Can be marked as protected
-  supportsGit         : boolean; // Has git status
-  supportsDiagnostics : boolean; // Has diagnostics (errors/warnings)
-};
-
-// Bay nomenclature aliases (future architecture - simplified capabilities)
-/**
  * Bay capabilities - Simplified to 5 core capabilities.
  * Other capabilities computed on-demand from state/metadata.
+ * 
+ * @see services/core/AGENT.md for capability computation patterns
  */
 export type BayCapabilities = {
   canClose            : boolean; // Can be closed
@@ -209,8 +164,8 @@ export type BayCapabilities = {
   canHaveChildren     : boolean; // Can have child tabs (variants)
 };
 
-//: Mutable runtime state of a tab.
-export type SideTabState = {
+//: Mutable runtime state of a bay.
+export type BayState = {
   //: VS CODE NATIVE STATE (synchronized)
   isActive           : boolean;
   isDirty            : boolean;
@@ -223,7 +178,7 @@ export type SideTabState = {
   indexInGroup       : number;
 
   //: VISUALIZATION MODE
-  viewMode           : TabViewMode;  // How the tab is visualized: source | preview | split
+  viewMode           : BayViewMode;  // How the tab is visualized: source | preview | split
 
   //: DIFF INFORMATION (for child tabs)
   diffStats?         : DiffStats;    // Diff statistics (lines added/removed, etc.)
@@ -233,8 +188,8 @@ export type SideTabState = {
   operationState     : OperationState;       // Async operations state
 
   //: CAPABILITIES & PERMISSIONS
-  capabilities       : SideTabCapabilities;  // What actions can be performed
-  permissions        : TabPermissions;       // Granular permissions
+  capabilities       : BayCapabilities;  // What actions can be performed
+  permissions        : BayPermissions;       // Granular permissions
   //: HIERARCHY
   hasChildren        : boolean;   // Has child tabs (diffs, previews)
   isChild            : boolean;   // Is a child tab of another
@@ -263,44 +218,40 @@ export type SideTabState = {
   isProtected        : boolean;   // Requires confirmation to close
 
   //: INTEGRATIONS (NEW)
-  integrations       : TabIntegrations;      // External service states
+  integrations       : BayIntegrations;      // External service states
 
   //: CUSTOMIZATION (NEW)
-  customActions?     : CustomTabAction[];    // User-defined actions
-  shortcuts?         : TabShortcuts;         // Custom keybindings
+  customActions?     : CustomBayAction[];    // User-defined actions
+  shortcuts?         : BayShortcuts;         // Custom keybindings
 }
-
-// Bay nomenclature aliases (future architecture)
-export type BayMetadata = SideTabMetadata;
-export type BayState = SideTabState;
 
 /**
  * Representa una pestaña en la barra lateral de Bays.
  * En pocas palabras: guarda la información que mostramos (nombre, ruta, icono)
  * y ofrece métodos para las acciones que el usuario puede realizar (abrir, cerrar, pinear...).
- * Los métodos de acción están definidos en SideTabActions (herencia).
+ * Los métodos de acción están definidos en BayActions (herencia).
  * 
  * @remarks
- * ARQUITECTURA: SideTab es responsable de la representación visual y estado de UI.
+ * ARQUITECTURA: Bay es responsable de la representación visual y estado de UI.
  * Para gestión compleja de metadata de documentos y versiones (diffs, snapshots),
- * SideTab delega a DocumentModel a través del campo `metadata.documentId`.
+ * Bay delega a DocumentModel a través del campo `metadata.documentId`.
  * 
  * Relación con DocumentModel:
- * - Parent tabs con URI: pueden tener un DocumentModel asociado
- * - Child tabs (diffs): su metadata está en VersionMetadata del DocumentModel parent
+ * - Parent bays con URI: pueden tener un DocumentModel asociado
+ * - Child bays (diffs): su metadata está en VersionMetadata del DocumentModel parent
  * - DocumentManager gestiona el ciclo de vida y búsqueda de DocumentModels
  * 
  * @see DocumentModel for complete document metadata
  * @see DocumentManager for document lifecycle management
  */
-export class SideTab extends SideTabActions {
+export class Bay extends BayActionManager {
   constructor(
-    public readonly metadata: SideTabMetadata,
-    public state: SideTabState,
+    public readonly metadata: BayMetadata,
+    public state: BayState,
   ) {
     super();
   }
 }
 
-// Bay nomenclature alias (future architecture) - TYPE ONLY
-export type Bay = SideTab;
+// Backward compatibility alias
+export { Bay as SideTab };

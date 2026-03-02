@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DiffType, DiffStats } from '../../models/SideTab';
+import type { DiffType, DiffStats } from '../../models/Bay';
 import type {
   DocumentModel,
   VersionMetadata,

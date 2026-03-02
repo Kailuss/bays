@@ -30,7 +30,7 @@ document.addEventListener('click', e => {
 
     if (action === 'closeTab') {
       const tabId = btn.dataset.tabid;
-      const tab   = document.querySelector(`.tab[data-tabid="${CSS.escape(tabId)}"]`);
+      const tab   = document.querySelector(`.bay[data-tabid="${CSS.escape(tabId)}"]`);
       if (tab && !closingTabs.has(tabId)) {
         closingTabs.add(tabId);
         tab.classList.add('closing');
@@ -85,12 +85,12 @@ document.addEventListener('click', e => {
     return;
   }
 
-  const tab = e.target.closest('.tab');
+  const tab = e.target.closest('.bay');
   if (tab) { vscode.postMessage({ type: 'openTab', tabId: tab.dataset.tabid }); }
 });
 
 document.addEventListener('contextmenu', e => {
-  const tab = e.target.closest('.tab');
+  const tab = e.target.closest('.bay');
   if (tab) {
     e.preventDefault();
     vscode.postMessage({ type: 'contextMenu', tabId: tab.dataset.tabid });
@@ -103,24 +103,24 @@ window.addEventListener('message', e => {
 
   if (msg.type === 'updateActiveTab') {
     const activeSet = new Set(msg.activeTabIds);
-    document.querySelectorAll('.tab').forEach(t => {
+    document.querySelectorAll('.bay').forEach(t => {
       t.classList.toggle('active', activeSet.has(t.dataset.tabid));
     });
   }
 
   if (msg.type === 'tabStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
-    const tab = document.querySelector(`.tab[data-tabid="${CSS.escape(msg.tabId)}"]`);
+    const tab = document.querySelector(`.bay[data-tabid="${CSS.escape(msg.tabId)}"]`);
     if (tab && !tab.classList.contains('closing')) {
-      const tabName = tab.querySelector('.tab-name');
-      const tabState = tab.querySelector('.tab-state');
+      const tabName = tab.querySelector('.bay-name');
+      const tabState = tab.querySelector('.bay-state');
 
       if (tabName) {
         // Remover clases de estado anteriores
-        tabName.className = 'tab-name';
+        tabName.className = 'bay-name';
         // Agregar nueva clase de estado
         if (msg.stateClass) {
-          tabName.className = 'tab-name' + msg.stateClass;
+          tabName.className = 'bay-name' + msg.stateClass;
         }
         // Aplicar animación de cambio
         tabName.classList.add('changing');

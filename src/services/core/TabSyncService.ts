@@ -3,8 +3,8 @@ import { BayStateService }                                     from './BayStateS
 import { GitSyncService }                                      from '../integration/GitSyncService';
 import { BayHierarchyService }                                 from './BayHierarchyService';
 import { DocumentManager }                                     from './DocumentManager';
-import { SideTab }                                             from '../../models/SideTab';
-import { createTabGroup }                                      from '../../models/SideTabGroup';
+import { SideTab }                                             from '../../models/Bay';
+import { createTabGroup }                                      from '../../models/BayGroup';
 import { convertToSideTab, generateIdFromNativeTab, getDiagnosticSeverity } from './helpers/tabConverter';
 import { Logger }                                              from '../../utils/logger';
 

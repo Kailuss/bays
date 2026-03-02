@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SideTab } from '../../models/SideTab';
+import { SideTab } from '../../models/Bay';
 
 /**
  * Options accepted by the `workbench.action.chat.open` command.

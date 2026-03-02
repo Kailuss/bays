@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import type { TabViewMode, EditMode } from '../../models/SideTab';
+import type { BayViewMode, EditMode } from '../../models/Bay';
 
 /**
  * Contexto adicional para resolver acciones dinámicamente.
  * Usado para acciones que dependen del estado de la tab (ej: toggle preview).
  */
 export type FileActionContext = {
-  viewMode?: TabViewMode;          // Current view mode: 'source' | 'preview' | 'split'
+  viewMode?: BayViewMode;          // Current view mode: 'source' | 'preview' | 'split'
   editMode?: EditMode;             // Edit capability state
   splitOrientation?: 'horizontal' | 'vertical';  // Split view orientation
   compareMode?: boolean;           // In diff/compare mode

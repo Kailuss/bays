@@ -1,25 +1,25 @@
-import { SideTab } from './SideTab';
+import { Bay } from './Bay';
 import * as vscode from 'vscode';
 
-/** Represents an editor group containing multiple tabs. */
-export type SideTabGroup = {
+/** Represents an editor group containing multiple bays. */
+export type BayGroup = {
   id         : number;
   viewColumn : vscode.ViewColumn;
   isActive   : boolean;
-  tabs       : SideTab[];
+  bays       : Bay[];
   label      : string;
 };
 
 /**
- * Creates a SideTabGroup from a VS Code TabGroup.
+ * Creates a BayGroup from a VS Code TabGroup.
  * Tabs are populated separately by the sync service.
  */
-export function createTabGroup(group: vscode.TabGroup): SideTabGroup {
+export function createTabGroup(group: vscode.TabGroup): BayGroup {
   return {
     id         : group.viewColumn,
     viewColumn : group.viewColumn,
     isActive   : group.isActive,
-    tabs       : [],
+    bays       : [],
     label      : `Group ${group.viewColumn}`,
   };
 }
