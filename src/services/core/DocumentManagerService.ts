@@ -15,8 +15,8 @@ import {
   setActiveVersion,
   removeVersion,
   updateVersionStats,
-  associateChildTab,
-  dissociateChildTab,
+  associateVariant,
+  dissociateVariant,
   getAggregatedStats,
   canBeCleanedUp,
   touchDocument,
@@ -134,8 +134,8 @@ export class DocumentManagerService {
     
     if (document) {
       // Update references if needed
-      if (options.parentTabId && !document.parentTabId) {
-        document.parentTabId = options.parentTabId;
+      if (options.parentBayId && !document.parentBayId) {
+        document.parentBayId = options.parentBayId;
       }
       
       touchDocument(document);
@@ -176,14 +176,14 @@ export class DocumentManagerService {
     
     const versionId = registerVersion(document, options);
     
-    // Associate with child tab if provided
-    if (options.relatedTabId) {
-      associateChildTab(document, options.relatedTabId);
+    // Associate with child bay if provided
+    if (options.relatedBayId) {
+      associateVariant(document, options.relatedBayId);
       
-      // Update version with tab reference
+      // Update version with bay reference
       const version = getVersion(document, versionId);
       if (version) {
-        version.relatedTabId = options.relatedTabId;
+        version.relatedBayId = options.relatedBayId;
       }
     }
     
@@ -299,8 +299,8 @@ export class DocumentManagerService {
     
     // Get version to unlink tab
     const version = getVersion(document, versionId);
-    if (version?.relatedTabId) {
-      dissociateChildTab(document, version.relatedTabId);
+    if (version?.relatedBayId) {
+      dissociateVariant(document, version.relatedBayId);
     }
     
     const success = removeVersion(document, versionId);
@@ -329,38 +329,38 @@ export class DocumentManagerService {
       return;
     }
     
-    document.parentTabId = parentTabId;
+    document.parentBayId = parentTabId;
     this.resetCleanupTimer(this.normalizeUri(baseUri));
     
-    Logger.log(`[DocumentManager] Associated parent tab ${parentTabId} with ${document.fileName}`);
+    Logger.log(`[DocumentManager] Associated parent bay ${parentTabId} with ${document.fileName}`);
   }
   
   /**
-   * Desasocia un parent tab de un documento.
+   * Desasocia un parent bay de un documento.
    * 
    * @param baseUri URI base del documento
    */
-  dissociateParentTab(baseUri: vscode.Uri): void {
+  dissociateParentBay(baseUri: vscode.Uri): void {
     const document = this.getDocument(baseUri);
     if (!document) {
       return;
     }
     
-    document.parentTabId = undefined;
+    document.parentBayId = undefined;
     
-    Logger.log(`[DocumentManager] Dissociated parent tab from ${document.fileName}`);
+    Logger.log(`[DocumentManager] Dissociated parent bay from ${document.fileName}`);
     
-    // Schedule cleanup if no more tabs
+    // Schedule cleanup if no more bays
     if (this.shouldCleanup(document)) {
       this.scheduleCleanup(this.normalizeUri(baseUri));
     }
   }
   
   /**
-   * Asocia una child tab con un documento.
+   * Asocia una child bay con un documento.
    * 
    * @param baseUri URI base del documento
-   * @param childTabId ID de la child tab
+   * @param variantId ID de la variant
    */
   associateChildTab(baseUri: vscode.Uri, childTabId: string): void {
     const document = this.getDocument(baseUri);
@@ -368,29 +368,29 @@ export class DocumentManagerService {
       return;
     }
     
-    associateChildTab(document, childTabId);
+    associateVariant(document, childTabId);
     this.resetCleanupTimer(this.normalizeUri(baseUri));
     
-    Logger.log(`[DocumentManager] Associated child tab ${childTabId} with ${document.fileName}`);
+    Logger.log(`[DocumentManager] Associated child bay ${childTabId} with ${document.fileName}`);
   }
   
   /**
-   * Desasocia una child tab de un documento.
+   * Desasocia una child bay de un documento.
    * 
    * @param baseUri URI base del documento
-   * @param childTabId ID de la child tab
+   * @param variantId ID de la variant
    */
-  dissociateChildTab(baseUri: vscode.Uri, childTabId: string): void {
+  dissociateVariant(baseUri: vscode.Uri, variantId: string): void {
     const document = this.getDocument(baseUri);
     if (!document) {
       return;
     }
     
-    dissociateChildTab(document, childTabId);
+    dissociateVariant(document, variantId);
     
-    Logger.log(`[DocumentManager] Dissociated child tab ${childTabId} from ${document.fileName}`);
+    Logger.log(`[DocumentManager] Dissociated child bay ${variantId} from ${document.fileName}`);
     
-    // Schedule cleanup if no more tabs
+    // Schedule cleanup if no more bays
     if (this.shouldCleanup(document)) {
       this.scheduleCleanup(this.normalizeUri(baseUri));
     }

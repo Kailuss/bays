@@ -28,22 +28,22 @@ document.addEventListener('click', e => {
     e.stopPropagation();
     const action = btn.dataset.action;
 
-    if (action === 'closeTab') {
-      const tabId = btn.dataset.tabid;
-      const tab   = document.querySelector(`.bay[data-tabid="${CSS.escape(tabId)}"]`);
-      if (tab && !closingTabs.has(tabId)) {
-        closingTabs.add(tabId);
+    if (action === 'closeBay') {
+      const bayId = btn.dataset.bayId;
+      const tab   = document.querySelector(`.bay[data-bayId="${CSS.escape(bayId)}"]`);
+      if (tab && !closingTabs.has(bayId)) {
+        closingTabs.add(bayId);
         tab.classList.add('closing');
         setTimeout(() => {
-          vscode.postMessage({ type: 'closeTab', tabId });
-          closingTabs.delete(tabId);
+          vscode.postMessage({ type: 'closeBay', bayId });
+          closingTabs.delete(bayId);
         }, 200);
       }
       return;
     }
 
     if (action === 'fileAction') {
-      vscode.postMessage({ type: 'fileAction', tabId: btn.dataset.tabid, actionId: btn.dataset.actionid });
+      vscode.postMessage({ type: 'fileAction', bayId: btn.dataset.bayId, actionId: btn.dataset.actionid });
       return;
     }
 
@@ -81,19 +81,19 @@ document.addEventListener('click', e => {
       return;
     }
 
-    vscode.postMessage({ type: action, tabId: btn.dataset.tabid });
+    vscode.postMessage({ type: action, bayId: btn.dataset.bayId });
     return;
   }
 
   const tab = e.target.closest('.bay');
-  if (tab) { vscode.postMessage({ type: 'openTab', tabId: tab.dataset.tabid }); }
+  if (tab) { vscode.postMessage({ type: 'openBay', bayId: tab.dataset.bayId }); }
 });
 
 document.addEventListener('contextmenu', e => {
   const tab = e.target.closest('.bay');
   if (tab) {
     e.preventDefault();
-    vscode.postMessage({ type: 'contextMenu', tabId: tab.dataset.tabid });
+    vscode.postMessage({ type: 'contextMenu', bayId: tab.dataset.bayId });
   }
 });
 
@@ -104,13 +104,13 @@ window.addEventListener('message', e => {
   if (msg.type === 'updateActiveTab') {
     const activeSet = new Set(msg.activeTabIds);
     document.querySelectorAll('.bay').forEach(t => {
-      t.classList.toggle('active', activeSet.has(t.dataset.tabid));
+      t.classList.toggle('active', activeSet.has(t.dataset.bayId));
     });
   }
 
   if (msg.type === 'tabStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
-    const tab = document.querySelector(`.bay[data-tabid="${CSS.escape(msg.tabId)}"]`);
+    const tab = document.querySelector(`.bay[data-bayId="${CSS.escape(msg.bayId)}"]`);
     if (tab && !tab.classList.contains('closing')) {
       const tabName = tab.querySelector('.bay-name');
       const tabState = tab.querySelector('.bay-state');

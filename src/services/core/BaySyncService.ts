@@ -6,9 +6,9 @@ import { DocumentManager } from './DocumentManager';
 import { BayEventService } from './bay/BayEventService';
 import { BayHeadService } from './bay/BayHeadService';
 import { ActiveStateService } from './bay/ActiveStateService';
-import { SideTab } from '../../models/Bay';
+import { Bay } from '../../models/Bay';
 import { createTabGroup } from '../../models/BayGroup';
-import { convertToSideTab, getDiagnosticSeverity } from './helpers/tabConverter';
+import { convertToBay, getDiagnosticSeverity } from './helpers/tabConverter';
 import { Logger } from '../../utils/logger';
 
 /**
@@ -137,20 +137,20 @@ export class BaySyncService {
       this.stateService.addGroup(createTabGroup(group));
     }
 
-    const allTabs: SideTab[] = [];
-    const childTabs: Array<{ sideTab: SideTab; nativeTab: vscode.Tab }> = [];
+    const allBays: Bay[] = [];
+    const childTabs: Array<{ sideTab: Bay; nativeTab: vscode.Tab }> = [];
     
     // First pass: collect all tabs, separating parents from children
     for (const group of vscode.window.tabGroups.all) {
       group.tabs.forEach((tab, idx) => {
-        const st = convertToSideTab(tab, this.gitSyncService, idx);
+        const st = convertToBay(tab, this.gitSyncService, idx);
         if (st) {
           if (st.metadata.parentId) {
             // This is a variant tab (diff) - defer it
             childTabs.push({ sideTab: st, nativeTab: tab });
           } else {
             // This is a parent tab or standalone tab - add it immediately
-            allTabs.push(st);
+            allBays.push(st);
           }
         }
       });
@@ -160,17 +160,17 @@ export class BaySyncService {
     // Process sequentially to ensure parents are opened before children are added
     for (const { sideTab, nativeTab } of childTabs) {
       // Ensure parent exists (delegate to BayHeadService)
-      await this.bayHeadService.ensureParentExistsForSync(sideTab, nativeTab, allTabs);
-      allTabs.push(sideTab);
+      await this.bayHeadService.ensureParentExistsForSync(sideTab, nativeTab, allBays);
+      allBays.push(sideTab);
     }
     
-    // Replace entire state with processed tabs
-    this.stateService.replaceTabs(allTabs);
+    // Replace entire state with processed bays
+    this.stateService.replaceBays(allBays);
     
     // Recalculate hierarchy after sync complete
     this.hierarchyService.recalculateAllCounts();
     
-    Logger.log(`[BaySync] syncAll complete - ${allTabs.length} tabs loaded`);
+    Logger.log(`[BaySync] syncAll complete - ${allBays.length} tabs loaded`);
   }
 
   /**
@@ -191,7 +191,7 @@ export class BaySyncService {
     // Sync cursor position when activating a tab from the parent-child family
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document.uri.toString() === activeUri.toString()) {
-      const tab = this.stateService.findTabByUri(activeUri);
+      const tab = this.stateService.findBayByUri(activeUri);
       if (tab && (tab.metadata.parentId || tab.state.hasChildren)) {
         // This tab is part of a parent-child family, sync cursor position
         const selection = activeEditor.selection;
@@ -215,123 +215,123 @@ export class BaySyncService {
     const line = selection.active.line + 1;
     const column = selection.active.character + 1;
 
-    const tab = this.stateService.findTabByUri(uri);
-    if (!tab) { return; }
+    const bay = this.stateService.findBayByUri(uri);
+    if (!bay) { return; }
 
-    this.hierarchyService.syncCursorPosition(tab.metadata.id, line, column);
+    this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
   }
 
   /**
    * Actualiza los diagnósticos y git status de una pestaña específica cuando cambian.
    */
   private updateTabDiagnostics(uri: vscode.Uri): void {
-    const tab = this.stateService.findTabByUri(uri);
-    if (!tab) { return; }
+    const bay = this.stateService.findBayByUri(uri);
+    if (!bay) { return; }
 
     const newDiagnosticSeverity = getDiagnosticSeverity(uri);
     const newGitStatus = this.gitSyncService.getGitStatus(uri);
 
-    if (tab.state.diagnosticSeverity !== newDiagnosticSeverity || 
-        tab.state.gitStatus !== newGitStatus) {
-      Logger.log(`[BaySync] Updating diagnostics/git for: ${tab.metadata.label}`);
-      tab.state.diagnosticSeverity = newDiagnosticSeverity;
-      tab.state.gitStatus = newGitStatus;
-      this.stateService.updateTabStateWithAnimation(tab);
+    if (bay.state.diagnosticSeverity !== newDiagnosticSeverity || 
+        bay.state.gitStatus !== newGitStatus) {
+      Logger.log(`[BaySync] Updating diagnostics/git for: ${bay.metadata.label}`);
+      bay.state.diagnosticSeverity = newDiagnosticSeverity;
+      bay.state.gitStatus = newGitStatus;
+      this.stateService.updateBayStateWithAnimation;
     }
   }
 
   /**
    * Asegura que existe un DocumentModel para una tab.
-   * Si no existe, lo crea y lo asocia con la tab.
+   * Si no existe, lo crea y lo asocia con la bay.
    * 
-   * @param tab SideTab para la cual asegurar que existe un documento
+   * @param bay Bay para la cual asegurar que existe un documento
    */
-  private ensureDocumentExists(tab: SideTab): void {
-    if (!tab.metadata.uri) {
+  private ensureDocumentExists(bay: Bay): void {
+    if (!bay.metadata.uri) {
       return;
     }
 
     // Check if document already exists
-    const existing = this.documentManager.getDocumentByUri(tab.metadata.uri);
+    const existing = this.documentManager.getDocumentByUri(bay.metadata.uri);
     if (existing) {
-      // Associate parent tab if not already associated
-      if (!existing.parentTabId) {
-        this.documentManager.associateParentTab(existing.documentId, tab.metadata.id);
+      // Associate parent bay if not already associated
+      if (!existing.parentBayId) {
+        this.documentManager.associateParentBay(existing.documentId, bay.metadata.id);
       }
       return;
     }
 
     // Create new document
     const document = this.documentManager.createDocument({
-      baseUri: tab.metadata.uri,
-      languageId: tab.metadata.languageId || 'plaintext',
-      fileName: tab.metadata.fileName || 'untitled',
-      fileExtension: tab.metadata.fileExtension,
-      parentTabId: tab.metadata.id,
-      fileSize: tab.metadata.fileSize,
-      isReadOnly: tab.metadata.isReadOnly,
-      isBinary: tab.metadata.isBinary,
+      baseUri: bay.metadata.uri,
+      languageId: bay.metadata.languageId || 'plaintext',
+      fileName: bay.metadata.fileName || 'untitled',
+      fileExtension: bay.metadata.fileExtension,
+      parentBayId: bay.metadata.id,
+      fileSize: bay.metadata.fileSize,
+      isReadOnly: bay.metadata.isReadOnly,
+      isBinary: bay.metadata.isBinary,
     });
 
-    Logger.log(`[TabSync] Created document for tab: ${tab.metadata.label} (docId: ${document.documentId})`);
+    Logger.log(`[TabSync] Created document for bay: ${bay.metadata.label} (docId: ${document.documentId})`);
   }
 
   /**
    * Registra una versión (diff) de un documento en el DocumentManager.
    * 
-   * @param childTab Child tab que representa la versión
-   * @param parentTab Parent tab del documento base
+   * @param variant Variant que representa la versión
+   * @param parentBay Parent bay del documento base
    */
-  private registerTabVersion(childTab: SideTab, parentTab: SideTab): void {
-    if (!parentTab.metadata.uri || !childTab.metadata.diffType) {
+  private registerTabVersion(variant: Bay, parentBay: Bay): void {
+    if (!parentBay.metadata.uri || !variant.metadata.diffType) {
       return;
     }
 
     // Get or create the document
     const document = this.documentManager.getOrCreateDocument(
-      parentTab.metadata.uri,
-      parentTab.metadata.languageId || 'plaintext',
-      parentTab.metadata.fileName || 'untitled',
-      parentTab.metadata.fileExtension
+      parentBay.metadata.uri,
+      parentBay.metadata.languageId || 'plaintext',
+      parentBay.metadata.fileName || 'untitled',
+      parentBay.metadata.fileExtension
     );
 
     // Associate parent if not already
-    if (!document.parentTabId) {
-      this.documentManager.associateParentTab(document.documentId, parentTab.metadata.id);
+    if (!document.parentBayId) {
+      this.documentManager.associateParentBay(document.documentId, parentBay.metadata.id);
     }
 
     // Register the version
     const versionId = this.documentManager.registerVersion(document.documentId, {
-      diffType: childTab.metadata.diffType,
-      originalUri: childTab.metadata.originalUri,
-      modifiedUri: childTab.metadata.uri,
-      label: childTab.metadata.label,
-      description: childTab.metadata.detailLabel,
-      stats: childTab.state.diffStats,
-      relatedTabId: childTab.metadata.id,
+      diffType: variant.metadata.diffType,
+      originalUri: variant.metadata.originalUri,
+      modifiedUri: variant.metadata.uri,
+      label: variant.metadata.label,
+      description: variant.metadata.detailLabel,
+      stats: variant.state.diffStats,
+      relatedBayId: variant.metadata.id,
     });
 
     if (versionId) {
       // Associate child tab with document
-      this.documentManager.associateChildTab(document.documentId, childTab.metadata.id);
+      this.documentManager.associateVariant(document.documentId, variant.metadata.id);
       // Map tab ID to unique versionId for future reference
-      this.tabIdToVersionId.set(childTab.metadata.id, versionId);
-      Logger.log(`[TabSync] Registered version ${childTab.metadata.diffType} for ${parentTab.metadata.label} (tabId: ${childTab.metadata.id}, versionId: ${versionId})`);
+      this.tabIdToVersionId.set(variant.metadata.id, versionId);
+      Logger.log(`[TabSync] Registered version ${variant.metadata.diffType} for ${parentBay.metadata.label} (bayId: ${variant.metadata.id}, versionId: ${versionId})`);
     }
   }
 
   /**
-   * Limpia el mapeo de una child tab cuando se cierra
+   * Limpia el mapeo de una child bay cuando se cierra
    */
-  private cleanupTabVersionMapping(tabId: string): void {
-    this.tabIdToVersionId.delete(tabId);
+  private cleanupBayVersionMapping(bayId: string): void {
+    this.tabIdToVersionId.delete(bayId);
   }
   
   /**
-   * Obtiene el versionId único asociado a una tab
+   * Obtiene el versionId único asociado a una bay
    */
-  getVersionIdForTab(tabId: string): string | undefined {
-    return this.tabIdToVersionId.get(tabId);
+  getVersionIdForBay(bayId: string): string | undefined {
+    return this.tabIdToVersionId.get(bayId);
   }
 
   /**

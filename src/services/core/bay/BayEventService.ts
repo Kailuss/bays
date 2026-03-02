@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { convertToSideTab } from '../helpers/tabConverter';
+import { convertToBay } from '../helpers/tabConverter';
 import { BayStateService } from '../BayStateService';
 import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
@@ -104,7 +104,7 @@ export class BayEventService {
 
     // Handle opened tabs
     for (const tab of event.opened) {
-      const st = convertToSideTab(tab, this.gitSyncService);
+      const st = convertToBay(tab, this.gitSyncService);
       if (!st) { continue; }
 
       // If it's a variant tab, ensure parent exists first

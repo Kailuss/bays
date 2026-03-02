@@ -11,8 +11,8 @@ export function registerCopilotCommands(
   stateService: BayStateService
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('bays.addToCopilotChat', async (tabId: string) => {
-      const tab = typeof tabId === 'string' ? stateService.getTab(tabId) : undefined;
+    vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) => {
+      const tab = typeof bayId === 'string' ? stateService.getTab(bayId) : undefined;
       if (tab) {
         await copilotService.addFileToChat(tab.metadata.uri);
       }

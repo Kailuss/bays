@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { BaysWebviewProvider } from './providers/BaysWebviewProvider';
 import { BayStateService } from './services/core/BayStateService';
-import { BaySyncService } from './services/core/TabSyncService';
+import { BaySyncService } from './services/core/BaySyncService';
 import { BayDragDropService } from './services/ui/BayDragDropService';
 import { FileActionRegistry } from './services/registry/FileActionRegistry';
 import { TabIconManager } from './services/ui/BayIconManager';

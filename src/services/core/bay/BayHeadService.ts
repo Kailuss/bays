@@ -3,7 +3,7 @@ import { Bay } from '../../../models/Bay';
 import { BayStateService } from '../BayStateService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { GitSyncService } from '../../integration/GitSyncService';
-import { convertToSideTab } from '../helpers/tabConverter';
+import { convertToBay } from '../helpers/tabConverter';
 import { Logger } from '../../../utils/logger';
 
 /**
@@ -63,7 +63,7 @@ export class BayHeadService {
 
     // If found in the group, convert and add it
     if (parentNativeTab) {
-      const parentSideTab = convertToSideTab(parentNativeTab, this.gitSyncService);
+      const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
       if (parentSideTab) {
         Logger.log(`[BayHead] Creating parent tab for variant: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
         this.stateService.addTab(parentSideTab);
@@ -88,7 +88,7 @@ export class BayHeadService {
         for (const tab of group.tabs) {
           if (tab.input instanceof vscode.TabInputText) {
             if (tab.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToSideTab(tab, this.gitSyncService);
+              const parentSideTab = convertToBay(tab, this.gitSyncService);
               if (parentSideTab) {
                 Logger.log(`[BayHead] Successfully opened and added parent tab: ${parentSideTab.metadata.label}`);
                 this.stateService.addTab(parentSideTab);
@@ -147,7 +147,7 @@ export class BayHeadService {
 
     // If found, convert and add it to the array
     if (parentNativeTab) {
-      const parentSideTab = convertToSideTab(parentNativeTab, this.gitSyncService);
+      const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
       if (parentSideTab) {
         Logger.log(`[BayHead] Creating parent tab for variant during syncAll: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
         allTabs.push(parentSideTab);
@@ -170,7 +170,7 @@ export class BayHeadService {
         for (const tab of group.tabs) {
           if (tab.input instanceof vscode.TabInputText) {
             if (tab.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToSideTab(tab, this.gitSyncService);
+              const parentSideTab = convertToBay(tab, this.gitSyncService);
               if (parentSideTab) {
                 Logger.log(`[BayHead] Successfully opened and added parent tab during sync: ${parentSideTab.metadata.label}`);
                 allTabs.push(parentSideTab);

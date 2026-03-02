@@ -144,7 +144,7 @@ function commitDrop() {
 
     // Enviar mensaje primero para que el rebuild del HTML empiece ya
     vscode.postMessage({
-      type           : 'dropTab',
+      type           : 'dropBay',
       sourceTabId    : sourceEl.dataset.bayid,
       targetTabId    : targetTabId,
       insertPosition : insertPosition,

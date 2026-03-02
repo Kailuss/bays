@@ -3,7 +3,7 @@
  */
 
 import * as vscode from 'vscode';
-import { SideTab } from '../../models/Bay';
+import { Bay } from '../../models/Bay';
 import { BayGroup } from '../../models/BayGroup';
 
 //= OPCIONES DE RENDERIZADO
@@ -15,7 +15,7 @@ export const FALLBACK_FILE_ICON = 'font-icon:\\E023:#d4d7d6';
 export type BuildHtmlOptions = {
   webview: vscode.Webview;
   groups: BayGroup[];
-  getTabsInGroup: (groupId: number) => SideTab[];
+  getBaysInGroup: (groupId: number) => Bay[];
   workspaceName: string;
   compactMode: boolean;
   showPath: boolean;
@@ -24,9 +24,9 @@ export type BuildHtmlOptions = {
   initialLoad?: boolean;
 };
 
-/** Opciones para renderizar una tab individual */
-export type RenderTabOptions = {
-  tab: SideTab;
+/** Opciones para renderizar una bay individual */
+export type RenderBayOptions = {
+  bay: Bay;
   showPath: boolean;
   copilotReady: boolean;
   enableDragDrop?: boolean;
@@ -73,9 +73,9 @@ export type WebviewResourceUris = {
   dragDropScript: vscode.Uri | null;
 };
 
-//= ESTADO DE TAB
+//= ESTADO DE BAY
 
-/** Indicador visual de estado de archivo */
+/** Indicador visual de estado de bay */
 export type StateIndicator = {
   html: string;
   nameClass: string;

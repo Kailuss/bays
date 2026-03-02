@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { SideTab } from '../../../models/Bay';
+import { Bay } from '../../../models/Bay';
 import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers } from '../../../models/BayHelpers';
 import type { GitSyncService } from '../../integration/GitSyncService';
@@ -8,7 +8,7 @@ import { formatFilePath } from '../../../utils/helpers';
 import { classifyDiffType, determineParentId } from './tabClassifier';
 
 /**
- * Funciones puras para convertir tabs nativas de VS Code a SideTabs.
+ * Funciones puras para convertir tabs nativas de VS Code a Bays.
  * 
  * Separado de TabSyncService para:
  * - Facilitar testing (funciones puras, sin estado)
@@ -24,25 +24,25 @@ import { classifyDiffType, determineParentId } from './tabClassifier';
  */
 
 /**
- * Convierte una tab nativa de VS Code a nuestro modelo SideTab.
+ * Convierte una tab nativa de VS Code a nuestro modelo Bay.
  * 
  * Explicación simple:
  * - Si es un archivo (texto, editor custom, notebook) recoge la uri, el nombre
  *   del archivo, la ruta relativa y la extensión.
  * - Si es una tab webview (Settings, Extensions, Welcome), NO crea una URI
  *   falsa; deja uri sin definir y genera un id estable basado en la etiqueta.
- * - El método solo transforma datos y devuelve un SideTab listo para la UI.
+ * - El método solo transforma datos y devuelve un Bay listo para la UI.
  * 
  * @param tab Tab nativa de VS Code
  * @param gitService Servicio de Git para obtener git status
  * @param index Índice opcional en el grupo
- * @returns SideTab o null si el tipo no es soportado
+ * @returns Bay o null si el tipo no es soportado
  */
-export function convertToSideTab(
+export function convertToBay(
   tab: vscode.Tab,
   gitService: GitSyncService,
   index?: number
-): SideTab | null {
+): Bay | null {
   let uri: vscode.Uri | undefined;
   let label: string;
   let description: string | undefined;
@@ -50,7 +50,7 @@ export function convertToSideTab(
   let fileType: string = '';
   let tabType: BayType = 'file';
   let viewType: string | undefined;
-  
+
   // Guardar URIs original y modificado para tabs diff (necesario para clasificación)
   let originalUri: vscode.Uri | undefined;
   let modifiedUri: vscode.Uri | undefined;
@@ -256,7 +256,7 @@ export function convertToSideTab(
     shortcuts: stateWithDefaults.shortcuts,
   };
 
-  return new SideTab(metadata, state);
+  return new Bay(metadata, state);
 }
 
 /**
@@ -325,7 +325,7 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
 }
 
 /**
- * Extrae un ID ligero de una tab nativa — evita conversión completa a SideTab.
+ * Extrae un ID ligero de una tab nativa — evita conversión completa a Bay.
  * Usado por removeOrphanedTabs y syncActiveState para mejor performance.
  * 
  * @param tab Tab nativa de VS Code

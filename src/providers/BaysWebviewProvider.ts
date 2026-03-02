@@ -4,13 +4,19 @@ import { TIMINGS }                  from '../constants/timings';
 import { Bay }                  from '../models/Bay';
 import type { BayViewMode }         from '../models/Bay';
 import { BayStateService }          from '../services/core/BayStateService';
-import { TabIconManager }           from '../services/ui/BayIconManager';
+import type { DocumentManager }     from '../services/core/DocumentManager';
+import { BayIconManager }           from '../services/ui/BayIconManager';
 import { CopilotService }           from '../services/integration/CopilotService';
 import { BayDragDropService }       from '../services/ui/BayDragDropService';
 import { FileActionRegistry }       from '../services/registry/FileActionRegistry';
 import { Logger }                   from '../utils/logger';
 import { BaysHtmlBuilder }          from './BaysHtmlBuilder';
 import { BayContextMenu }           from './BayContextMenu';
+
+type BaySyncLike = {
+  syncActiveState?: () => void;
+  getDocumentManager?: () => DocumentManager | undefined;
+};
 
 /**
  * Proveedor del Webview que coordina la vista de pestañas.
@@ -30,9 +36,9 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly _extensionUri  : vscode.Uri,
     private readonly stateService   : BayStateService,
-    private readonly syncService    : any, // TabSyncService (any para evitar import cíclico)
+    private readonly syncService    : BaySyncLike,
     private readonly copilotService : CopilotService,
-    private readonly iconManager    : TabIconManager,
+    private readonly iconManager    : BayIconManager,
     private readonly context        : vscode.ExtensionContext,
     private readonly dragDropService: BayDragDropService,
     private readonly fileActionRegistry: FileActionRegistry,
@@ -43,10 +49,10 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     this.contextMenu = new BayContextMenu(stateService, copilotService);
     // Full rebuild on structural changes
     stateService.onDidChangeState(() => this.refresh());
-    // Partial update for lightweight changes (active tab only)
+    // Partial update for lightweight changes (active bay only)
     stateService.onDidChangeStateSilent(() => this.refreshSilent());
-    // Notify tab state changes for animation
-    stateService.onDidChangeTabState((tabId: string) => this.notifyTabStateChanged(tabId));
+    // Notify bay state changes for animation
+    stateService.onDidChangeBayState((bayId: string) => this.notifyBayStateChanged(bayId));
     // Rebuild when workspace folders change (updates header title)
     vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh());
   }
@@ -100,7 +106,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       this._view.webview.html = await this.htmlBuilder.buildHtml({
         webview        : this._view.webview,
         groups,
-        getTabsInGroup : (groupId) => this.stateService.getTabsInGroup(groupId),
+        getBaysInGroup : (groupId) => this.stateService.getBaysByGroupId(groupId),
         workspaceName  : this.getWorkspaceName(),
         compactMode    : config.compactMode,
         showPath       : config.showFilePath,
@@ -125,35 +131,35 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private refreshSilent(): void {
     if (!this._view || this._fullRefreshPending) { return; }
 
-    const activeTabIds: string[] = [];
+    const activeBayIds: string[] = [];
     for (const group of this.stateService.getGroups()) {
-      for (const tab of this.stateService.getTabsInGroup(group.id)) {
-        if (tab.state.isActive) { activeTabIds.push(tab.metadata.id); }
+      for (const bay of this.stateService.getBaysByGroupId(group.id)) {
+        if (bay.state.isActive) { activeBayIds.push(bay.metadata.id); }
       }
     }
 
     this._view.webview.postMessage({
-      type: 'updateActiveTab',
-      activeTabIds,
+      type: 'updateActiveBay',
+      activeBayIds,
     });
   }
 
   /**
-   * Notifica al webview que el estado de una tab ha cambiado (diagnóstico o git status).
+   * Notifica al webview que el estado de una bay ha cambiado (diagnóstico o git status).
    * Envía el nuevo estado para actualización granular sin reconstruir el HTML.
    */
-  async notifyTabStateChanged(tabId: string): Promise<void> {
+  async notifyBayStateChanged(bayId: string): Promise<void> {
     if (!this._view || this._fullRefreshPending) { return; }
 
-    const tab = this.stateService.getTab(tabId);
-    if (!tab) { return; }
+    const bay = this.stateService.getBay(bayId);
+    if (!bay) { return; }
 
     const { getStateIndicator } = await import('../utils/stateIndicator.js');
-    const stateIndicator = getStateIndicator(tab);
+    const stateIndicator = getStateIndicator(bay);
 
     this._view.webview.postMessage({
-      type: 'tabStateChanged',
-      tabId,
+      type: 'bayStateChanged',
+      bayId: bayId,
       stateClass: stateIndicator.nameClass,
       stateHtml: stateIndicator.html,
     });
@@ -162,163 +168,149 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
 
   //= MESSAGE HANDLERS
 
+  private readonly messageHandlers = new Map<string, (msg: any) => Promise<void>>([
+    ['openBay', async (msg)         => await this.handleOpenBay    (msg.bayId)              ],
+    ['closeBay', async (msg)        => await this.handleCloseBay   (msg.bayId)              ],
+    ['pinBay', async (msg)          => await this.handlePinBay     (msg.bayId)              ],
+    ['unpinBay', async (msg)        => await this.handleUnpinBay   (msg.bayId)              ],
+    ['addToChat', async (msg)       => await this.handleAddToChat  (msg.bayId)              ],
+    ['contextMenu', async (msg)     => await this.handleContextMenu(msg.bayId)              ],
+    ['dropBay', async (msg)         => await this.handleDropBay    (msg)                    ],
+    ['fileAction', async (msg)      => await this.handleFileAction (msg.bayId, msg.actionId)],
+    ['saveAll', async (_)           => { await vscode.workspace.saveAll(false); }           ],
+    ['reorder', async (_)           => void vscode.window.showInformationMessage('Reorder: Coming soon')],
+    ['closeGroup', async (msg)      => {
+      const group = vscode.window.tabGroups.all.find(g => g.viewColumn === msg.groupId);
+      if (group) { await vscode.window.tabGroups.close(group); }
+    }],
+    ['toggleCompactMode', async (_) => {
+      const cfg = vscode.workspace.getConfiguration('bays');
+      const current = cfg.get<boolean>('compactMode', false);
+      await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
+    }],
+    ['refresh', async (_)           => this.refresh()],
+  ]);
+
   private async handleMessage(msg: any): Promise<void> {
-    switch (msg.type) {
-      case 'openTab': {
-        // Forzar sincronización de estado antes de buscar la tab
-        // (crítico para preview tabs que pueden haber cambiado)
-        if (this.syncService?.syncActiveState) {
-          this.syncService.syncActiveState();
-          // Pequeño retardo para dar tiempo a que VS Code propague el estado de pestañas sincronizado.
-          await new Promise(resolve => setTimeout(resolve, TIMINGS.SYNC_PROPAGATION_DELAY));
-        }
+    const handler = this.messageHandlers.get(msg.type);
+    if (handler) {
+      await handler(msg);
+    } else {
+      Logger.warn(`[Bays] Unknown message type: ${msg.type}`);
+    }
+  }
 
-        const tab = this.findTab(msg.tabId);
-        if (!tab) {
-          Logger.warn('[Bays] Tab not found for activation (likely closed): ' + msg.tabId);
-          // La tab ya no existe - hacer refresh inmediato para limpiar
-          this.refresh();
-          return;
-        }
+  private async handleOpenBay(bayId: string): Promise<void> {
+    if (this.syncService?.syncActiveState) {
+      this.syncService.syncActiveState();
+      await new Promise(resolve => setTimeout(resolve, TIMINGS.SYNC_PROPAGATION_DELAY));
+    }
 
-        // If this tab is in preview mode, track it as the last preview source
-        if (tab.state.viewMode === 'preview') {
-          this.stateService.setLastMarkdownPreviewTabId(tab.metadata.id);
-        }
+    const bay = this.findBay(bayId);
+    if (!bay) {
+      Logger.warn('[Bays] Bay not found for activation (likely closed): ' + bayId);
+      this.refresh();
+      return;
+    }
 
-        try {
-          await tab.activate();
-        } catch (err: unknown) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          Logger.error('[Bays] Failed to activate tab: ' + tab.metadata.label, err);
+    if (bay.state.viewMode === 'preview') {
+      this.stateService.setLastMarkdownPreviewBayId(bay.metadata.id);
+    }
 
-          // Si el error indica que la tab no existe o no corresponde al documento activo,
-          // hacer refresh para limpiar
-          if (errorMsg.includes('not found') || 
-              errorMsg.includes('no longer exists') ||
-              errorMsg.includes('does not correspond')) {
-            Logger.log('[Bays] Tab was closed/removed or mismatch, refreshing to sync state');
-            this.refresh();
-          }
-        }
-        break;
-      }
-      case 'closeTab': {
-        const tab = this.findTab(msg.tabId);
-        if (tab) { await tab.close(); }
-        break;
-      }
-      case 'pinTab': {
-        const tab = this.findTab(msg.tabId);
-        if (tab) {
-          await tab.pin();
-          this.stateService.reorderOnPin(tab.metadata.id);
-        }
-        break;
-      }
-      case 'unpinTab': {
-        const tab = this.findTab(msg.tabId);
-        if (tab) {
-          await tab.unpin();
-          this.stateService.reorderOnUnpin(tab.metadata.id);
-        }
-        break;
-      }
-      case 'addToChat': {
-        const tab = this.findTab(msg.tabId);
-        if (tab) { await this.copilotService.addFileToChat(tab.metadata.uri); }
-        break;
-      }
-      case 'contextMenu': {
-        const tab = this.findTab(msg.tabId);
-        if (tab) { await this.contextMenu.show(tab); }
-        break;
-      }
-      case 'dropTab': {
-        const { sourceTabId, targetTabId, insertPosition, sourceGroupId, targetGroupId } = msg;
+    try {
+      await bay.activate();
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      Logger.error('[Bays] Failed to activate bay: ' + bay.metadata.label, err);
 
-        // Movimiento dentro del mismo grupo
-        if (sourceGroupId === targetGroupId) {
-          this.dragDropService.reorderWithinGroup(sourceTabId, targetTabId, insertPosition);
-        } else {
-          // Movimiento entre grupos
-          await this.dragDropService.moveBetweenGroups(sourceTabId, targetGroupId, targetTabId, insertPosition);
-        }
-        break;
-      }
-      case 'fileAction': {
-        const tab = this.findTab(msg.tabId);
-        if (tab?.metadata.uri && msg.actionId) {
-          // For Markdown toggle actions, update viewMode state
-          const isMarkdownToggle = msg.actionId === 'openMarkdownPreview' || msg.actionId === 'editMarkdownSource';
-          
-          if (isMarkdownToggle) {
-            // Simply toggle the viewMode state for THIS tab only
-            // Each tab remembers its own preference (preview vs source)
-            const newViewMode: BayViewMode = tab.state.viewMode === 'preview' ? 'source' : 'preview';
-            tab.state.viewMode = newViewMode;
-            Logger.log(`[WebviewProvider] Toggled viewMode for: ${tab.metadata.label} → ${tab.state.viewMode}`);
-            
-            // Track which tab last activated the preview (for unique identification)
-            if (msg.actionId === 'openMarkdownPreview') {
-              this.stateService.setLastMarkdownPreviewTabId(tab.metadata.id);
-            } else {
-              // If switching back to source, clear the tracker (if this was the active preview)
-              if (this.stateService.lastMarkdownPreviewTabId === tab.metadata.id) {
-                this.stateService.setLastMarkdownPreviewTabId(null);
-              }
-            }
-          }
-          
-          // Pass context for dynamic action execution
-          const context = { viewMode: tab.state.viewMode };
-          const shouldFocus = this.fileActionRegistry.shouldSetFocus(msg.actionId);
-          
-          // Execute the action (this changes the view)
-          await this.fileActionRegistry.execute(msg.actionId, tab.metadata.uri, context);
-          
-          // For Markdown toggle, always activate the tab to reflect the view change immediately
-          if (isMarkdownToggle || (shouldFocus && !tab.state.isActive)) {
-            await tab.activate();
-          }
-          
-          // Update state after activation to reflect changes
-          if (isMarkdownToggle) {
-            this.stateService.updateTab(tab);
-          }
-        }
-        break;
-      }
-      case 'saveAll': {
-        await vscode.workspace.saveAll(false);
-        break;
-      }
-      case 'reorder': {
-        vscode.window.showInformationMessage('Reorder: Coming soon');
-        break;
-      }
-      case 'closeGroup': {
-        const group = vscode.window.tabGroups.all.find(g => g.viewColumn === msg.groupId);
-        if (group) {
-          await vscode.window.tabGroups.close(group);
-        }
-        break;
-      }
-      case 'toggleCompactMode': {
-        const cfg = vscode.workspace.getConfiguration('bays');
-        const current = cfg.get<boolean>('compactMode', false);
-        await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
-        break;
-      }
-      case 'refresh': {
+      if (errorMsg.includes('not found') ||
+          errorMsg.includes('no longer exists') ||
+          errorMsg.includes('does not correspond')) {
+        Logger.log('[Bays] Bay was closed/removed or mismatch, refreshing to sync state');
         this.refresh();
-        break;
       }
     }
   }
 
-  private findTab(id: string): Bay | undefined {
-    return this.stateService.getTab(id);
+  private async handleCloseBay(bayId: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (bay) {
+      await bay.close();
+    }
+  }
+
+  private async handlePinBay(bayId: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (!bay) { return; }
+    await bay.pin();
+    this.stateService.reorderOnPin(bay.metadata.id);
+  }
+
+  private async handleUnpinBay(bayId: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (!bay) { return; }
+    await bay.unpin();
+    this.stateService.reorderOnUnpin(bay.metadata.id);
+  }
+
+  private async handleAddToChat(bayId: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (bay) {
+      await this.copilotService.addFileToChat(bay.metadata.uri);
+    }
+  }
+
+  private async handleContextMenu(bayId: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (bay) {
+      await this.contextMenu.show(bay);
+    }
+  }
+
+  private async handleDropBay(msg: any): Promise<void> {
+    const { sourceBayId, targetBayId, insertPosition, sourceGroupId, targetGroupId } = msg;
+    if (sourceGroupId === targetGroupId) {
+      this.dragDropService.reorderWithinGroup(sourceBayId, targetBayId, insertPosition);
+      return;
+    }
+
+    await this.dragDropService.moveBetweenGroups(sourceBayId, targetGroupId, targetBayId, insertPosition);
+  }
+
+  private async handleFileAction(bayId: string, actionId?: string): Promise<void> {
+    const bay = this.findBay(bayId);
+    if (!bay?.metadata.uri || !actionId) {
+      return;
+    }
+
+    const isMarkdownToggle = actionId === 'openMarkdownPreview' || actionId === 'editMarkdownSource';
+    if (isMarkdownToggle) {
+      const newViewMode: BayViewMode = bay.state.viewMode === 'preview' ? 'source' : 'preview';
+      bay.state.viewMode = newViewMode;
+      Logger.log(`[WebviewProvider] Toggled viewMode for: ${bay.metadata.label} → ${bay.state.viewMode}`);
+
+      if (actionId === 'openMarkdownPreview') {
+        this.stateService.setLastMarkdownPreviewBayId(bay.metadata.id);
+      } else if (this.stateService.lastMarkdownPreviewBayId === bay.metadata.id) {
+        this.stateService.setLastMarkdownPreviewBayId(null);
+      }
+    }
+
+    const context = { viewMode: bay.state.viewMode };
+    const shouldFocus = this.fileActionRegistry.shouldSetFocus(actionId);
+    await this.fileActionRegistry.execute(actionId, bay.metadata.uri, context);
+
+    if (isMarkdownToggle || (shouldFocus && !bay.state.isActive)) {
+      await bay.activate();
+    }
+
+    if (isMarkdownToggle) {
+      this.stateService.updateBay(bay);
+    }
+  }
+
+  private findBay(id: string): Bay | undefined {
+    return this.stateService.fetchBayById(id);
   }
 
   //= HELPERS

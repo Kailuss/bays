@@ -45,7 +45,7 @@ export type VersionMetadata = {
   };
   
   //: RELATIONSHIPS
-  relatedTabId?: string;        // SideTab ID that displays this version
+  relatedBayId?: string;        // Bay ID that displays this version
   isActive: boolean;            // Is currently displayed in editor
 };
 
@@ -55,14 +55,14 @@ export type VersionMetadata = {
  * 
  * @remarks
  * Este modelo es de uso interno en servicios y NO se expone directamente
- * en la webview. SideTab mantiene la responsabilidad de representación visual.
+ * en la webview. Bay mantiene la responsabilidad de representación visual.
  * 
- * Relación con SideTab:
- * - Cada SideTab parent puede tener un DocumentModel asociado
- * - Cada DocumentVersion referencia a una SideTab child (si existe)
+ * Relación con Bay:
+ * - Cada Bay parent puede tener un DocumentModel asociado
+ * - Cada DocumentVersion referencia a una Variant (si existe)
  * - DocumentModel es la fuente de verdad para metadata de documento
  * 
- * @see SideTab for visual representation
+ * @see Bay for visual representation
  * @see DocumentManager for lifecycle management
  */
 export type DocumentModel = {
@@ -91,8 +91,8 @@ export type DocumentModel = {
   lastAccessedAt: number;       // Last access timestamp
   
   //: RELATIONSHIPS
-  parentTabId?: string;         // Associated parent SideTab ID
-  childTabIds: Set<string>;     // Associated child SideTab IDs
+  parentBayId?: string;         // Associated parent Bay ID
+  variantIds: Set<string>;     // Associated variant IDs
   
   //: STATE
   hasUnsavedChanges: boolean;   // Whether document has unsaved changes
@@ -126,7 +126,7 @@ export type CreateDocumentModelOptions = {
   languageId: string;
   fileName: string;
   fileExtension: string;
-  parentTabId?: string;
+  parentBayId?: string;
   fileSize?: number;
   isReadOnly?: boolean;
   isBinary?: boolean;
@@ -142,7 +142,7 @@ export type RegisterVersionOptions = {
   label: string;
   description?: string;
   stats?: DiffStats;
-  relatedTabId?: string;
+  relatedBayId?: string;
   commitHash?: string;
   branch?: string;
   aiMetadata?: VersionMetadata['aiMetadata'];
@@ -178,14 +178,14 @@ export function createDocumentModel(options: CreateDocumentModelOptions): Docume
     isReadOnly: options.isReadOnly ?? false,
     isBinary: options.isBinary ?? false,
     versions: new Map(),
-    childTabIds: new Set(),
+    variantIds: new Set(),
     createdAt: now,
     lastModifiedAt: now,
     lastAccessedAt: now,
     hasUnsavedChanges: false,
     versionCount: 0,
     snapshotHistory: [],
-    parentTabId: options.parentTabId,
+    parentBayId: options.parentBayId,
   };
 }
 
@@ -214,7 +214,7 @@ export function registerVersion(
     createdAt: now,
     lastAccessedAt: now,
     isActive: false,
-    relatedTabId: options.relatedTabId,
+    relatedBayId: options.relatedBayId,
     commitHash: options.commitHash,
     branch: options.branch,
     aiMetadata: options.aiMetadata,
@@ -368,29 +368,29 @@ export function updateVersionStats(
 }
 
 /**
- * Asocia una child tab con un documento.
+ * Asocia una variante con un documento.
  * 
  * @param document DocumentModel
- * @param childTabId ID de la child tab
+ * @param variantId ID de la variante
  */
-export function associateChildTab(
+export function associateVariant(
   document: DocumentModel,
-  childTabId: string
+  variantId: string
 ): void {
-  document.childTabIds.add(childTabId);
+  document.variantIds.add(variantId);
 }
 
 /**
- * Desasocia una child tab de un documento.
+ * Desasocia una variante de un documento.
  * 
  * @param document DocumentModel
- * @param childTabId ID de la child tab
+ * @param variantId ID de la variante
  */
-export function dissociateChildTab(
+export function dissociateVariant(
   document: DocumentModel,
-  childTabId: string
+  variantId: string
 ): void {
-  document.childTabIds.delete(childTabId);
+  document.variantIds.delete(variantId);
 }
 
 /**
@@ -448,13 +448,13 @@ export function getAggregatedStats(document: DocumentModel): {
 }
 
 /**
- * Comprueba si el documento necesita limpieza (no tiene tabs asociadas).
+ * Comprueba si el documento necesita limpieza (no tiene bays asociadas).
  * 
  * @param document DocumentModel
  * @returns true si puede ser limpiado
  */
 export function canBeCleanedUp(document: DocumentModel): boolean {
-  return !document.parentTabId && document.childTabIds.size === 0;
+  return !document.parentBayId && document.variantIds.size === 0;
 }
 
 /**
@@ -477,6 +477,6 @@ export function getDocumentSummary(document: DocumentModel): string {
   return `Document: ${document.fileName} (${document.languageId})
   - Versions: ${stats.totalVersions} (${stats.workingTreeVersions} working-tree, ${stats.stagedVersions} staged, ${stats.snapshots} snapshots)
   - Changes: +${stats.totalLinesAdded} -${stats.totalLinesRemoved}
-  - Tabs: parent=${document.parentTabId ?? 'none'}, children=${document.childTabIds.size}
+  - Bays: parent=${document.parentBayId ?? 'none'}, children=${document.variantIds.size}
   - Modified: ${new Date(document.lastModifiedAt).toLocaleString()}`;
 }

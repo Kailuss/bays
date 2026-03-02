@@ -14,8 +14,8 @@ import {
   getActiveVersion,
   setActiveVersion,
   removeVersion,
-  associateChildTab,
-  dissociateChildTab,
+  associateVariant,
+  dissociateVariant,
   canBeCleanedUp,
   touchDocument,
   getAggregatedStats,
@@ -28,7 +28,7 @@ import { Logger } from '../../utils/logger';
  */
 export type DocumentManagerOptions = {
   /**
-   * Habilita limpieza automática de documentos sin tabs asociadas.
+   * Habilita limpieza automática de documentos sin bays asociadas.
    * @default true
    */
   autoCleanup?: boolean;
@@ -52,16 +52,16 @@ export type DocumentManagerOptions = {
  * Responsabilidades:
  * - Crear y mantener el ciclo de vida de DocumentModels
  * - Gestionar versiones (diffs) asociadas a cada documento
- * - Asociar/desasociar tabs (parent y children) con documentos
+ * - Asociar/desasociar bays (parent y children) con documentos
  * - Proporcionar búsqueda y consulta de documentos y versiones
  * - Limpieza automática de documentos huérfanos
  * 
  * @remarks
  * Este servicio es la fuente de verdad para metadata de documentos.
- * BayStateService y TabSyncService delegan la gestión de documentos aquí.
+ * BayStateService y BaySyncService delegan la gestión de documentos aquí.
  * 
  * @see DocumentModel for data structure
- * @see BayStateService for tab state management
+ * @see BayStateService for bay state management
  */
 export class DocumentManager {
   private documents = new Map<string, DocumentModel>();
@@ -307,97 +307,97 @@ export class DocumentManager {
   }
   
   // ═══════════════════════════════════════════════════════════════
-  // TAB ASSOCIATIONS
+  // BAY ASSOCIATIONS
   // ═══════════════════════════════════════════════════════════════
   
   /**
-   * Asocia un parent tab con un documento.
+   * Asocia un parent bay con un documento.
    * 
    * @param documentId ID del documento
-   * @param parentTabId ID del parent tab
+   * @param parentBayId ID del parent bay
    * @returns true si se asoció correctamente
    */
-  public associateParentTab(documentId: string, parentTabId: string): boolean {
+  public associateParentBay(documentId: string, parentBayId: string): boolean {
     const document = this.getDocument(documentId);
     if (!document) {
       return false;
     }
     
-    document.parentTabId = parentTabId;
+    document.parentBayId = parentBayId;
     return true;
   }
   
   /**
-   * Desasocia el parent tab de un documento.
+   * Desasocia el parent bay de un documento.
    * 
    * @param documentId ID del documento
    * @returns true si se desasociócorrectamente
    */
-  public dissociateParentTab(documentId: string): boolean {
+  public dissociateParentBay(documentId: string): boolean {
     const document = this.getDocument(documentId);
     if (!document) {
       return false;
     }
     
-    document.parentTabId = undefined;
+    document.parentBayId = undefined;
     return true;
   }
   
   /**
-   * Asocia un child tab con un documento.
+   * Asocia un child bay con un documento.
    * 
    * @param documentId ID del documento
-   * @param childTabId ID del child tab
+   * @param childBayId ID del child bay
    * @returns true si se asoció correctamente
    */
-  public associateChildTab(documentId: string, childTabId: string): boolean {
+  public associateVariant(documentId: string, variantId: string): boolean {
     const document = this.getDocument(documentId);
     if (!document) {
       return false;
     }
     
-    associateChildTab(document, childTabId);
+    associateVariant(document, variantId);
     return true;
   }
   
   /**
-   * Desasocia un child tab de un documento.
+   * Desasocia un variant de un documento.
    * 
    * @param documentId ID del documento
-   * @param childTabId ID del child tab
-   * @returns true si se desasociό correctamente
+   * @param variantId ID del variant
+   * @returns true si se desasoció correctamente
    */
-  public dissociateChildTab(documentId: string, childTabId: string): boolean {
+  public dissociateVariant(documentId: string, variantId: string): boolean {
     const document = this.getDocument(documentId);
     if (!document) {
       return false;
     }
     
-    dissociateChildTab(document, childTabId);
+    dissociateVariant(document, variantId);
     return true;
   }
   
   /**
-   * Obtiene el documento asociado a un parent tab.
+   * Obtiene el documento asociado a un parent bay.
    * 
-   * @param parentTabId ID del parent tab
+   * @param parentBayId ID del parent bay
    * @returns DocumentModel o undefined
    */
-  public getDocumentByParentTab(parentTabId: string): DocumentModel | undefined {
+  public getDocumentByParentBayId(parentBayId: string): DocumentModel | undefined {
     return Array.from(this.documents.values()).find(
-      doc => doc.parentTabId === parentTabId
+      doc => doc.parentBayId === parentBayId
     );
   }
   
   /**
-   * Obtiene todos los documentos que tienen un child tab específica.
+   * Obtiene todos los documentos que tienen un variant específico.
    * 
-   * @param childTabId ID del child tab
+   * @param variantId ID del variant
    * @returns Array de DocumentModel
    */
-  public getDocumentsByChildTab(childTabId: string): DocumentModel[] {
+  public getDocumentsByVariant(variantId: string): DocumentModel[] {
     return Array.from(this.documents.values()).filter(
-      doc => doc.childTabIds.has(childTabId)
+      doc => doc.variantIds.has(variantId)
     );
   }
   
@@ -515,18 +515,18 @@ export class DocumentManager {
     totalVersions: number;
     documentsWithChanges: number;
     orphanedDocuments: number;
-    totalChildTabs: number;
+    totalVariants: number;
     languageDistribution: Map<string, number>;
   } {
     const docs = Array.from(this.documents.values());
     const languageDistribution = new Map<string, number>();
     
     let totalVersions = 0;
-    let totalChildTabs = 0;
+    let totalVariants = 0;
     
     for (const doc of docs) {
       totalVersions += doc.versionCount;
-      totalChildTabs += doc.childTabIds.size;
+      totalVariants += doc.variantIds.size;
       
       const count = languageDistribution.get(doc.languageId) ?? 0;
       languageDistribution.set(doc.languageId, count + 1);
@@ -537,7 +537,7 @@ export class DocumentManager {
       totalVersions,
       documentsWithChanges: docs.filter(d => d.hasUnsavedChanges).length,
       orphanedDocuments: docs.filter(d => canBeCleanedUp(d)).length,
-      totalChildTabs,
+      totalVariants,
       languageDistribution,
     };
   }

@@ -57,7 +57,7 @@ export class BayHierarchyService {
     parent.state.childrenCount++;
     // Note: canExpand computed on-demand, not stored in capabilities
 
-    this.stateService.updateTab(parent);
+    this.stateService.updateBay(parent);
     
     Logger.log(`[BayHierarchy] Registered child: ${child.metadata.label} → ${parent.metadata.label} (count: ${parent.state.childrenCount})`);
   }
@@ -85,7 +85,7 @@ export class BayHierarchyService {
       // Note: canExpand computed on-demand from hasChildren
     }
 
-    this.stateService.updateTab(parent);
+    this.stateService.updateBay(parent);
     
     Logger.log(`[BayHierarchy] Unregistered child from ${parent.metadata.label} (remaining: ${parent.state.childrenCount})`);
   }
@@ -97,7 +97,7 @@ export class BayHierarchyService {
    * @returns Array of child bays
    */
   getChildren(parentId: string): Bay[] {
-    return this.stateService.getAllTabs()
+    return this.stateService.getAllBays()
       .filter(bay => bay.metadata.parentId === parentId);
   }
 
@@ -108,7 +108,7 @@ export class BayHierarchyService {
    * @returns true if has children
    */
   hasChildren(bayId: string): boolean {
-    return this.stateService.getAllTabs()
+    return this.stateService.getAllBays()
       .some(bay => bay.metadata.parentId === bayId);
   }
 
@@ -117,7 +117,7 @@ export class BayHierarchyService {
    * Useful after full synchronization or when inconsistencies exist.
    */
   recalculateAllCounts(): void {
-    const allBays = this.stateService.getAllTabs();
+    const allBays = this.stateService.getAllBays();
     const parents = allBays.filter(bay => !bay.metadata.parentId);
     
     let updated = 0;
@@ -131,7 +131,7 @@ export class BayHierarchyService {
         parent.state.hasChildren = actualCount > 0;
         // Note: canExpand computed on-demand from hasChildren state
         
-        this.stateService.updateTab(parent);
+        this.stateService.updateBay(parent);
         updated++;
       }
     }
@@ -222,7 +222,7 @@ export class BayHierarchyService {
     );
     
     // Find version matching this bay
-    const matchingVersion = versions.find((v: any) => v.relatedTabId === childBay.metadata.id);
+    const matchingVersion = versions.find((v: any) => v.relatedBayId === childBay.metadata.id);
     
     return matchingVersion?.stats;
   }
@@ -295,10 +295,10 @@ export class BayHierarchyService {
    * @param groupId Optional: filter by group
    * @returns Bay tree
    */
-  getTabTree(groupId?: number): BayTreeNode[] {
+  getBayTree(groupId?: number): BayTreeNode[] {
     const allBays = groupId 
-      ? this.stateService.getTabsInGroup(groupId)
-      : this.stateService.getAllTabs();
+      ? this.stateService.getBaysByGroupId(groupId)
+      : this.stateService.getAllBays();
     
     const parents = allBays.filter((bay: Bay) => !bay.metadata.parentId);
     
