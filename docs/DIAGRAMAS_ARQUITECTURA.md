@@ -155,27 +155,27 @@ TabSyncService.handleTabChanges()
         ↓
 TabConverter.convert(tab)
         ↓
-    ┌───────────────────┐
-    │ Si parentId existe│
-    └───────────────────┘
-            ↓
+┌────────────────────┐
+│ Si parentId existe │
+└────────────────────┘
+        ↓
     await ensureParentExists(childTab, tab)  ← ✅ Se espera
-            ↓
+        ↓
     TabHierarchyService.inheritState(child, parent)
-            ↓
+        ↓
     TabHierarchyService.registerChild(child.id, parent.id)
-            ↓
-        ┌────────────────────────────────────┐
-        │ Parent actualizado:                │
-        │ • hasChildren = true               │
-        │ • childrenCount++                  │
-        └────────────────────────────────────┘
-            ↓
-    TabStateService.addTab(childTab)
-            ↓
-    ✅ Child añadido DESPUÉS del parent
-    ✅ Parent actualizado correctamente
-    ✅ Estado consistente
+        ↓
+┌────────────────────────────────────┐
+│ Parent actualizado:                │
+│ • hasChildren = true               │
+│ • childrenCount++                  │
+└────────────────────────────────────┘
+        ↓
+TabStateService.addTab(childTab)
+        ↓
+✅ Child añadido DESPUÉS del parent
+✅ Parent actualizado correctamente
+✅ Estado consistente
 ```
 
 ---
@@ -187,37 +187,49 @@ TabConverter.convert(tab)
 │ Group 1                                                     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  📄 extension.ts                     [Parent]              │
+│  extension.ts                                 [Parent]      │
 │     ├─ isPinned: false                                      │
-│     ├─ hasChildren: true              ✅ ACTUALIZADO        │
-│     └─ childrenCount: 2               ✅ ACTUALIZADO        │
+│     ├─ hasChildren: true                                    │
+│     └─ childrenCount: 2                                     │
 │                                                             │
-│        🔄 Working Tree              [Child #1]             │
-│           ├─ parentId: "extension.ts-1"                     │
-│           ├─ diffType: "working-tree"                       │
-│           ├─ diffStats: { +15, -3 }                         │
-│           └─ NO hereda gitStatus/diagnostics                │
+├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
 │                                                             │
-│        📦 Staged Changes             [Child #2]            │
-│           ├─ parentId: "extension.ts-1"                     │
-│           ├─ diffType: "staged"                             │
-│           ├─ diffStats: { +8, -2 }                          │
-│           └─ NO hereda gitStatus/diagnostics                │
+│  Working Tree                               [Child #1]      │
+│     ├─ parentId: "extension.ts-1"                           │
+│     ├─ diffType: "working-tree"                             │
+│     ├─ diffStats: { +15, -3 }                               │
+│     └─ NO hereda gitStatus/diagnostics                      │
+│                                                             │
+│  Staged Changes                             [Child #2]      │
+│     ├─ parentId: "extension.ts-1"                           │
+│     ├─ diffType: "staged"                                   │
+│     ├─ diffStats: { +8, -2 }                                │
+│     └─ NO hereda gitStatus/diagnostics                      │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
-│  📄 TabSyncService.ts                [Parent]              │
+│                                                             │
+│  TabSyncService.ts                            [Parent]      │
 │     ├─ isPinned: true                                       │
-│     ├─ hasChildren: false             (No children)        │
+│     ├─ hasChildren: false                (No children)      │
 │     ├─ childrenCount: 0                                     │
 │     └─ capabilities.canExpand: false                        │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
-│  📄 README.md                        [Parent]              │
-│     ├─ isPinned: false                                      │
-│     ├─ hasChildren: true              ✅ ACTUALIZADO        │
-│     └─ childrenCount: 1               ✅ ACTUALIZADO        │
 │                                                             │
-│        📸 Snapshot 14:30             [Child]               │
+│  README.md                                    [Parent]      │
+│     ├─ isPinned: false                                      │
+│     ├─ hasChildren: true                                    │
+│     └─ childrenCount: 1                                     │
+│                                                             │
+├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+│                                                             │
+│  Snapshot                           14:30      [Child]      │
+│                                                             │
+│  Copilot Edit                      +12 -3      [Child]      │
+│                                                             │
+│  Compare to README.backup.md                   [Child]      │
+│                                                             │
+│  Compare to README.backup.md                   [Child]      │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -228,32 +240,30 @@ TabConverter.convert(tab)
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ Visualización normal (parent activo):                     │
+│ Visualización normal (parent activo):                      │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
-│ ┃📄 extension.ts                  ← Borde 5px izquierdo  │
-│     ├─ 🔄 Working Tree    +15 -3   [✕]                   │
-│     ├─ 📦 Staged Changes  +8 -2    [✕]                   │
-│     └─ 📸 Snapshot 14:30  2h ago   [✕]                   │
-│                                                            │
-│  📄 TabSyncService.ts                                      │
+│┃ extension.ts  ← Borde 5px izquierdo            [✕]      │
+│     ├─ Working Tree    +15 -3                    [──]      │
+│     ├─ Staged Changes  +8 -2                     [──]      │
+│     └─ Snapshot 14:30  2h ago                    [──]      │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────┐
-│ Child activo (parent sigue visualmente activo):           │
+│ Child activo (parent sigue visualmente activo):            │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
-│  📄 extension.ts           ← Activo pero SIN borde 5px    │
-│   ┃ ├─ 🔄 Working Tree    +15 -3   [✕]  ← Borde aquí    │
-│     ├─ 📦 Staged Changes  +8 -2    [✕]                   │
-│     └─ 📸 Snapshot 14:30  2h ago   [✕]                   │
+│  extension.ts ← Activo pero SIN borde 5px       [✕]      │
+│┃    ├─ Working Tree    +15 -3  ← Borde aquí     [──]      │
+│     ├─ Staged Changes  +8 -2                     [──]      │
+│     └─ Snapshot 14:30  2h ago                    [──]      │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
 
 Notas:
 - Los children siempre se muestran visibles bajo su parent
-- Children NO tienen tab-actions, solo botón cerrar con codicon 'dash'
+- Children NO tienen bay-actions, solo botón cerrar con codicon 'dash'
 - Cuando un child está activo, el parent mantiene apariencia activa
 - El borde izquierdo de 5px pasa del parent al child activo
 ```
@@ -272,12 +282,12 @@ Notas:
           ↓
 ┌───────────────────────────────────────────────────────────┐
 │ VS Code abre diff tab                                     │
-│ TabInputTextDiff { original: uri, modified: uri }        │
+│ TabInputTextDiff { original: uri, modified: uri }         │
 └─────────┬─────────────────────────────────────────────────┘
           │
           ↓
 ┌───────────────────────────────────────────────────────────┐
-│ onDidChangeTabs event disparado                          │
+│ onDidChangeTabs event disparado                           │
 │ e.opened = [diffTab]                                      │
 └─────────┬─────────────────────────────────────────────────┘
           │
@@ -297,14 +307,14 @@ Notas:
 │ └─ return SideTab {                                       │
 │      metadata: { parentId: '...', diffType: ... },        │
 │      state: { isChild: true, hasChildren: false }         │
-│    }                                                       │
+│    }                                                      │
 └─────────┬─────────────────────────────────────────────────┘
           │
           ↓
 ┌───────────────────────────────────────────────────────────┐
 │ if (sideTab.metadata.parentId) {                          │
 │   await ensureParentExists(sideTab, diffTab)              │
-│ }                                                          │
+│ }                                                         │
 └─────────┬─────────────────────────────────────────────────┘
           │
           ↓ (parent existe)
@@ -340,7 +350,7 @@ Notas:
           ↓
 ┌───────────────────────────────────────────────────────────┐
 │ UI muestra:                                               │
-│ � extension.ts                                           │
+│ � extension.ts                                            │
 │    └─ 🔄 Working Tree             +15 -3                 │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -355,34 +365,34 @@ Notas:
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │ TabConverter.test.ts                                    │
-│ ├─ should convert file tab correctly                   │
-│ ├─ should convert diff tab with parentId               │
-│ ├─ should handle webview tabs (uri: undefined)         │
+│ ├─ should convert file tab correctly                    │
+│ ├─ should convert diff tab with parentId                │
+│ ├─ should handle webview tabs (uri: undefined)          │
 │ └─ should generate stable IDs                           │
 │                                                         │
 │ TabClassifier.test.ts                                   │
-│ ├─ should classify 'working-tree' correctly            │
-│ ├─ should classify 'staged' correctly                  │
-│ ├─ should classify 'snapshot' by timestamp pattern     │
-│ └─ should determine parentId for diff tabs             │
+│ ├─ should classify 'working-tree' correctly             │
+│ ├─ should classify 'staged' correctly                   │
+│ ├─ should classify 'snapshot' by timestamp pattern      │
+│ └─ should determine parentId for diff tabs              │
 │                                                         │
 │ TabHierarchyService.test.ts                             │
-│ ├─ should register child and update parent counts      │
-│ ├─ should unregister child and decrement counts        │
-│ ├─ should inherit state from parent to child           │
-│ └─ should recalculate all counts correctly             │
+│ ├─ should register child and update parent counts       │
+│ ├─ should unregister child and decrement counts         │
+│ ├─ should inherit state from parent to child            │
+│ └─ should recalculate all counts correctly              │
 │                                                         │
 │ tabConverter.test.ts                                    │
-│ ├─ should convert TabInputText to SideTab              │
-│ ├─ should convert TabInputDiff to SideTab              │
-│ ├─ should generate unique IDs correctly                │
-│ └─ should return null for unsupported types            │
+│ ├─ should convert TabInputText to SideTab               │
+│ ├─ should convert TabInputDiff to SideTab               │
+│ ├─ should generate unique IDs correctly                 │
+│ └─ should return null for unsupported types             │
 │                                                         │
 │ tabClassifier.test.ts                                   │
-│ ├─ should classify Working Tree diffs                  │
-│ ├─ should classify Staged diffs                        │
-│ ├─ should determine parent ID correctly                │
-│ └─ should return undefined for non-child tabs          │
+│ ├─ should classify Working Tree diffs                   │
+│ ├─ should classify Staged diffs                         │
+│ ├─ should determine parent ID correctly                 │
+│ └─ should return undefined for non-child tabs           │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 
@@ -391,10 +401,10 @@ Notas:
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │ TabSyncService.integration.test.ts                      │
-│ ├─ should sync all tabs with correct hierarchy         │
-│ ├─ should handle tab open/close events                 │
-│ ├─ should ensure parent exists for orphan children     │
-│ └─ should maintain consistent state across operations  │
+│ ├─ should sync all tabs with correct hierarchy          │
+│ ├─ should handle tab open/close events                  │
+│ ├─ should ensure parent exists for orphan children      │
+│ └─ should maintain consistent state across operations   │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 
@@ -402,7 +412,7 @@ Notas:
 │ E2E TESTS                                               │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│ ├─ should show correct hierarchy in webview            │
+│ ├─ should show correct hierarchy in webview             │
 │ └─ should handle rapid tab operations                   │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
