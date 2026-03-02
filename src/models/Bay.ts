@@ -252,3 +252,6 @@ export class Bay extends BayActions {
     super();
   }
 }
+
+// Backward-compatible alias used by modules still importing `SideTab`.
+export { Bay as SideTab };

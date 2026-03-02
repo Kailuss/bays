@@ -1,5 +1,5 @@
 /**
- * Builder encargado de generar el HTML/CSS del webview de tabs.
+ * Builder encargado de generar el HTML/CSS del webview de bays.
  * Orquesta los módulos especializados para renderizado.
  *
  * Arquitectura:
@@ -9,14 +9,14 @@
  */
 
 import * as vscode from 'vscode';
-import { TabIconManager } from '../services/ui/BayIconManager';
+import { BayIconManager } from '../services/ui/BayIconManager';
 import type { DocumentManager } from '../services/core/DocumentManager';
 import { Bay } from '../models/Bay';
 import { BayGroup } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
 import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris } from './html';
-import { getDiffTypeDisplay, getDiffTypeBadgeHtml } from '../constants/diffTypes';
+import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './renderers';
 
 export class BaysHtmlBuilder {
   private readonly iconRenderer: IconRenderer;
@@ -24,8 +24,8 @@ export class BaysHtmlBuilder {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly iconManager: TabIconManager,
-    private readonly context: vscode.ExtensionContext,
+    iconManager: BayIconManager,
+    context: vscode.ExtensionContext,
     private readonly fileActionRegistry?: FileActionRegistry,
     private readonly documentManager?: DocumentManager,
   ) {
@@ -41,20 +41,19 @@ export class BaysHtmlBuilder {
   async buildHtml(options: BuildHtmlOptions): Promise<string> {
     const {
       webview,
-      groups: grps,
-      getTabsInGroup: getTabs,
-      showPath: path,
-      copilotReady: copilot,
-      enableDragDrop: dragDrop = false,
+      groups,
+      getTabsInGroup: getBaysInGroup,
+      showPath,
+      copilotReady,
+      enableDragDrop = false,
       compactMode,
-      workspaceName,
     } = options;
 
-    const uris = this.resolveResourceUris(webview, dragDrop);
+    const uris = this.resolveResourceUris(webview, enableDragDrop);
     const nonce = this.generateNonce();
-    const tabsHtml = await this.renderAllTabs(grps, getTabs, path, copilot, dragDrop, compactMode);
+    const baysHtml = await this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode);
 
-    return this.assembleHtml(webview, uris, nonce, workspaceName, compactMode, tabsHtml, dragDrop, options.initialLoad);
+    return this.assembleHtml(webview, uris, nonce, baysHtml, options.initialLoad);
   }
 
   //= RESOLUCIÓN DE RECURSOS
@@ -77,17 +76,14 @@ export class BaysHtmlBuilder {
     webview: vscode.Webview,
     uris: WebviewResourceUris,
     nonce: string,
-    workspaceName: string,
-    compactMode: boolean,
-    tabsHtml: string,
-    enableDragDrop: boolean,
+    baysHtml: string,
     initialLoad = false,
   ): string {
     const csp = this.stylesBuilder.buildCSP(webview, nonce);
     const criticalCss = this.stylesBuilder.buildCriticalCSS();
     const bodyClass = initialLoad ? '' : 'loaded';
 
-    return /* html */ `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -98,27 +94,26 @@ export class BaysHtmlBuilder {
 <link href="${uris.webviewCss}" rel="stylesheet" />
 </head>
 <body class="${bodyClass}">
-  ${tabsHtml || '<div class="empty">No open tabs</div>'}
+  ${baysHtml || '<div class="empty">No open bays</div>'}
   <script nonce="${nonce}" src="${uris.webviewScript}"></script>
   ${uris.dragDropScript ? `<script nonce="${nonce}" src="${uris.dragDropScript}"></script>` : ''}
 </body>
 </html>`;
   }
 
-  //= RENDERIZADO DE TABS
+  //= RENDERIZADO DE BAYS
 
-  private async renderAllTabs(
+  private async renderAllBays(
     groups: BayGroup[],
     getTabsInGroup: (groupId: number) => Bay[],
     showPath: boolean,
     copilotReady: boolean,
-    enableDragDrop: boolean,
     compactMode: boolean,
   ): Promise<string> {
     if (groups.length <= 1) {
       const groupId = groups[0]?.id;
       if (groupId !== undefined) {
-        return this.renderTabList(getTabsInGroup(groupId), showPath, copilotReady, enableDragDrop, compactMode);
+        return this.renderBayList(getTabsInGroup(groupId), showPath, copilotReady, compactMode);
       }
       return '';
     }
@@ -126,37 +121,28 @@ export class BaysHtmlBuilder {
     let html = '';
     for (const group of groups) {
       html += this.renderGroupHeader(group);
-      html += await this.renderTabList(getTabsInGroup(group.id), showPath, copilotReady, enableDragDrop, compactMode);
+      html += await this.renderBayList(getTabsInGroup(group.id), showPath, copilotReady, compactMode);
     }
     return html;
   }
 
   private renderGroupHeader(group: BayGroup): string {
-    const marker = group.isActive ? ' ●' : '';
-    return `<div class="group-header" data-groupid="${group.id}">
-      <span class="codicon codicon-files files"></span>
-      <span class="group-label">${this.esc(group.label)}${marker}</span>
-      <span class="group-actions">
-        <button class="group-btn" data-action="closeGroup" data-groupid="${group.id}" title="Close Group"><span class="codicon codicon-close-all"></span></button>
-        <button class="group-btn" data-action="toggleGroup" data-groupid="${group.id}" title="Collapse/Expand"><span class="codicon codicon-fold-down"></span></button>
-      </span>
-    </div>`;
+    return GroupHeaderRenderer.render(group, this.esc);
   }
 
-  private async renderTabList(
-    tabs: Bay[],
+  private async renderBayList(
+    bays: Bay[],
     showPath: boolean,
     copilotReady: boolean,
-    enableDragDrop: boolean,
     compactMode: boolean,
   ): Promise<string> {
-    // Separate parent tabs (no parentId) from child tabs (have parentId)
-    const parentTabs = tabs.filter(t => !t.metadata.parentId);
-    const childTabs = tabs.filter(t => t.metadata.parentId);
+    // Separate parent bays (no parentId) from variant bays (have parentId)
+    const parentBays = bays.filter(bay => !bay.metadata.parentId);
+    const variantBays = bays.filter(bay => bay.metadata.parentId);
     
     // Build a map of parentId -> children
     const childrenByParent = new Map<string, Bay[]>();
-    for (const child of childTabs) {
+    for (const child of variantBays) {
       const parentId = child.metadata.parentId!;
       if (!childrenByParent.has(parentId)) {
         childrenByParent.set(parentId, []);
@@ -164,8 +150,8 @@ export class BaysHtmlBuilder {
       childrenByParent.get(parentId)!.push(child);
     }
     
-    // Sort parent tabs: pinned first
-    const sortedParents = [...parentTabs].sort((a, b) => {
+    // Sort parent bays: pinned first
+    const sortedParents = [...parentBays].sort((a, b) => {
       if (a.state.isPinned && !b.state.isPinned) { return -1; }
       if (!a.state.isPinned && b.state.isPinned) { return 1; }
       return 0;
@@ -179,18 +165,18 @@ export class BaysHtmlBuilder {
       const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
 
       let block = `<div class="${blockClass}" data-tabid="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
-      block += await this.renderTab(parent, showPath, copilotReady, enableDragDrop, compactMode);
+      block += await this.renderBay(parent, showPath, copilotReady, compactMode);
       for (const child of children) {
-        block += await this.renderChildTab(child, copilotReady, parent);
+        block += this.renderVariantBay(child, parent);
       }
       block += `</div>`;
       rendered.push(block);
     }
 
-    // Orphan child tabs (parent file not open) — wrapped individually as draggable blocks
-    for (const child of childTabs) {
-      if (!parentTabs.some(p => p.metadata.id === child.metadata.parentId)) {
-        const orphanHtml = await this.renderOrphanChildTab(child, showPath, copilotReady, compactMode);
+    // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
+    for (const child of variantBays) {
+      if (!parentBays.some(parent => parent.metadata.id === child.metadata.parentId)) {
+        const orphanHtml = await this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode);
         rendered.push(`<div class="bay-block" data-tabid="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
@@ -199,200 +185,105 @@ export class BaysHtmlBuilder {
   }
 
   /**
-   * Renders a child tab (diff) attached to its parent.
+   * Renders a variant bay (diff) attached to its parent.
    * Always compact, indented, no path shown.
    */
-  private async renderChildTab(
-    tab: Bay,
-    copilotReady: boolean,
+  private renderVariantBay(
+    bay: Bay,
     parent: Bay,
-  ): Promise<string> {
-    const activeClass = tab.state.isActive ? ' active' : '';
-    const dataParentId = `data-parentid="${this.esc(parent.metadata.id)}"`;
-
-    // Get diff type display info
-    const diffInfo = getDiffTypeDisplay(tab.metadata.diffType, tab.metadata.label);
-    const diffTypeClass = diffInfo?.cssClass ? ` ${diffInfo.cssClass}` : '';
-    
-    // Icon and label
-    const iconHtml = diffInfo 
-      ? `<span class="codicon codicon-${diffInfo.icon}"></span>` 
-      : '<span class="codicon codicon-diff"></span>';
-    const labelHtml = diffInfo ? this.esc(diffInfo.label) : 'Diff';
-
-    // Stats display
-    const statsHtml = this.renderChildStats(tab.state.diffStats);
-
-    // Close button
-    const closeBtn = tab.state.capabilities.canClose
-      ? `<button data-action="closeTab" data-tabid="${this.esc(tab.metadata.id)}" title="Close"><span class="codicon codicon-close"></span></button>`
-      : '';
-
-    return `<div class="bay variant${activeClass}${diffTypeClass}" data-tabid="${this.esc(tab.metadata.id)}" ${dataParentId}>
-      <span class="bay-icon">${iconHtml}</span>
-      <span class="child-type-label">${labelHtml}</span>
-      ${statsHtml}
-      <span class="bay-actions">${closeBtn}</span>
-    </div>`;
+  ): string {
+    return VariantRowRenderer.render({
+      bay,
+      parentId: this.esc(parent.metadata.id),
+      esc: this.esc,
+    });
   }
 
   /**
-   * Renders stats for a child tab (diff statistics)
-   */
-  private renderChildStats(diffStats: any): string {
-    if (!diffStats) {
-      return '';
-    }
-
-    const { linesAdded, linesRemoved, timestamp, conflictSections } = diffStats;
-
-    // Lines changed (working tree, staged, edit)
-    if (linesAdded !== undefined && linesRemoved !== undefined) {
-      return `<span class="child-stats" title="${linesAdded} lines added, ${linesRemoved} lines removed"><span class="stats-added">+${linesAdded}</span><span class="stats-removed">-${linesRemoved}</span></span>`;
-    }
-
-    // Timestamp (snapshots)
-    if (timestamp) {
-      const relativeTime = this.formatRelativeTime(timestamp);
-      return `<span class="child-stats" title="${new Date(timestamp).toLocaleString()}">${relativeTime}</span>`;
-    }
-
-    // Conflicts
-    if (conflictSections) {
-      return `<span class="child-stats conflict" title="${conflictSections} conflict sections">${conflictSections} conflicts</span>`;
-    }
-
-    return '';
-  }
-
-  /**
-   * Formats a timestamp as relative time (e.g., "2 hours ago")
-   */
-  private formatRelativeTime(timestamp: number): string {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) {
-      return `${days}d ago`;
-    }
-    if (hours > 0) {
-      return `${hours}h ago`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ago`;
-    }
-    return 'just now';
-  }
-
-  /**
-   * Renders an orphan child tab (diff whose parent file is not open).
+   * Renders an orphan variant bay (diff whose parent file is not open).
    * Shown with full info since there's no parent context.
    */
-  private async renderOrphanChildTab(
-    tab: Bay,
+  private async renderOrphanVariantBay(
+    bay: Bay,
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
   ): Promise<string> {
-    // Render like a normal tab but with diff icon prefix
-    return this.renderTab(tab, showPath, copilotReady, false, compactMode);
+    // Render like a normal bay but with diff icon prefix
+    return this.renderBay(bay, showPath, copilotReady, compactMode);
   }
 
-  private async renderTab(
-    tab: Bay,
+  private async renderBay(
+    bay: Bay,
     showPath: boolean,
     copilotReady: boolean,
-    _enableDragDrop: boolean,
     compactMode: boolean,
   ): Promise<string> {
     // data-tabid only — data-pinned and data-groupid live on the parent .bay-block
-    const activeClass = tab.state.isActive ? ' active' : '';
-    const stateIndicator = getStateIndicator(tab);
+    const activeClass = bay.state.isActive ? ' active' : '';
+    const stateIndicator = getStateIndicator(bay);
 
-    const pinBadge = tab.state.isPinned
+    const pinBadge = bay.state.isPinned
       ? '<span class="pin-badge codicon codicon-pinned" title="Pinned"></span>'
       : '';
     
-    // Version badge for parent tabs with multiple versions
-    const versionBadge = this.renderVersionBadge(tab);
+    // Version badge for parent bays with multiple versions
+    const versionBadge = this.renderVersionBadge(bay);
 
-    const fileActionBtn = tab.state.capabilities.canTogglePreview
-      ? this.renderFileActionButton(tab)
+    const fileActionBtn = bay.state.capabilities.canTogglePreview
+      ? this.renderFileActionButton(bay)
       : '';
 
-    const chatBtn = copilotReady && tab.metadata.uri
-      ? `<button data-action="addToChat" data-tabid="${this.esc(tab.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
+    const chatBtn = copilotReady && bay.metadata.uri
+      ? `<button data-action="addToChat" data-tabid="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
       : '';
 
-    const closeBtn = tab.state.capabilities.canClose
-      ? `<button data-action="closeTab" data-tabid="${this.esc(tab.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
+    const closeBtn = bay.state.capabilities.canClose
+      ? `<button data-action="closeTab" data-tabid="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
       : '';
 
-    const iconHtml = await this.iconRenderer.render(tab);
+    const iconHtml = await this.iconRenderer.render(bay);
 
-    // Compact mode: same layout as normal, single-line text (name + inline path)
-    if (compactMode) {
-      const pathSuffix = showPath && tab.metadata.detailLabel
-        ? `<span class="bay-path-inline">${this.esc(tab.metadata.detailLabel)}</span>`
-        : '';
-      return `<div class="bay compact${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
-      <span class="bay-icon">${iconHtml}</span>
-      <div class="bay-text">
-        <div class="bay-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}${pathSuffix}</div>
-      </div>
-      ${stateIndicator.html}
-      <span class="bay-actions">
-        ${fileActionBtn}${chatBtn}${closeBtn}
-      </span>
-    </div>`;
-    }
-
-    // Normal mode: two-line layout
-    const pathHtml = showPath && tab.metadata.detailLabel
-      ? `<div class="bay-path">${this.esc(tab.metadata.detailLabel)}</div>`
-      : '';
-
-    return `<div class="bay${activeClass}" data-tabid="${this.esc(tab.metadata.id)}">
-      <span class="bay-icon">${iconHtml}</span>
-      <div class="bay-text">
-        <div class="bay-name${stateIndicator.nameClass}">${this.esc(tab.metadata.label)}${pinBadge}${versionBadge}</div>
-        ${pathHtml}
-      </div>
-      ${stateIndicator.html}
-      <span class="bay-actions">
-        ${fileActionBtn}${chatBtn}${closeBtn}
-      </span>
-    </div>`;
+    return BayRowRenderer.render({
+      bay,
+      showPath,
+      compactMode,
+      activeClass,
+      iconHtml,
+      stateIndicator,
+      pinBadge,
+      versionBadge,
+      fileActionBtn,
+      chatBtn,
+      closeBtn,
+      esc: this.esc,
+    });
   }
 
   //= BOTONES DE ACCIÓN
 
-  private renderFileActionButton(tab: Bay): string {
-    if (!this.fileActionRegistry || !tab.metadata.uri) { return ''; }
+  private renderFileActionButton(bay: Bay): string {
+    if (!this.fileActionRegistry || !bay.metadata.uri) { return ''; }
 
     // Pass viewMode context for dynamic actions (like MD toggle)
-    const context = { viewMode: tab.state.viewMode };
-    const resolved = this.fileActionRegistry.resolve(tab.metadata.label, tab.metadata.uri, context);
+    const context = { viewMode: bay.state.viewMode };
+    const resolved = this.fileActionRegistry.resolve(bay.metadata.label, bay.metadata.uri, context);
     if (!resolved) { return ''; }
 
-    return `<button data-action="fileAction" data-tabid="${this.esc(tab.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
+    return `<button data-action="fileAction" data-tabid="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
   }
   
   /**
    * Renderiza un badge con el número de versiones del documento.
-   * Solo se muestra para parent tabs que tienen document model con versiones.
+   * Solo se muestra para parent bays que tienen document model con versiones.
    */
-  private renderVersionBadge(tab: Bay): string {
-    // Only show for parent tabs (not children)
-    if (tab.metadata.parentId || !tab.metadata.uri || !this.documentManager) {
+  private renderVersionBadge(bay: Bay): string {
+    // Only show for parent bays (not children)
+    if (bay.metadata.parentId || !bay.metadata.uri || !this.documentManager) {
       return '';
     }
     
-    const document = this.documentManager.getDocumentByUri(tab.metadata.uri);
+    const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
     if (!document || document.versionCount === 0) {
       return '';
     }
