@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { BaysWebviewProvider } from './providers/BaysWebviewProvider';
 import { BayStateService } from './services/core/BayStateService';
-import { TabSyncService } from './services/core/TabSyncService';
+import { BaySyncService } from './services/core/TabSyncService';
 import { BayDragDropService } from './services/ui/BayDragDropService';
 import { FileActionRegistry } from './services/registry/FileActionRegistry';
 import { TabIconManager } from './services/ui/BayIconManager';
@@ -18,7 +18,7 @@ export async function activate(context: vscode.ExtensionContext) {
   try {
     // Core services
     const stateService  = new BayStateService();
-    const syncService   = new TabSyncService(stateService);
+    const syncService   = new BaySyncService(stateService);
     const dragDropService = new BayDragDropService(stateService);
     const fileActionRegistry = new FileActionRegistry();
     const iconManager   = new TabIconManager();

@@ -1,5 +1,5 @@
-import * as vscode      from 'vscode';
-import { SideTab, Bay }      from '../../models/Bay';
+import * as vscode from 'vscode';
+import { SideTab as Bay } from '../../models/Bay';
 import { BayGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
@@ -16,7 +16,7 @@ import type { DocumentManager } from './DocumentManager';
  * @see services/core/AGENT.md
  */
 export class BayStateService {
-  private tabs   : Map<string, SideTab>      = new Map();
+  private tabs   : Map<string, Bay>      = new Map();
   private groups : Map<number, BayGroup> = new Map();
   private _isBulkLoading                     = false;
   private _onDidChangeState                  = new vscode.EventEmitter<void>();
@@ -47,6 +47,16 @@ export class BayStateService {
   }
 
   /**
+   * Notifica cambios estructurales en el estado.
+   * Usado por servicios especializados para disparar actualización de UI.
+   */
+  notifyChange(): void {
+    if (!this._isBulkLoading) {
+      this._onDidChangeState.fire();
+    }
+  }
+
+  /**
    * Inyecta el hierarchy service para evitar dependencia circular.
    * Llamado desde BaySyncService después de crear BayHierarchyService.
    */
@@ -65,7 +75,7 @@ export class BayStateService {
   //- Bay management
 
   // Add a bay (or update if it already exists in the group).
-  addTab(tab: SideTab): void {
+  addTab(tab: Bay): void {
     this.tabs.set(tab.metadata.id, tab);
 
     const group = this.groups.get(tab.state.groupId);
@@ -127,27 +137,27 @@ export class BayStateService {
 
   // Método interno para eliminar sin lógica de jerarquía (evita recursión)
   private removeTabInternal(id: string): void {
-    const tab = this.tabs.get(id);
-    if (tab) {
-      const group = this.groups.get(tab.state.groupId);
+    const bay = this.tabs.get(id);
+    if (bay) {
+      const group = this.groups.get(bay.state.groupId);
       if (group) {
         group.bays = group.bays.filter(t => t.metadata.id !== id);
       }
       
       // Cleanup document associations
       if (this.documentManager) {
-        if (tab.metadata.parentId) {
+        if (bay.metadata.parentId) {
           // Desasociar child bay del documento
-          const parentTab = this.tabs.get(tab.metadata.parentId);
-          if (parentTab?.metadata.uri) {
-            const document = this.documentManager.getDocumentByUri(parentTab.metadata.uri);
+          const parentBay = this.tabs.get(bay.metadata.parentId);
+          if (parentBay?.metadata.uri) {
+            const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
             if (document) {
               this.documentManager.dissociateChildTab(document.documentId, id);
             }
           }
-        } else if (tab.metadata.uri) {
+        } else if (bay.metadata.uri) {
           // Desasociar parent bay del documento
-          const document = this.documentManager.getDocumentByUri(tab.metadata.uri);
+          const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
           if (document) {
             this.documentManager.dissociateParentTab(document.documentId);
           }
@@ -160,7 +170,7 @@ export class BayStateService {
   }
 
   // Update a bay in-place (both the map and its group array).
-  updateTab(tab: SideTab): void {
+  updateTab(tab: Bay): void {
     this.tabs.set(tab.metadata.id, tab);
 
     const group = this.groups.get(tab.state.groupId);
@@ -175,7 +185,7 @@ export class BayStateService {
   }
 
   // Update a bay without triggering tree refresh (for silent state updates like isActive).
-  updateTabSilent(tab: SideTab): void {
+  updateTabSilent(tab: Bay): void {
     this.tabs.set(tab.metadata.id, tab);
 
     const group = this.groups.get(tab.state.groupId);
@@ -189,7 +199,7 @@ export class BayStateService {
   }
 
   // Update a bay's diagnostic/git state and notify for animation.
-  updateTabStateWithAnimation(tab: SideTab): void {
+  updateTabStateWithAnimation(tab: Bay): void {
     this.tabs.set(tab.metadata.id, tab);
 
     const group = this.groups.get(tab.state.groupId);
@@ -216,21 +226,21 @@ export class BayStateService {
   /**
    * @deprecated Use fetchBayById() for consistency with AGENT.md
    */
-  getTab(id: string): SideTab | undefined {
+  getTab(id: string): Bay | undefined {
     return this.tabs.get(id);
   }
 
-  getAllTabs(): SideTab[] {
+  getAllTabs(): Bay[] {
     return Array.from(this.tabs.values());
   }
 
-  getTabsInGroup(groupId: number): SideTab[] {
+  getTabsInGroup(groupId: number): Bay[] {
     const group = this.groups.get(groupId);
     return group ? [...group.bays] : [];
   }
 
   // Replace all bays with a new set (used during full sync).
-  replaceTabs(tabs: SideTab[]): void {
+  replaceTabs(tabs: Bay[]): void {
     this._isBulkLoading = true;
     this.tabs.clear();
 
@@ -274,7 +284,7 @@ export class BayStateService {
   //- Search
 
   // Buscar una bay por su URI; opcionalmente limitar al grupo indicado.
-  findTabByUri(uri: vscode.Uri, groupId?: number): SideTab | undefined {
+  findTabByUri(uri: vscode.Uri, groupId?: number): Bay | undefined {
     const uriString = uri.toString();
 
     for (const tab of this.tabs.values()) {

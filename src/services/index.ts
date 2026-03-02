@@ -1,10 +1,13 @@
 // Core services - Estado y sincronización fundamentales
 export { BayStateService } from './core/BayStateService';
-export { TabSyncService } from './core/TabSyncService';
+export { BaySyncService as TabSyncService } from './core/TabSyncService';
 export { BayHierarchyService } from './core/BayHierarchyService';
 export type { TabTreeNode, BayTreeNode } from './core/BayHierarchyService';
 export { DocumentManager } from './core/DocumentManager';
 export type { DocumentManagerOptions } from './core/DocumentManager';
+
+// Bay services - Specialized synchronization services (post-refactoring)
+export { BayEventService, BayHeadService, ActiveStateService } from './core/bay';
 
 // UI services - Presentación e interacción visual
 export { ThemeService } from './ui/ThemeService';
