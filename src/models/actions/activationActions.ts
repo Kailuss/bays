@@ -34,20 +34,20 @@ async function activateWithRetry(
       return;
     }
 
-    // Re-buscar la tab nativa en cada intento (puede haber cambiado)
+    // Re-buscar la bay nativa en cada intento (puede haber cambiado)
     const nativeTab = BayHelpers.findNativeTab(metadata, state);
 
     if (attempt === 0) {
-      Logger.log(`[BayAction] Activating tab: ${metadata.label}, isPreview: ${state.isPreview}, viewMode: ${state.viewMode}, tabType: ${metadata.bayType}, nativeTabFound: ${!!nativeTab}, uri: ${metadata.uri?.toString()}`);
+      Logger.log(`[BayAction] Activating bay: ${metadata.label}, isPreview: ${state.isPreview}, viewMode: ${state.viewMode}, tabType: ${metadata.bayType}, nativeTabFound: ${!!nativeTab}, uri: ${metadata.uri?.toString()}`);
     }
 
-    // Si la tab no existe después del primer intento completo, está cerrada
+    // Si la bay no existe después del primer intento completo, está cerrada
     if (!nativeTab && attempt > 0) {
-      throw new Error(`Tab '${metadata.label}' no longer exists (closed or replaced)`);
+      throw new Error(`Bay '${metadata.label}' no longer exists (closed or replaced)`);
     }
 
     // Para webview tabs, siempre usar el método nativo
-    // Variants (with parentId) are also activated via native tab
+    // Variants (with parentId) are also activated via native bay
     if (metadata.bayType === 'webview' || metadata.parentId) {
       return await BayHelpers.activateByNativeTab(metadata, state);
     }
@@ -56,7 +56,7 @@ async function activateWithRetry(
       return;
     }
 
-    // Si la tab nativa existe, SIEMPRE usar activación por índice
+    // Si la bay nativa existe, SIEMPRE usar activación por índice
     // (más confiable que showTextDocument, especialmente con preview tabs)
     if (nativeTab) {
       // Verificar que el URI coincide
@@ -67,12 +67,12 @@ async function activateWithRetry(
         Logger.log('[BayAction] Using native activation by index for: ' + metadata.label);
         return await BayHelpers.activateByNativeTab(metadata, state);
       }
-      // Si el URI no coincide, la tab fue reemplazada - continuar al fallback
-      Logger.log('[BayAction] URI mismatch, tab was replaced: ' + metadata.label);
+      // Si el URI no coincide, la bay fue reemplazada - continuar al fallback
+      Logger.log('[BayAction] URI mismatch, bay was replaced: ' + metadata.label);
     }
 
-    // La tab no existe o fue reemplazada - abrirla de nuevo
-    // Usar workbench.action.openEditorAtIndex si hay una tab en esa posición
+    // La bay no existe o fue reemplazada - abrirla de nuevo
+    // Usar workbench.action.openEditorAtIndex si hay una bay en esa posición
     if (nativeTab) {
       const tabIndex = nativeTab.group.tabs.indexOf(nativeTab);
       if (tabIndex !== -1) {
@@ -89,7 +89,7 @@ async function activateWithRetry(
     await vscode.window.showTextDocument(doc, {
       viewColumn: state.viewColumn,
       preserveFocus: false,
-      preview: false, // Abrir como permanente cuando reactivamos una tab cerrada
+      preview: false, // Abrir como permanente cuando reactivamos una bay cerrada
     });
   } catch (err) {
     // Si falla y es un intento temprano, esperar un poco y reintentar

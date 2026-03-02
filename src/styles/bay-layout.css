@@ -8,8 +8,8 @@
   align-items: center;
   height: 39px;
   padding: 0 8px 0 4px;
-  background: var(--vscode-tab-inactiveBackground, transparent);
-  color: var(--vscode-tab-inactiveForeground, var(--vscode-foreground));
+  background: var(--vscode-bay-inactiveBackground, transparent);
+  color: var(--vscode-bay-inactiveForeground, var(--vscode-foreground));
   border-left: 4px solid transparent;
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--vscode-panel-border, rgba(128,128,128,0.35)));
   cursor: pointer;

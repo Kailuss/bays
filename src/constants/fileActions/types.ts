@@ -3,7 +3,7 @@ import type { BayViewMode, EditMode } from '../../models/Bay';
 
 /**
  * Contexto adicional para resolver acciones dinámicamente.
- * Usado para acciones que dependen del estado de la tab (ej: toggle preview).
+ * Usado para acciones que dependen del estado de la bay (ej: toggle preview).
  */
 export type FileActionContext = {
   viewMode?: BayViewMode;          // Current view mode: 'source' | 'preview' | 'split'
@@ -21,9 +21,9 @@ export type FileActionContext = {
  */
 export type FileAction = {
   id: string;      // Identificador único de la acción (se envía como mensaje al webview).
-  icon: string;    // Codicon que se muestra en el botón de la tab (sin el prefijo `codicon-`).
+  icon: string;    // Codicon que se muestra en el botón de la bay (sin el prefijo `codicon-`).
   tooltip: string; // Tooltip del botón.
-  setFocus?: boolean; // Si debe hacer focus en la tab al ejecutar (default: false).
+  setFocus?: boolean; // Si debe hacer focus en la bay al ejecutar (default: false).
 
   /**
    * Función que decide si esta acción aplica a un archivo dado.
@@ -40,12 +40,12 @@ export type FileAction = {
 }
 
 /**
- * Acción con resolución dinámica basada en contexto de la tab.
+ * Acción con resolución dinámica basada en contexto de la bay.
  * Usado para acciones toggle como Markdown preview/source.
  */
 export type DynamicFileAction = {
   id: string;
-  setFocus?: boolean; // Si debe hacer focus en la tab al ejecutar (default: false).
+  setFocus?: boolean; // Si debe hacer focus en la bay al ejecutar (default: false).
   /**
    * Función que decide si esta acción aplica a un archivo dado.
    */

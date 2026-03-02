@@ -151,7 +151,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   async notifyBayStateChanged(bayId: string): Promise<void> {
     if (!this._view || this._fullRefreshPending) { return; }
 
-    const bay = this.stateService.getBay(bayId);
+    const bay = this.stateService.getBayById(bayId);
     if (!bay) { return; }
 
     const { getStateIndicator } = await import('../utils/stateIndicator.js');
@@ -310,7 +310,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   }
 
   private findBay(id: string): Bay | undefined {
-    return this.stateService.fetchBayById(id);
+    return this.stateService.getBayById(id);
   }
 
   //= HELPERS

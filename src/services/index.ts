@@ -1,6 +1,6 @@
 // Core services - Estado y sincronización fundamentales
 export { BayStateService } from './core/BayStateService';
-export { BaySyncService as TabSyncService } from './core/BaySyncService';
+export { BaySyncService } from './core/BaySyncService';
 export { BayHierarchyService } from './core/BayHierarchyService';
 export type { TabTreeNode, BayTreeNode } from './core/BayHierarchyService';
 export { DocumentManager } from './core/DocumentManager';
@@ -12,7 +12,6 @@ export { BayEventService, BayHeadService, ActiveStateService } from './core/bay'
 // UI services - Presentación e interacción visual
 export { ThemeService } from './ui/ThemeService';
 export { BayIconManager } from './ui/BayIconManager';
-export { BayIconManager as TabIconManager } from './ui/BayIconManager';
 export { BayDragDropService } from './ui/BayDragDropService';
 
 // Integration services - Conexiones con APIs externas

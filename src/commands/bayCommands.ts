@@ -3,37 +3,37 @@ import { BayStateService } from '../services/core/BayStateService';
 import { VSCODE_COMMANDS } from '../constants/commands';
 
 /**
- * Registra los comandos relacionados con pestañas (abrir, cerrar, mover, etc.).
- * Normalmente reciben un ID de pestaña desde el webview y resuelven el `SideTab`.
+ * Registra los comandos relacionados con bays (abrir, cerrar, mover, etc.).
+ * Normalmente reciben un ID de bay desde el webview y resuelven el `SideBay`.
  */
-export function registerTabCommands(
+export function registerBayCommands(
   context: vscode.ExtensionContext,
   stateService: BayStateService
 ): void {
   const resolve = (arg: unknown) => {
-    if (typeof arg === 'string') { return stateService.fetchBayById(arg); }
+    if (typeof arg === 'string') { return stateService.getBayById(arg); }
     return undefined;
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('bays.openTab', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.activate(); }
+    vscode.commands.registerCommand('bays.openBay', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.activate(); }
     }),
 
-    vscode.commands.registerCommand('bays.closeTab', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.close(); }
+    vscode.commands.registerCommand('bays.closeBay', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.close(); }
     }),
 
     vscode.commands.registerCommand('bays.closeOthers', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.closeOthers(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.closeOthers(); }
     }),
 
     vscode.commands.registerCommand('bays.closeToRight', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.closeToRight(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.closeToRight(); }
     }),
 
     vscode.commands.registerCommand('bays.closeAll', async () => {
@@ -54,39 +54,39 @@ export function registerTabCommands(
       await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
     }),
 
-    vscode.commands.registerCommand('bays.pinTab', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.pin(); }
+    vscode.commands.registerCommand('bays.pinBay', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.pin(); }
     }),
 
-    vscode.commands.registerCommand('bays.unpinTab', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.unpin(); }
+    vscode.commands.registerCommand('bays.unpinBay', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.unpin(); }
     }),
 
     vscode.commands.registerCommand('bays.revealInExplorer', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.revealInExplorer(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.revealInExplorer(); }
     }),
 
     vscode.commands.registerCommand('bays.copyRelativePath', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.copyRelativePath(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.copyRelativePath(); }
     }),
 
     vscode.commands.registerCommand('bays.copyFileContents', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.copyFileContents(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.copyFileContents(); }
     }),
 
     vscode.commands.registerCommand('bays.compareWithActive', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (tab) { await tab.compareWithActive(); }
+      const bay = resolve(arg);
+      if (bay) { await bay.compareWithActive(); }
     }),
 
     vscode.commands.registerCommand('bays.moveToGroup', async (arg: unknown) => {
-      const tab = resolve(arg);
-      if (!tab) { return; }
+      const bay = resolve(arg);
+      if (!bay) { return; }
 
       const groups = vscode.window.tabGroups.all;
       if (groups.length <= 1) {
@@ -95,14 +95,14 @@ export function registerTabCommands(
       }
 
       const options = groups
-        .filter(g => g.viewColumn !== tab.state.viewColumn)
+        .filter(g => g.viewColumn !== bay.state.viewColumn)
         .map(g => ({ label: `Group ${g.viewColumn}`, viewColumn: g.viewColumn }));
 
       const selected = await vscode.window.showQuickPick(options, {
         placeHolder: 'Select target group',
       });
 
-      if (selected) { await tab.moveToGroup(selected.viewColumn); }
+      if (selected) { await bay.moveToGroup(selected.viewColumn); }
     }),
   );
 }

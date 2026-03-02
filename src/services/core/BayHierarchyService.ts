@@ -17,7 +17,7 @@ import { Logger } from '../../utils/logger';
  * IMPORTANT:
  * - Markdown children inherit ONLY viewMode from parent
  * - gitStatus, diagnosticSeverity and state icons are NOT inherited
- * - Children have NO tab-actions (only close button)
+ * - Children have NO bay-actions (only close button)
  * - When a child is active, parent maintains active appearance
  * - DocumentManager is the source of truth for document metadata
  * 
@@ -40,13 +40,13 @@ export class BayHierarchyService {
    * @param parentId Parent bay ID
    */
   registerChild(childId: string, parentId: string): void {
-    const parent = this.stateService.fetchBayById(parentId);
+    const parent = this.stateService.getBayById(parentId);
     if (!parent) {
       Logger.log(`[BayHierarchy] Cannot register child: parent not found (${parentId})`);
       return;
     }
 
-    const child = this.stateService.fetchBayById(childId);
+    const child = this.stateService.getBayById(childId);
     if (!child) {
       Logger.log(`[BayHierarchy] Cannot register child: child not found (${childId})`);
       return;
@@ -70,7 +70,7 @@ export class BayHierarchyService {
    * @param parentId Parent bay ID
    */
   unregisterChild(childId: string, parentId: string): void {
-    const parent = this.stateService.fetchBayById(parentId);
+    const parent = this.stateService.getBayById(parentId);
     if (!parent) {
       Logger.log(`[BayHierarchy] Cannot unregister child: parent not found (${parentId})`);
       return;
@@ -275,7 +275,7 @@ export class BayHierarchyService {
    * @returns Aggregated statistics or undefined
    */
   getDocumentStats(bayId: string): ReturnType<NonNullable<typeof this.documentManager>['getDocumentStats']> | undefined {
-    const bay = this.stateService.fetchBayById(bayId);
+    const bay = this.stateService.getBayById(bayId);
     if (!bay?.metadata.uri || !this.documentManager) {
       return undefined;
     }
@@ -338,7 +338,7 @@ export class BayHierarchyService {
       return; // Feature disabled
     }
 
-    const bay = this.stateService.fetchBayById(bayId);
+    const bay = this.stateService.getBayById(bayId);
     if (!bay) {
       return;
     }
@@ -353,7 +353,7 @@ export class BayHierarchyService {
 
     if (bay.metadata.parentId) {
       // Is a child, find parent and siblings
-      parentBay = this.stateService.fetchBayById(bay.metadata.parentId);
+      parentBay = this.stateService.getBayById(bay.metadata.parentId);
       if (parentBay) {
         family.push(parentBay);
         family.push(...this.getChildren(bay.metadata.parentId));

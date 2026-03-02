@@ -23,7 +23,7 @@ import { Logger } from '../../utils/logger';
  * Este servicio actúa como coordinador delgado, no como implementador.
  * 
  * NOTA: Las tabs de Markdown Preview se filtran directamente en convertToSideTab()
- * y se manejan como estado toggle (viewMode) en la tab del archivo fuente.
+ * y se manejan como estado toggle (viewMode) en la bay del archivo fuente.
  * 
  * REFACTORIZACIÓN MARZO 2026: Código modularizado en bay/ folder.
  * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
@@ -40,7 +40,7 @@ export class BaySyncService {
   private activeStateService: ActiveStateService;
   
   // Map para relacionar IDs de tabs con versionIds únicos del DocumentModel
-  // Esto permite rastrear qué version del documento corresponde a cada child tab
+  // Esto permite rastrear qué version del documento corresponde a cada child bay
   private readonly tabIdToVersionId: Map<string, string> = new Map();
 
   constructor(private stateService: BayStateService) {
@@ -142,14 +142,14 @@ export class BaySyncService {
     
     // First pass: collect all tabs, separating parents from children
     for (const group of vscode.window.tabGroups.all) {
-      group.tabs.forEach((tab, idx) => {
-        const st = convertToBay(tab, this.gitSyncService, idx);
+      group.tabs.forEach((bay, idx) => {
+        const st = convertToBay(bay, this.gitSyncService, idx);
         if (st) {
           if (st.metadata.parentId) {
-            // This is a variant tab (diff) - defer it
-            childTabs.push({ sideTab: st, nativeTab: tab });
+            // This is a variant bay (diff) - defer it
+            childTabs.push({ sideTab: st, nativeTab: bay });
           } else {
-            // This is a parent tab or standalone tab - add it immediately
+            // This is a parent bay or standalone bay - add it immediately
             allBays.push(st);
           }
         }
@@ -177,27 +177,27 @@ export class BaySyncService {
    * Actualiza el estado activo de las tabs cuando cambia el editor activo.
    * Delega a ActiveStateService para la sincronización real.
    * 
-   * También sincroniza la posición del cursor si la tab activa pertenece
+   * También sincroniza la posición del cursor si la bay activa pertenece
    * a una familia parent-child.
    */
   private updateActiveTab(activeUri: vscode.Uri): void {
-    // Delegate to syncActiveState which reads tab.isActive from the native API
+    // Delegate to syncActiveState which reads bay.isActive from the native API
     // This correctly handles the same file open in multiple groups
     const { hasChanges } = this.activeStateService.syncActiveState();
     if (hasChanges) {
       this.stateService.notifyChange();
     }
 
-    // Sync cursor position when activating a tab from the parent-child family
+    // Sync cursor position when activating a bay from the parent-child family
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document.uri.toString() === activeUri.toString()) {
-      const tab = this.stateService.findBayByUri(activeUri);
-      if (tab && (tab.metadata.parentId || tab.state.hasChildren)) {
-        // This tab is part of a parent-child family, sync cursor position
+      const bay = this.stateService.findBayByUri(activeUri);
+      if (bay && (bay.metadata.parentId || bay.state.hasChildren)) {
+        // This bay is part of a parent-child family, sync cursor position
         const selection = activeEditor.selection;
         const line = selection.active.line + 1;
         const column = selection.active.character + 1;
-        this.hierarchyService.syncCursorPosition(tab.metadata.id, line, column);
+        this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
       }
     }
   }
@@ -241,7 +241,7 @@ export class BaySyncService {
   }
 
   /**
-   * Asegura que existe un DocumentModel para una tab.
+   * Asegura que existe un DocumentModel para una bay.
    * Si no existe, lo crea y lo asocia con la bay.
    * 
    * @param bay Bay para la cual asegurar que existe un documento
@@ -312,9 +312,9 @@ export class BaySyncService {
     });
 
     if (versionId) {
-      // Associate child tab with document
+      // Associate child bay with document
       this.documentManager.associateVariant(document.documentId, variant.metadata.id);
-      // Map tab ID to unique versionId for future reference
+      // Map bay ID to unique versionId for future reference
       this.tabIdToVersionId.set(variant.metadata.id, versionId);
       Logger.log(`[TabSync] Registered version ${variant.metadata.diffType} for ${parentBay.metadata.label} (bayId: ${variant.metadata.id}, versionId: ${versionId})`);
     }

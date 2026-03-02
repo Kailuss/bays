@@ -3,7 +3,7 @@
  * Provides centralized access to data structures and helper functions.
  */
 
-// SideTab - Tab representation and actions
+// SideTab - Bay representation and actions
 export { Bay } from './Bay';
 export { BayActions as SideTabActions } from './BayActions';
 export { BayHelpers as SideTabHelpers } from './BayHelpers';
@@ -29,7 +29,7 @@ export type {
   BayShortcuts as TabShortcuts,
 } from './Bay';
 
-// SideTabGroup - Tab grouping
+// SideTabGroup - Bay grouping
 export { createTabGroup } from './BayGroup';
 export type { BayGroup as SideTabGroup } from './BayGroup';
 
@@ -43,8 +43,8 @@ export {
   setActiveVersion,
   removeVersion,
   updateVersionStats,
-  associateChildTab,
-  dissociateChildTab,
+  associateVariant,
+  dissociateVariant,
   getAggregatedStats,
   canBeCleanedUp,
   touchDocument,

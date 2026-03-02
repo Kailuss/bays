@@ -297,7 +297,7 @@ export class DocumentManagerService {
       return false;
     }
     
-    // Get version to unlink tab
+    // Get version to unlink bay
     const version = getVersion(document, versionId);
     if (version?.relatedBayId) {
       dissociateVariant(document, version.relatedBayId);
@@ -318,10 +318,10 @@ export class DocumentManagerService {
   }
   
   /**
-   * Asocia un parent tab con un documento.
+   * Asocia un parent bay con un documento.
    * 
    * @param baseUri URI base del documento
-   * @param parentTabId ID del parent tab
+   * @param parentTabId ID del parent bay
    */
   associateParentTab(baseUri: vscode.Uri, parentTabId: string): void {
     const document = this.getDocument(baseUri);

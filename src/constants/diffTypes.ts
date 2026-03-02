@@ -1,5 +1,5 @@
 /**
- * Configuración de visualización para cada tipo de diff (child tab).
+ * Configuración de visualización para cada tipo de diff (child bay).
  * 
  * Define iconos codicon y labels descriptivos para cada tipo.
  */
@@ -120,7 +120,7 @@ export const DIFF_TYPE_DISPLAY: Record<DiffType, DiffTypeDisplayInfo> = {
  * Obtiene la información de visualización para un tipo de diff.
  * 
  * @param diffType Tipo de diff (puede ser undefined)
- * @param tabLabel Label completo del tab (para extraer info adicional como commit hash)
+ * @param tabLabel Label completo de la native tab (para extraer info adicional como commit hash)
  * @returns Información de visualización, o null si no hay diffType
  */
 export function getDiffTypeDisplay(

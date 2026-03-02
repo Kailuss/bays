@@ -1,5 +1,5 @@
 /**
- * Bay/ Folder - Specialized Services for Tab Synchronization
+ * Bay/ Folder - Specialized Services for Bay Synchronization
  * 
  * Post-refactoring March 2026: TabSyncService split into specialized services
  * for better maintainability, testability, and separation of concerns.

@@ -424,16 +424,16 @@ export class BayIconManager {
     try {
       const allTabs: vscode.Tab[] = [];
       for (const group of vscode.window.tabGroups.all) {
-        for (const tab of group.tabs) {
-          allTabs.push(tab);
+        for (const bay of group.tabs) {
+          allTabs.push(bay);
         }
       }
 
       const iconPromises: Promise<void>[] = [];
 
-      for (const tab of allTabs) {
-        if (tab.input instanceof vscode.TabInputText) {
-          const input = tab.input as vscode.TabInputText;
+      for (const bay of allTabs) {
+        if (bay.input instanceof vscode.TabInputText) {
+          const input = bay.input as vscode.TabInputText;
           const fileName = input.uri.path.split('/').pop() || '';
 
           const loadIcon = async () => {

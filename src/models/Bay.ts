@@ -29,7 +29,7 @@ export type DiffStats = {
  * Define el estado actual de visualización y edición.
  */
 export type ActionContext = {
-  viewMode?: BayViewMode;                        // How the tab is visualized
+  viewMode?: BayViewMode;                        // How the bay is visualized
   editMode?: EditMode;                           // Edit capability state
   splitOrientation?: 'horizontal' | 'vertical';  // Split view orientation
   compareMode?: boolean;                         // In diff/compare mode
@@ -104,8 +104,8 @@ export type BayShortcuts = {
 export type BayMetadata = {
   //: IDENTITY
   id            : string;        // Unique identifier (uri-based for file tabs, label-based for webview tabs).
-  parentId?     : string;        // ID of parent tab (for diff tabs that belong to a file tab).
-  bayType       : BayType;   // What kind of VS Code tab input this wraps.
+  parentId?     : string;        // ID of parent bay (for diff tabs that belong to a file bay).
+  bayType       : BayType;   // What kind of VS Code bay input this wraps.
   diffType?     : DiffType;      // Type of diff (for child tabs only)
   
   //: DOCUMENT LINK (NEW)
@@ -170,7 +170,7 @@ export type BayState = {
   isActive           : boolean;
   isDirty            : boolean;
   isPinned           : boolean;
-  isPreview          : boolean;  // VS Code preview tab (italic, replaceable)
+  isPreview          : boolean;  // VS Code preview bay (italic, replaceable)
 
   //: LOCATION
   groupId            : number;
@@ -178,7 +178,7 @@ export type BayState = {
   indexInGroup       : number;
 
   //: VISUALIZATION MODE
-  viewMode           : BayViewMode;  // How the tab is visualized: source | preview | split
+  viewMode           : BayViewMode;  // How the bay is visualized: source | preview | split
 
   //: DIFF INFORMATION (for child tabs)
   diffStats?         : DiffStats;    // Diff statistics (lines added/removed, etc.)
@@ -192,7 +192,7 @@ export type BayState = {
   permissions        : BayPermissions;       // Granular permissions
   //: HIERARCHY
   hasChildren        : boolean;   // Has child tabs (diffs, previews)
-  isChild            : boolean;   // Is a child tab of another
+  isChild            : boolean;   // Is a child bay of another
   childrenCount      : number;    // Number of child tabs (for badge display)
 
   //: UI STATE

@@ -37,7 +37,7 @@ export class BayHelpers {
   };
 
   /**
-   * Detecta si una tab es un Markdown Preview basándose en su metadata.
+   * Detecta si una bay es un Markdown Preview basándose en su metadata.
    */
   static isMarkdownPreview(metadata: BayMetadata): boolean {
     // Método 1: Detectar por viewType (más confiable)
@@ -53,7 +53,7 @@ export class BayHelpers {
   }
 
   /**
-   * Focuses the editor group that contains this tab.
+   * Focuses the editor group that contains this bay.
    */
   static async focusGroup(viewColumn: vscode.ViewColumn): Promise<void> {
     const cmd = BayHelpers.FOCUS_GROUP_CMDS[viewColumn];
@@ -63,25 +63,25 @@ export class BayHelpers {
   }
 
   /**
-   * Activates a tab that can't be opened via openTextDocument (webview, unknown, diff).
+   * Activates a bay that can't be opened via openTextDocument (webview, unknown, diff).
    * Strategy:
    * 1. For diff tabs: reopen the diff via vscode.diff with the correct viewColumn.
    * 2. For all non-URI tabs: focus group → openEditorAtIndex.
    * 3. Fallback for known built-in tabs: use the mapped VS Code command.
    * 
-   * Re-busca la tab nativa cada vez para obtener el estado más actualizado.
+   * Re-busca la bay nativa cada vez para obtener el estado más actualizado.
    * 
    * NOTA: Las tabs de Markdown Preview se filtran en TabSyncService y no llegan aquí.
-   * Se manejan como estado toggle (viewMode) en la tab del archivo fuente.
+   * Se manejan como estado toggle (viewMode) en la bay del archivo fuente.
    */
   static async activateByNativeTab(
     metadata: BayMetadata,
     state: BayState
   ): Promise<void> {
-    // Siempre re-buscar la tab nativa para obtener el estado más reciente
+    // Siempre re-buscar la bay nativa para obtener el estado más reciente
     const nativeTab = BayHelpers.findNativeTab(metadata, state);
 
-    // Best approach for any tab: focus its group, then open by native index.
+    // Best approach for any bay: focus its group, then open by native index.
     // This works reliably for diff tabs, webviews, unknown-input tabs, etc.
     if (nativeTab) {
       const tabIndex = nativeTab.group.tabs.indexOf(nativeTab);
@@ -97,22 +97,22 @@ export class BayHelpers {
         }
       }
     } else {
-      Logger.warn('[BayHelper] Native tab not found for activation: ' + metadata.label);
-      // Tab doesn't exist anymore - throw error so caller can handle it
-      throw new Error(`Native tab not found: ${metadata.label}`);
+      Logger.warn('[BayHelper] Native bay not found for activation: ' + metadata.label);
+      // Bay doesn't exist anymore - throw error so caller can handle it
+      throw new Error(`Native bay not found: ${metadata.label}`);
     }
 
     // Fallback for known built-in editor commands (Settings, Welcome, etc.)
     const label = metadata.label.toLowerCase();
     for (const [keyword, cmd] of Object.entries(BayHelpers.WEBVIEW_COMMANDS)) {
       if (label.includes(keyword)) {
-        try { await vscode.commands.executeCommand(cmd); return; } catch { /* tab may be gone */ }
+        try { await vscode.commands.executeCommand(cmd); return; } catch { /* bay may be gone */ }
       }
     }
   }
 
   /**
-   * Checks if a native VS Code tab matches this Bay's metadata.
+   * Checks if a native VS Code bay matches this Bay's metadata.
    */
   static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
     // Webview tabs: match by label (no URI available)
@@ -143,7 +143,7 @@ export class BayHelpers {
   }
 
   /**
-   * Finds the native VS Code tab that corresponds to this SideTab.
+   * Finds the native VS Code bay that corresponds to this SideTab.
    */
   static findNativeTab(metadata: BayMetadata, state: BayState): vscode.Tab | undefined {
     const group = BayHelpers.nativeGroup(state.viewColumn);
@@ -151,7 +151,7 @@ export class BayHelpers {
   }
 
   /**
-   * Gets the native VS Code tab group by view column.
+   * Gets the native VS Code bay group by view column.
    */
   static nativeGroup(viewColumn: vscode.ViewColumn): vscode.TabGroup | undefined {
     return vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
@@ -289,11 +289,11 @@ export class BayHelpers {
   }
 
   /**
-   * Computes capabilities for a tab based on its metadata and state.
+   * Computes capabilities for a bay based on its metadata and state.
    * Determines what actions can be performed (close, pin, edit, etc.).
    * 
-   * @param metadata - Tab metadata
-   * @param state - Tab state
+   * @param metadata - Bay metadata
+   * @param state - Bay state
    * @returns Computed capabilities object
    */
   static computeCapabilities(metadata: BayMetadata, state: Partial<BayState>): BayCapabilities {

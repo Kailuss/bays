@@ -27,8 +27,8 @@ export class BayDragDropService {
     targetBayId: string,
     insertPosition: 'before' | 'after',
   ): boolean {
-    const sourceBay = this.stateService.fetchBayById(sourceBayId);
-    const targetBay = this.stateService.fetchBayById(targetBayId);
+    const sourceBay = this.stateService.getBayById(sourceBayId);
+    const targetBay = this.stateService.getBayById(targetBayId);
 
     if (!sourceBay || !targetBay) { return false; }
     if (sourceBay.state.groupId !== targetBay.state.groupId) { return false; }
@@ -88,7 +88,7 @@ export class BayDragDropService {
     });
 
     // Notify change
-    this.stateService.updateTab(sourceBay);
+    this.stateService.updateBay(sourceBay);
 
     return true;
   }
@@ -107,7 +107,7 @@ export class BayDragDropService {
     targetBayId?: string,
     insertPosition?: 'before' | 'after',
   ): Promise<boolean> {
-    const sourceBay = this.stateService.fetchBayById(sourceBayId);
+    const sourceBay = this.stateService.getBayById(sourceBayId);
     if (!sourceBay || !sourceBay.metadata.uri) { return false; }
 
     // Restriction: pinned bays cannot be moved
@@ -118,7 +118,7 @@ export class BayDragDropService {
 
     // If there's a specific target, check restrictions
     if (targetBayId) {
-      const targetBay = this.stateService.fetchBayById(targetBayId);
+      const targetBay = this.stateService.getBayById(targetBayId);
       if (targetBay && targetBay.state.isPinned) {
         return false; // Don't allow drop over pinned bays
       }
@@ -142,8 +142,8 @@ export class BayDragDropService {
    * @returns true if drop is valid
    */
   canDrop(sourceBayId: string, targetBayId: string): boolean {
-    const sourceBay = this.stateService.fetchBayById(sourceBayId);
-    const targetBay = this.stateService.fetchBayById(targetBayId);
+    const sourceBay = this.stateService.getBayById(sourceBayId);
+    const targetBay = this.stateService.getBayById(targetBayId);
 
     if (!sourceBay || !targetBay) { return false; }
 

@@ -10,37 +10,37 @@ import * as vscode from 'vscode';
 import { SideTab } from '../models/SideTab';
 
 /**
- * Verifica si una tab es una imagen.
+ * Verifica si una bay es una imagen.
  */
-function isImageTab(tab: SideTab): boolean {
+function isImageTab(bay: SideTab): boolean {
   const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
-  return imageExtensions.includes(tab.metadata.fileExtension.toLowerCase());
+  return imageExtensions.includes(bay.metadata.fileExtension.toLowerCase());
 }
 
 /**
- * Añade acción de optimización a una tab de imagen.
+ * Añade acción de optimización a una bay de imagen.
  * Demuestra uso de CustomActions.
  */
-export function addImageOptimizationAction(tab: SideTab): void {
-  tab.addCustomAction({
+export function addImageOptimizationAction(bay: SideTab): void {
+  bay.addCustomAction({
     id: 'optimize-image',
     label: 'Optimize Image',
     icon: 'zap',
     tooltip: 'Compress and optimize this image file',
     keybinding: 'Ctrl+Alt+O',
     execute: async (metadata, state) => {
-      await optimizeImage(tab);
+      await optimizeImage(bay);
     },
   });
 
   // También añadir acción para info de imagen
-  tab.addCustomAction({
+  bay.addCustomAction({
     id: 'image-info',
     label: 'Image Info',
     icon: 'info',
     tooltip: 'Show image dimensions and size',
     execute: async (metadata, state) => {
-      await showImageInfo(tab);
+      await showImageInfo(bay);
     },
   });
 }
@@ -49,34 +49,34 @@ export function addImageOptimizationAction(tab: SideTab): void {
  * Optimiza una imagen con feedback de progreso.
  * Demuestra uso de OperationState, Permissions y ActionContext.
  */
-async function optimizeImage(tab: SideTab): Promise<void> {
+async function optimizeImage(bay: SideTab): Promise<void> {
   // 1. VERIFICAR PERMISOS
-  if (!tab.state.permissions.canExport) {
+  if (!bay.state.permissions.canExport) {
     vscode.window.showWarningMessage('Export/optimization not allowed for this file');
     return;
   }
 
-  if (tab.isActionRestricted('optimize-image')) {
+  if (bay.isActionRestricted('optimize-image')) {
     vscode.window.showWarningMessage('Image optimization is restricted');
     return;
   }
 
   // 2. VERIFICAR CAPACIDADES
-  if (!tab.state.capabilities.canEdit) {
+  if (!bay.state.capabilities.canEdit) {
     vscode.window.showWarningMessage('Cannot modify read-only file');
     return;
   }
 
-  if (!tab.metadata.uri) {
+  if (!bay.metadata.uri) {
     return;
   }
 
   // 3. CAMBIAR A READONLY DURANTE PROCESAMIENTO
-  const originalEditMode = tab.state.actionContext.editMode;
-  tab.updateActionContext({ editMode: 'readonly' });
+  const originalEditMode = bay.state.actionContext.editMode;
+  bay.updateActionContext({ editMode: 'readonly' });
 
   // 4. INICIAR OPERACIÓN
-  tab.startOperation('Optimizing image', true);
+  bay.startOperation('Optimizing image', true);
 
   try {
     // Simular optimización con progreso
@@ -89,27 +89,27 @@ async function optimizeImage(tab: SideTab): Promise<void> {
 
     for (const step of steps) {
       // Verificar si el usuario canceló
-      if (!tab.state.operationState.isProcessing) {
+      if (!bay.state.operationState.isProcessing) {
         vscode.window.showInformationMessage('Optimization cancelled');
         return;
       }
 
       vscode.window.showInformationMessage(step.label);
-      tab.updateOperationProgress(step.progress);
+      bay.updateOperationProgress(step.progress);
 
       // Simular trabajo
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     // 5. OPERACIÓN COMPLETADA
-    tab.updateOperationProgress(100);
+    bay.updateOperationProgress(100);
 
     // 6. ACTUALIZAR ESTADO DE GIT (archivo modificado)
-    tab.updateGitIntegration({
+    bay.updateGitIntegration({
       hasUncommittedChanges: true,
     });
 
-    vscode.window.showInformationMessage(`Image optimized: ${tab.metadata.label}`);
+    vscode.window.showInformationMessage(`Image optimized: ${bay.metadata.label}`);
 
     // 7. OPCIONAL: Añadir a Copilot para documentar cambios
     const addToCopilot = await vscode.window.showQuickPick(['Yes', 'No'], {
@@ -117,14 +117,14 @@ async function optimizeImage(tab: SideTab): Promise<void> {
     });
 
     if (addToCopilot === 'Yes') {
-      tab.addToCopilotContext();
+      bay.addToCopilotContext();
     }
   } catch (error) {
     vscode.window.showErrorMessage(`Optimization failed: ${error}`);
   } finally {
     // 8. LIMPIAR
-    tab.finishOperation();
-    tab.updateActionContext({ editMode: originalEditMode });
+    bay.finishOperation();
+    bay.updateActionContext({ editMode: originalEditMode });
   }
 }
 
@@ -152,16 +152,16 @@ async function optimizeMultipleImages(tabs: SideTab[]): Promise<void> {
       cancellable: true,
     },
     async (progress, token) => {
-      for (const tab of tabs) {
+      for (const bay of tabs) {
         if (token.isCancellationRequested) {
           break;
         }
 
         // Iniciar operación individual
-        tab.startOperation('Batch optimization', false);
+        bay.startOperation('Batch optimization', false);
 
         try {
-          await optimizeImageQuick(tab);
+          await optimizeImageQuick(bay);
           completed++;
 
           // Actualizar progreso global
@@ -171,9 +171,9 @@ async function optimizeMultipleImages(tabs: SideTab[]): Promise<void> {
             increment: 100 / total,
           });
         } catch (error) {
-          console.error(`Failed to optimize ${tab.metadata.label}:`, error);
+          console.error(`Failed to optimize ${bay.metadata.label}:`, error);
         } finally {
-          tab.finishOperation();
+          bay.finishOperation();
         }
       }
 
@@ -187,8 +187,8 @@ async function optimizeMultipleImages(tabs: SideTab[]): Promise<void> {
 /**
  * Versión rápida de optimización sin UI feedback.
  */
-async function optimizeImageQuick(tab: SideTab): Promise<void> {
-  if (!tab.metadata.uri || !tab.state.permissions.canExport) {
+async function optimizeImageQuick(bay: SideTab): Promise<void> {
+  if (!bay.metadata.uri || !bay.state.permissions.canExport) {
     return;
   }
 
@@ -196,7 +196,7 @@ async function optimizeImageQuick(tab: SideTab): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
   // Actualizar Git
-  tab.updateGitIntegration({
+  bay.updateGitIntegration({
     hasUncommittedChanges: true,
   });
 }
@@ -205,19 +205,19 @@ async function optimizeImageQuick(tab: SideTab): Promise<void> {
  * Muestra información de la imagen.
  * Demuestra ejecución de customAction.
  */
-async function showImageInfo(tab: SideTab): Promise<void> {
-  if (!tab.metadata.uri) {
+async function showImageInfo(bay: SideTab): Promise<void> {
+  if (!bay.metadata.uri) {
     return;
   }
 
   try {
-    const stats = await vscode.workspace.fs.stat(tab.metadata.uri);
+    const stats = await vscode.workspace.fs.stat(bay.metadata.uri);
     const sizeKB = (stats.size / 1024).toFixed(2);
 
     const info = [
-      `File: ${tab.metadata.label}`,
+      `File: ${bay.metadata.label}`,
       `Size: ${sizeKB} KB`,
-      `Type: ${tab.metadata.fileExtension}`,
+      `Type: ${bay.metadata.fileExtension}`,
       `Modified: ${new Date(stats.mtime).toLocaleString()}`,
     ].join('\\n');
 
@@ -236,12 +236,12 @@ export function updateImagePermissions(allTabs: SideTab[]): void {
   const allowOptimization = config.get<boolean>('enabled', true);
   const protectedExtensions = config.get<string[]>('protectedExtensions', ['.svg']);
 
-  for (const tab of allTabs) {
-    if (isImageTab(tab)) {
-      const isProtected = protectedExtensions.includes(tab.metadata.fileExtension.toLowerCase());
+  for (const bay of allTabs) {
+    if (isImageTab(bay)) {
+      const isProtected = protectedExtensions.includes(bay.metadata.fileExtension.toLowerCase());
 
-      tab.state.permissions = {
-        ...tab.state.permissions,
+      bay.state.permissions = {
+        ...bay.state.permissions,
         canExport: allowOptimization && !isProtected,
         canDelete: !isProtected,
         restrictedActions: isProtected ? ['optimize-image'] : [],
@@ -254,9 +254,9 @@ export function updateImagePermissions(allTabs: SideTab[]): void {
  * Ejemplo de uso desde el webview o UI.
  */
 export async function handleImageActionFromUI(
-  tab: SideTab,
+  bay: SideTab,
   actionId: string
 ): Promise<void> {
   // Ejecutar acción personalizada
-  await tab.executeCustomAction(actionId);
+  await bay.executeCustomAction(actionId);
 }

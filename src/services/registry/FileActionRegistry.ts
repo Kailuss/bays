@@ -32,7 +32,7 @@ export type { FileAction, ResolvedFileAction, FileActionContext } from '../../co
  * devuelva `true` gana.  Las acciones registradas manualmente tienen
  * prioridad sobre las built-in.
  * 
- * **Acciones dinámicas:** Para acciones que dependen del estado de la tab
+ * **Acciones dinámicas:** Para acciones que dependen del estado de la bay
  * (como toggle preview/source), se usa `DynamicFileAction` que resuelve
  * icono y tooltip según el contexto.
  */
@@ -66,10 +66,10 @@ export class FileActionRegistry {
    * 
    * @param fileName - Nombre del archivo (basename)
    * @param uri - URI completa del archivo
-   * @param context - Contexto opcional de la tab (viewMode, etc.)
+   * @param context - Contexto opcional de la bay (viewMode, etc.)
    */
   resolve(fileName: string, uri: vscode.Uri, context?: FileActionContext): ResolvedFileAction | null {
-    // Dynamic actions first (they depend on tab state)
+    // Dynamic actions first (they depend on bay state)
     for (const action of this.dynamic) {
       if (action.match(fileName, uri)) {
         const resolved = action.resolve(context);
@@ -112,7 +112,7 @@ export class FileActionRegistry {
    * 
    * @param actionId - ID de la acción a ejecutar
    * @param uri - URI del archivo
-   * @param context - Contexto opcional de la tab
+   * @param context - Contexto opcional de la bay
    */
   async execute(actionId: string, uri: vscode.Uri, context?: FileActionContext): Promise<boolean> {
     // Check dynamic actions first (they have context-aware execute)

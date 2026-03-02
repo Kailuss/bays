@@ -12,19 +12,19 @@ export function registerCopilotCommands(
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) => {
-      const tab = typeof bayId === 'string' ? stateService.getTab(bayId) : undefined;
-      if (tab) {
-        await copilotService.addFileToChat(tab.metadata.uri);
+      const bay = typeof bayId === 'string' ? stateService.getBayById(bayId) : undefined;
+      if (bay) {
+        await copilotService.addFileToChat(bay.metadata.uri);
       }
     }),
 
     vscode.commands.registerCommand('bays.addMultipleToCopilotChat', async () => {
-      const allTabs = stateService.getAllTabs();
-      if (allTabs.length === 0) {
-        vscode.window.showInformationMessage('No tabs open');
+      const allBays = stateService.getAllBays();
+      if (allBays.length === 0) {
+        vscode.window.showInformationMessage('No bays open');
         return;
       }
-      await copilotService.addMultipleFiles(allTabs);
+      await copilotService.addMultipleFiles(allBays);
     }),
   );
 }

@@ -1,8 +1,8 @@
 /* Bay Interactive States */
 .bay.active {
   border-left-color: var(--vscode-focusBorder, #007acc);
-  background: var(--vscode-tab-activeBackground, var(--vscode-editor-background));
-  color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
+  background: var(--vscode-bay-activeBackground, var(--vscode-editor-background));
+  color: var(--vscode-bay-activeForeground, var(--vscode-foreground));
 }
 
 /* Drag & Drop States */

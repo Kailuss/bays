@@ -35,9 +35,9 @@ export class CopilotService {
   /**
    * Añade un archivo al contexto de Copilot Chat.
    * Si la integración directa no está disponible usa el portapapeles como alternativa.
-   * @param tab - The tab to add (updates integration state)
+   * @param bay - The bay to add (updates integration state)
    */
-  async addFileToChat(tab: SideTab): Promise<boolean>;
+  async addFileToChat(bay: SideTab): Promise<boolean>;
   /**
    * Añade un archivo al contexto de Copilot Chat (legacy signature).
    * @param uri - The URI to add (no state update)
@@ -46,11 +46,11 @@ export class CopilotService {
   async addFileToChat(tabOrUri: SideTab | vscode.Uri | undefined): Promise<boolean> {
     // Handle both signatures
     let uri: vscode.Uri | undefined;
-    let tab: SideTab | undefined;
+    let bay: SideTab | undefined;
     
     if (tabOrUri instanceof SideTab) {
-      tab = tabOrUri;
-      uri = tab.metadata.uri;
+      bay = tabOrUri;
+      uri = bay.metadata.uri;
     } else {
       uri = tabOrUri;
     }
@@ -69,9 +69,9 @@ export class CopilotService {
         attachFiles: [uri],
       } satisfies ChatOpenOptions);
       
-      // Update integration state if tab was provided
-      if (tab) {
-        tab.addToCopilotContext();
+      // Update integration state if bay was provided
+      if (bay) {
+        bay.addToCopilotContext();
       }
       
       return true;
@@ -117,9 +117,9 @@ export class CopilotService {
       
       // Update integration state for all tabs
       if (tabs) {
-        for (const tab of tabs) {
-          if (tab.metadata.uri) {
-            tab.addToCopilotContext();
+        for (const bay of tabs) {
+          if (bay.metadata.uri) {
+            bay.addToCopilotContext();
           }
         }
       }
@@ -141,11 +141,11 @@ export class CopilotService {
       return;
     }
     const selected = await vscode.window.showQuickPick(
-      fileTabs.map(tab => ({
-        label: tab.metadata.label,
-        description: tab.metadata.detailLabel,
-        detail: tab.metadata.tooltipText,
-        tab,
+      fileTabs.map(bay => ({
+        label: bay.metadata.label,
+        description: bay.metadata.detailLabel,
+        detail: bay.metadata.tooltipText,
+        bay,
       })),
       {
         canPickMany: true,
@@ -158,7 +158,7 @@ export class CopilotService {
     }
 
     // Pass tabs directly to preserve state tracking
-    const selectedTabs = selected.map(item => item.tab);
+    const selectedTabs = selected.map(item => item.bay);
 
     const success = await this.addFilesToChat(selectedTabs);
 

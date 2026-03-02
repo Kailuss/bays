@@ -27,7 +27,7 @@ const BUILTIN_PREFIX_MAP: [string, string][] = [
 ];
 
 /**
- * Resolves a codicon name for a built-in (non-file) tab.
+ * Resolves a codicon name for a built-in (non-file) bay.
  * Search order: viewType → exact label → label prefix → generic fallback.
  */
 export function resolveBuiltInCodicon(label: string, viewType?: string): string {

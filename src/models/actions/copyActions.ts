@@ -10,7 +10,7 @@ export async function copyRelativePath(
   state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
-    vscode.window.showWarningMessage('This tab has no path to copy');
+    vscode.window.showWarningMessage('This bay has no path to copy');
     return;
   }
   if (!metadata.uri) {
@@ -23,7 +23,7 @@ export async function copyRelativePath(
 
 export async function copyPath(metadata: BayMetadata, state: BayState): Promise<void> {
   if (!metadata.uri) {
-    vscode.window.showWarningMessage('This tab has no path to copy');
+    vscode.window.showWarningMessage('This bay has no path to copy');
     return;
   }
   if (!metadata.uri) {

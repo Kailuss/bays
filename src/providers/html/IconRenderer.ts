@@ -21,17 +21,17 @@ export class IconRenderer {
   ) {}
 
   /**
-   * Genera el HTML del icono para una tab.
+   * Genera el HTML del icono para una bay.
    */
-  async render(tab: Bay): Promise<string> {
-    const { bayType: tabType, viewType, label, uri, fileExtension: fileType } = tab.metadata;
+  async render(bay: Bay): Promise<string> {
+    const { bayType: tabType, viewType, label, uri, fileExtension: fileType } = bay.metadata;
 
     // Webviews use codicons with standard color
     if (tabType === 'webview') {
       return this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6');
     }
 
-    const fileName = this.resolveFileName(tab);
+    const fileName = this.resolveFileName(bay);
     if (!fileName) {
       return this.renderFallback(fileType);
     }
@@ -51,10 +51,10 @@ export class IconRenderer {
   }
 
   /**
-   * Resuelve el nombre del archivo desde la tab.
+   * Resuelve el nombre del archivo desde la bay.
    */
-  private resolveFileName(tab: Bay): string | null {
-    const { bayType: tabType, uri, label, parentId } = tab.metadata;
+  private resolveFileName(bay: Bay): string | null {
+    const { bayType: tabType, uri, label, parentId } = bay.metadata;
 
     // Variants have parentId set
     if (parentId && uri) {

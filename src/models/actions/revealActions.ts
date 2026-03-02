@@ -10,7 +10,7 @@ export async function revealInExplorer(
   state: BayState
 ): Promise<void> {
   if (!state.capabilities.canRevealInExplorer) {
-    vscode.window.showWarningMessage('This tab has no file to reveal');
+    vscode.window.showWarningMessage('This bay has no file to reveal');
     return;
   }
   if (metadata.uri) {

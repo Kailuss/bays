@@ -14,7 +14,7 @@ import { DATA_ACTIONS } from './data';
 import { DOCKER_ACTIONS } from './docker';
 
 /**
- * Acciones dinámicas que se resuelven según el contexto de la tab.
+ * Acciones dinámicas que se resuelven según el contexto de la bay.
  * Tienen prioridad sobre las acciones estáticas.
  */
 export const DYNAMIC_ACTIONS: DynamicFileAction[] = [

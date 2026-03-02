@@ -13,7 +13,7 @@ import type { DiffType } from '../../../models/Bay';
  */
 
 /**
- * Clasifica un tab diff basándose en su label y URIs.
+ * Clasifica un bay diff basándose en su label y URIs.
  * Retorna el tipo específico de diff para mostrar el icono y stats apropiados.
  * 
  * Tipos soportados:
@@ -26,7 +26,7 @@ import type { DiffType } from '../../../models/Bay';
  * - incoming-current: Vista de merge de 3 vías
  * - unknown: Comparación genérica
  * 
- * @param label Label del tab diff
+ * @param label Label del bay diff
  * @param originalUri URI original (lado izquierdo del diff)
  * @param modifiedUri URI modificado (lado derecho del diff)
  * @returns Tipo de diff clasificado
@@ -142,7 +142,7 @@ export function classifyDiffType(
 }
 
 /**
- * Determina el parentId para un tab diff.
+ * Determina el parentId para un bay diff.
  * 
  * Reglas:
  * - Snapshots/working-tree/staged/merge-conflict: parent es el archivo actual
@@ -152,10 +152,10 @@ export function classifyDiffType(
  * 
  * @param diffType Tipo de diff clasificado
  * @param uri URI del archivo (modificado/derecho)
- * @param viewColumn Columna del tab
+ * @param viewColumn Columna del bay
  * @param originalUri URI original (lado izquierdo del diff)
  * @param modifiedUri URI modificado (lado derecho del diff)
- * @returns ID del parent, o undefined si es tab independiente
+ * @returns ID del parent, o undefined si es bay independiente
  */
 export function determineParentId(
   diffType: DiffType,
@@ -188,7 +188,7 @@ export function determineParentId(
       parentUri = vscode.Uri.file(uri.path);
     }
     
-    // Parent es el tab del archivo con el mismo URI en el mismo grupo
+    // Parent es el bay del archivo con el mismo URI en el mismo grupo
     return `${parentUri.toString()}-${viewColumn}`;
   }
   

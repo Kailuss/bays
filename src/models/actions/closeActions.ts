@@ -8,7 +8,7 @@ import { BayHelpers } from '../BayHelpers';
 
 export async function close(metadata: BayMetadata, state: BayState): Promise<void> {
   if (!state.capabilities.canClose) {
-    vscode.window.showWarningMessage('This tab cannot be closed');
+    vscode.window.showWarningMessage('This bay cannot be closed');
     return;
   }
   const t = BayHelpers.findNativeTab(metadata, state);

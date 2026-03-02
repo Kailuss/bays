@@ -29,8 +29,8 @@ export class BayHeadService {
   ) {}
 
   /**
-   * Asegura que el parent tab de un variant exista en el estado.
-   * Si el archivo base no está abierto como tab, lo abre automáticamente
+   * Asegura que el parent bay de un variant exista en el estado.
+   * Si el archivo base no está abierto como bay, lo abre automáticamente
    * y lo añade al estado, luego asocia el variant.
    * 
    * Contexto: handleTabChanges (evento opened)
@@ -40,22 +40,22 @@ export class BayHeadService {
     if (!parentId) { return; }
 
     // Check if parent already exists
-    if (this.stateService.getTab(parentId)) {
+    if (this.stateService.getBayById(parentId)) {
       return; // Parent exists, all good
     }
 
     // Parent doesn't exist - we need to find or create it
-    // For diff tabs, the parent is the file tab with the same URI in the same group
+    // For diff tabs, the parent is the file bay with the same URI in the same group
     const group = nativeChildTab.group;
     const childUri = childTab.metadata.uri;
     if (!childUri) { return; }
 
-    // Search for a file tab with matching URI in the same group
+    // Search for a file bay with matching URI in the same group
     let parentNativeTab: vscode.Tab | undefined;
-    for (const tab of group.tabs) {
-      if (tab.input instanceof vscode.TabInputText) {
-        if (tab.input.uri.toString() === childUri.toString()) {
-          parentNativeTab = tab;
+    for (const bay of group.tabs) {
+      if (bay.input instanceof vscode.TabInputText) {
+        if (bay.input.uri.toString() === childUri.toString()) {
+          parentNativeTab = bay;
           break;
         }
       }
@@ -65,33 +65,33 @@ export class BayHeadService {
     if (parentNativeTab) {
       const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
       if (parentSideTab) {
-        Logger.log(`[BayHead] Creating parent tab for variant: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
-        this.stateService.addTab(parentSideTab);
+        Logger.log(`[BayHead] Creating parent bay for variant: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
+        this.stateService.addBay(parentSideTab);
         // Inherit state from parent
         this.hierarchyService.inheritState(childTab, parentSideTab);
       }
     } else {
-      // Parent tab doesn't exist in VS Code - open it automatically
-      Logger.log(`[BayHead] Parent tab not found, opening automatically: ${childUri.fsPath}`);
+      // Parent bay doesn't exist in VS Code - open it automatically
+      Logger.log(`[BayHead] Parent bay not found, opening automatically: ${childUri.fsPath}`);
       
       try {
-        // Open the file in the same group as the child tab
+        // Open the file in the same group as the child bay
         const doc = await vscode.workspace.openTextDocument(childUri);
         await vscode.window.showTextDocument(doc, {
           viewColumn: group.viewColumn,
           preview: false, // Open as non-preview to ensure it stays open
-          preserveFocus: true, // Don't steal focus from current tab
+          preserveFocus: true, // Don't steal focus from current bay
         });
         
-        // After opening, search for the newly created tab and add it to state
+        // After opening, search for the newly created bay and add it to state
         // The onDidChangeTabs event will eventually catch it, but we can add it immediately
-        for (const tab of group.tabs) {
-          if (tab.input instanceof vscode.TabInputText) {
-            if (tab.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToBay(tab, this.gitSyncService);
+        for (const bay of group.tabs) {
+          if (bay.input instanceof vscode.TabInputText) {
+            if (bay.input.uri.toString() === childUri.toString()) {
+              const parentSideTab = convertToBay(bay, this.gitSyncService);
               if (parentSideTab) {
-                Logger.log(`[BayHead] Successfully opened and added parent tab: ${parentSideTab.metadata.label}`);
-                this.stateService.addTab(parentSideTab);
+                Logger.log(`[BayHead] Successfully opened and added parent bay: ${parentSideTab.metadata.label}`);
+                this.stateService.addBay(parentSideTab);
                 this.hierarchyService.inheritState(childTab, parentSideTab);
               }
               break;
@@ -101,7 +101,7 @@ export class BayHeadService {
       } catch (error) {
         // If we can't open the parent (e.g., file doesn't exist anymore),
         // the child will be rendered as orphan
-        Logger.log(`[BayHead] Failed to open parent tab: ${error}`);
+        Logger.log(`[BayHead] Failed to open parent bay: ${error}`);
       }
     }
   }
@@ -134,12 +134,12 @@ export class BayHeadService {
     const childUri = childTab.metadata.uri;
     if (!childUri) { return; }
 
-    // Search for a file tab with matching URI in the same group
+    // Search for a file bay with matching URI in the same group
     let parentNativeTab: vscode.Tab | undefined;
-    for (const tab of group.tabs) {
-      if (tab.input instanceof vscode.TabInputText) {
-        if (tab.input.uri.toString() === childUri.toString()) {
-          parentNativeTab = tab;
+    for (const bay of group.tabs) {
+      if (bay.input instanceof vscode.TabInputText) {
+        if (bay.input.uri.toString() === childUri.toString()) {
+          parentNativeTab = bay;
           break;
         }
       }
@@ -149,30 +149,30 @@ export class BayHeadService {
     if (parentNativeTab) {
       const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
       if (parentSideTab) {
-        Logger.log(`[BayHead] Creating parent tab for variant during syncAll: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
+        Logger.log(`[BayHead] Creating parent bay for variant during syncAll: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
         allTabs.push(parentSideTab);
         this.hierarchyService.inheritState(childTab, parentSideTab);
       }
     } else {
-      // Parent tab doesn't exist in VS Code - open it automatically
-      Logger.log(`[BayHead] Parent tab not found during sync, opening automatically: ${childUri.fsPath}`);
+      // Parent bay doesn't exist in VS Code - open it automatically
+      Logger.log(`[BayHead] Parent bay not found during sync, opening automatically: ${childUri.fsPath}`);
       
       try {
-        // Open the file in the same group as the child tab
+        // Open the file in the same group as the child bay
         const doc = await vscode.workspace.openTextDocument(childUri);
         await vscode.window.showTextDocument(doc, {
           viewColumn: group.viewColumn,
           preview: false, // Open as non-preview to ensure it stays open
-          preserveFocus: true, // Don't steal focus from current tab
+          preserveFocus: true, // Don't steal focus from current bay
         });
         
-        // After opening, search for the newly created tab and add it to array
-        for (const tab of group.tabs) {
-          if (tab.input instanceof vscode.TabInputText) {
-            if (tab.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToBay(tab, this.gitSyncService);
+        // After opening, search for the newly created bay and add it to array
+        for (const bay of group.tabs) {
+          if (bay.input instanceof vscode.TabInputText) {
+            if (bay.input.uri.toString() === childUri.toString()) {
+              const parentSideTab = convertToBay(bay, this.gitSyncService);
               if (parentSideTab) {
-                Logger.log(`[BayHead] Successfully opened and added parent tab during sync: ${parentSideTab.metadata.label}`);
+                Logger.log(`[BayHead] Successfully opened and added parent bay during sync: ${parentSideTab.metadata.label}`);
                 allTabs.push(parentSideTab);
                 this.hierarchyService.inheritState(childTab, parentSideTab);
               }
@@ -183,7 +183,7 @@ export class BayHeadService {
       } catch (error) {
         // If we can't open the parent (e.g., file doesn't exist anymore),
         // the child will be rendered as orphan
-        Logger.log(`[BayHead] Failed to open parent tab during sync: ${error}`);
+        Logger.log(`[BayHead] Failed to open parent bay during sync: ${error}`);
       }
     }
   }

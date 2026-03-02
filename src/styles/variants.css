@@ -22,7 +22,7 @@
   /* Visual */
   background: inherit;
   border-left: 4px solid transparent;
-  border-bottom: 1px solid var(--vscode-tab-border, #444);
+  border-bottom: 1px solid var(--vscode-bay-border, #444);
   opacity: 1;
 
   /* Flexbox */

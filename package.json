@@ -1,17 +1,17 @@
 {
   "name": "bays",
   "displayName": "Bays",
-  "description": "Vertical tabs panel with advanced features",
+  "description": "Vertical bays panel with advanced features",
   "version": "0.3.3",
   "publisher": "Kailuss",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kailuss/tabs-lover.git"
+    "url": "https://github.com/Kailuss/bays.git"
   },
   "bugs": {
-    "url": "https://github.com/Kailuss/tabs-lover/issues"
+    "url": "https://github.com/Kailuss/bays/issues"
   },
-  "homepage": "https://github.com/Kailuss/tabs-lover#readme",
+  "homepage": "https://github.com/Kailuss/bays#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -50,13 +50,13 @@
         "category" :"Bays"
       },
       {
-        "command"  :"bays.openTab",
-        "title"    :"Open Tab",
+        "command"  :"bays.openBay",
+        "title"    :"Open Bay",
         "category" :"Bays"
       },
       {
-        "command"  :"bays.closeTab",
-        "title"    :"Close Tab",
+        "command"  :"bays.closeBay",
+        "title"    :"Close Bay",
         "icon"     :"$(close)",
         "category" :"Bays"
       },
@@ -77,14 +77,14 @@
         "category" :"Bays"
       },
       {
-        "command"  :"bays.pinTab",
-        "title"    :"Pin Tab",
+        "command"  :"bays.pinBay",
+        "title"    :"Pin Bay",
         "icon"     :"$(pinned)",
         "category" :"Bays"
       },
       {
-        "command"  :"bays.unpinTab",
-        "title"    :"Unpin Tab",
+        "command"  :"bays.unpinBay",
+        "title"    :"Unpin Bay",
         "icon"     :"$(pin)",
         "category" :"Bays"
       },
@@ -192,7 +192,7 @@
       },
       {
         "command"  :"bays.reorder",
-        "title"    :"Reorder Tabs",
+        "title"    :"Reorder Bays",
         "icon"     :"$(list-ordered)",
         "category" :"Bays"
       },
@@ -238,12 +238,12 @@
         "bays.showFilePath": {
           "type": "boolean",
           "default": true,
-          "description": "Show the relative file path as description next to each tab."
+          "description": "Show the relative file path as description next to each bay."
         },
         "bays.compactMode": {
           "type": "boolean",
           "default": false,
-          "description": "Enable compact mode: tabs show file name and path in a single line with reduced height (28px)."
+          "description": "Enable compact mode: bays show file name and path in a single line with reduced height (28px)."
         },
         "bays.iconSize": {
           "type": "number",
@@ -253,22 +253,22 @@
         "bays.enableHoverActions": {
           "type": "boolean",
           "default": true,
-          "description": "Show action buttons when hovering over a tab."
+          "description": "Show action buttons when hovering over a bay."
         },
         "bays.showStateIcons": {
           "type": "boolean",
           "default": true,
-          "description": "Show state icons (pinned, modified, Copilot-edited) on tabs."
+          "description": "Show state icons (pinned, modified, Copilot-edited) on bays."
         },
         "bays.enableDragDrop": {
           "type": "boolean",
           "default": true,
-          "description": "Enable drag & drop reordering of tabs within and across groups."
+          "description": "Enable drag & drop reordering of bays within and across groups."
         },
         "bays.syncCursorPosition": {
           "type": "boolean",
           "default": false,
-          "description": "Synchronize cursor position (line and column) between parent tabs and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one tab will update all related tabs."
+          "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
         }
       }
     }

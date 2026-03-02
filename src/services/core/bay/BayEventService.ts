@@ -40,14 +40,14 @@ export class BayEventService {
   activate(): void {
     Logger.log('[BayEvent] Activating event listeners');
 
-    // 1. Tab changes (opened/closed)
+    // 1. Bay changes (opened/closed)
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabs(async (event) => {
         await this.handleTabChanges(event);
       })
     );
 
-    // 2. Tab group changes (created/closed)
+    // 2. Bay group changes (created/closed)
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabGroups(() => {
         this.handleGroupChanges();
@@ -72,14 +72,14 @@ export class BayEventService {
     this.disposables.push(
       vscode.window.onDidChangeTextEditorSelection((event) => {
         const uri = event.textEditor.document.uri;
-        const tab = this.stateService.findTabByUri(uri);
-        if (!tab || !event.selections[0]) { return; }
+        const bay = this.stateService.findBayByUri(uri);
+        if (!bay || !event.selections[0]) { return; }
 
         const selection = event.selections[0];
         const line = selection.active.line + 1;
         const column = selection.active.character + 1;
 
-        this.hierarchyService.syncCursorPosition(tab.metadata.id, line, column);
+        this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
       })
     );
 
@@ -87,33 +87,33 @@ export class BayEventService {
   }
 
   /**
-   * Maneja cambios en tabs (opened/closed).
+   * Maneja cambios en bays (opened/closed).
    * 
    * Flujo:
-   * 1. Opened tabs: Convertir a SideTab, asegurar parent si es variant, añadir al estado
-   * 2. Closed tabs: Remover del estado, notificar cambio
-   * 3. Changed tabs: Actualizar estado (preview, pinned, dirty)
+   * 1. Opened bays: Convertir a Bay, asegurar parent si es variant, añadir al estado
+   * 2. Closed bays: Remover del estado, notificar cambio
+   * 3. Changed bays: Actualizar estado (preview, pinned, dirty)
    * 
    * Delegación:
-   * - BayHeadService.ensureParentExists(): Si el tab es variant
+   * - BayHeadService.ensureParentExists(): Si el bay es variant
    * - ActiveStateService.syncActiveState(): Después de añadir/remover
-   * - BayHierarchyService.registerChild(): Si el tab tiene parentId
+   * - BayHierarchyService.registerChild(): Si el bay tiene parentId
    */
   private async handleTabChanges(event: vscode.TabChangeEvent): Promise<void> {
     let hasChanges = false;
 
     // Handle opened tabs
-    for (const tab of event.opened) {
-      const st = convertToBay(tab, this.gitSyncService);
+    for (const bay of event.opened) {
+      const st = convertToBay(bay, this.gitSyncService);
       if (!st) { continue; }
 
-      // If it's a variant tab, ensure parent exists first
+      // If it's a variant bay, ensure parent exists first
       if (st.metadata.parentId) {
-        await this.bayHeadService.ensureParentExists(st, tab);
+        await this.bayHeadService.ensureParentExists(st, bay);
       }
 
-      // Add tab to state
-      this.stateService.addTab(st);
+      // Add bay to state
+      this.stateService.addBay(st);
 
       // Register in hierarchy if it has a parent
       if (st.metadata.parentId) {
@@ -124,45 +124,45 @@ export class BayEventService {
     }
 
     // Handle closed tabs
-    for (const tab of event.closed) {
-      const id = this.generateIdFromTab(tab);
+    for (const bay of event.closed) {
+      const id = this.generateIdFromTab(bay);
       if (!id) { continue; }
 
-      const existingTab = this.stateService.getTab(id);
-      if (existingTab) {
-        this.stateService.removeTab(id);
+      const existingBay = this.stateService.getBayById(id);
+      if (existingBay) {
+        this.stateService.removeBay(id);
         hasChanges = true;
       }
     }
 
-    // Handle changed tabs (preview, pinned, dirty state changes)
-    for (const tab of event.changed) {
-      const id = this.generateIdFromTab(tab);
+    // Handle changed bays (preview, pinned, dirty state changes)
+    for (const bay of event.changed) {
+      const id = this.generateIdFromTab(bay);
       if (!id) { continue; }
 
-      const existingTab = this.stateService.getTab(id);
-      if (existingTab) {
-        let tabChanged = false;
+      const existingBay = this.stateService.getBayById(id);
+      if (existingBay) {
+        let bayChanged = false;
         
         // Update preview state
-        if (existingTab.state.isPreview !== tab.isPreview) {
-          existingTab.state.isPreview = tab.isPreview;
-          tabChanged = true;
+        if (existingBay.state.isPreview !== bay.isPreview) {
+          existingBay.state.isPreview = bay.isPreview;
+          bayChanged = true;
         }
         
         // Update pinned state
-        if (existingTab.state.isPinned !== tab.isPinned) {
-          existingTab.state.isPinned = tab.isPinned;
-          tabChanged = true;
+        if (existingBay.state.isPinned !== bay.isPinned) {
+          existingBay.state.isPinned = bay.isPinned;
+          bayChanged = true;
         }
         
         // Update dirty state
-        if (existingTab.state.isDirty !== tab.isDirty) {
-          existingTab.state.isDirty = tab.isDirty;
-          tabChanged = true;
+        if (existingBay.state.isDirty !== bay.isDirty) {
+          existingBay.state.isDirty = bay.isDirty;
+          bayChanged = true;
         }
 
-        if (tabChanged) {
+        if (bayChanged) {
           hasChanges = true;
         }
       }
@@ -189,12 +189,12 @@ export class BayEventService {
   }
 
   /**
-   * Genera un ID desde un native tab sin crear un SideTab completo.
+   * Genera un ID desde un native bay sin crear un SideTab completo.
    * Usado para identificar tabs en eventos de cierre/cambio.
    */
-  private generateIdFromTab(tab: vscode.Tab): string | undefined {
-    const input = tab.input;
-    const viewColumn = tab.group.viewColumn;
+  private generateIdFromTab(bay: vscode.Tab): string | undefined {
+    const input = bay.input;
+    const viewColumn = bay.group.viewColumn;
 
     if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputNotebook) {
       return `${input.uri.toString()}-${viewColumn}`;

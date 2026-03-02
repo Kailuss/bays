@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 export const STYLE_CONSTANTS = {
-  // Tab dimensions
+  // Bay dimensions
   TAB_HEIGHT              : 40,
   TAB_ICON_SIZE           : 16,
   TAB_PADDING_LEFT        : 8,
@@ -43,7 +43,7 @@ export const STYLE_CONSTANTS = {
     iconForeground                  : 'icon.foreground',
     editorWarningForeground         : 'editorWarning.foreground',
     buttonHoverBackground           : 'button.hoverBackground',
-    tabBorder                       : 'tab.border',
+    tabBorder                       : 'bay.border',
     editorGroupHeaderTabsBorder     : 'editorGroupHeader.tabsBorder',
     panelBorder                     : 'panel.border',
   },

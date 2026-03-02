@@ -213,17 +213,10 @@ export class BayStateService {
   }
 
   /**
-   * Fetch a bay by ID (canonical method name per AGENT.md).
+   * Get a bay by ID (canonical method name per AGENT.md).
    * @returns Bay instance or undefined if not found
    */
-  fetchBayById(id: string): Bay | undefined {
-    return this.bays.get(id);
-  }
-
-  /**
-   * @deprecated Use fetchBayById() for consistency with AGENT.md
-   */
-  getBay(id: string): Bay | undefined {
+  getBayById(id: string): Bay | undefined {
     return this.bays.get(id);
   }
 

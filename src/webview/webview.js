@@ -30,10 +30,10 @@ document.addEventListener('click', e => {
 
     if (action === 'closeBay') {
       const bayId = btn.dataset.bayId;
-      const tab   = document.querySelector(`.bay[data-bayId="${CSS.escape(bayId)}"]`);
-      if (tab && !closingTabs.has(bayId)) {
+      const bay   = document.querySelector(`.bay[data-bayId="${CSS.escape(bayId)}"]`);
+      if (bay && !closingTabs.has(bayId)) {
         closingTabs.add(bayId);
-        tab.classList.add('closing');
+        bay.classList.add('closing');
         setTimeout(() => {
           vscode.postMessage({ type: 'closeBay', bayId });
           closingTabs.delete(bayId);
@@ -85,19 +85,19 @@ document.addEventListener('click', e => {
     return;
   }
 
-  const tab = e.target.closest('.bay');
-  if (tab) { vscode.postMessage({ type: 'openBay', bayId: tab.dataset.bayId }); }
+  const bay = e.target.closest('.bay');
+  if (bay) { vscode.postMessage({ type: 'openBay', bayId: bay.dataset.bayId }); }
 });
 
 document.addEventListener('contextmenu', e => {
-  const tab = e.target.closest('.bay');
-  if (tab) {
+  const bay = e.target.closest('.bay');
+  if (bay) {
     e.preventDefault();
-    vscode.postMessage({ type: 'contextMenu', bayId: tab.dataset.bayId });
+    vscode.postMessage({ type: 'contextMenu', bayId: bay.dataset.bayId });
   }
 });
 
-// Actualización parcial desde el host (evita rebuild completo al cambiar tab activa)
+// Actualización parcial desde el host (evita rebuild completo al cambiar bay activa)
 window.addEventListener('message', e => {
   const msg = e.data;
 
@@ -110,10 +110,10 @@ window.addEventListener('message', e => {
 
   if (msg.type === 'tabStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
-    const tab = document.querySelector(`.bay[data-bayId="${CSS.escape(msg.bayId)}"]`);
-    if (tab && !tab.classList.contains('closing')) {
-      const tabName = tab.querySelector('.bay-name');
-      const tabState = tab.querySelector('.bay-state');
+    const bay = document.querySelector(`.bay[data-bayId="${CSS.escape(msg.bayId)}"]`);
+    if (bay && !bay.classList.contains('closing')) {
+      const tabName = bay.querySelector('.bay-name');
+      const tabState = bay.querySelector('.bay-state');
 
       if (tabName) {
         // Remover clases de estado anteriores

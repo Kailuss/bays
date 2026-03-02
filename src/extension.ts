@@ -4,10 +4,10 @@ import { BayStateService } from './services/core/BayStateService';
 import { BaySyncService } from './services/core/BaySyncService';
 import { BayDragDropService } from './services/ui/BayDragDropService';
 import { FileActionRegistry } from './services/registry/FileActionRegistry';
-import { TabIconManager } from './services/ui/BayIconManager';
+import { BayIconManager } from './services/ui/BayIconManager';
 import { ThemeService } from './services/ui/ThemeService';
 import { CopilotService } from './services/integration/CopilotService';
-import { registerTabCommands } from './commands/tabCommands';
+import { registerBayCommands } from './commands/bayCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
 import { Logger } from './utils/logger';
 
@@ -21,14 +21,14 @@ export async function activate(context: vscode.ExtensionContext) {
     const syncService   = new BaySyncService(stateService);
     const dragDropService = new BayDragDropService(stateService);
     const fileActionRegistry = new FileActionRegistry();
-    const iconManager   = new TabIconManager();
+    const iconManager   = new BayIconManager();
     const themeService  = new ThemeService();
     const copilotService = new CopilotService();
 
     // Initialise icon manager (loads icon map)
     // We await this to ensure icons are ready before first render
     await iconManager.initialize(context);
-    
+
     // WebviewView provider
     const provider = new BaysWebviewProvider(
       context.extensionUri,
@@ -63,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
     iconManager.preloadIconsInBackground(context);
 
     // Register commands
-    registerTabCommands(context, stateService);
+    registerBayCommands(context, stateService);
     registerCopilotCommands(context, copilotService, stateService);
 
     context.subscriptions.push(
@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Refresh on theme change
     themeService.onDidChangeTheme(() => provider.refresh());
-    
+
     // Refresh when icons are reloaded (e.g., theme change)
     iconManager.onDidInitialize(() => provider.refresh());
 
