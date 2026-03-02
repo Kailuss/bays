@@ -3,7 +3,7 @@ import { CopilotService } from '../services/integration/CopilotService';
 import { BayStateService } from '../services/core/BayStateService';
 
 /**
- * Registra comandos para añadir archivos al contexto de GitHub Copilot Chat.
+ ** Registra comandos para añadir archivos al contexto de GitHub Copilot Chat.
  */
 export function registerCopilotCommands(
   context: vscode.ExtensionContext,

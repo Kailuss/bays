@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import type { FileAction } from './types';
-import { byName, byPattern } from './matchers';
+import type { FileAction } from '../types';
+import { byName, byPattern } from '../matchers';
 
 export const CONFIGURATION_ACTIONS: FileAction[] = [
 
-  // ── package.json: ejecutar scripts ──
+  //· package.json: ejecutar scripts
   {
     id      : 'npmScripts',
     icon    : 'play',
@@ -15,7 +15,7 @@ export const CONFIGURATION_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── .env: encriptar/desencriptar secretos ──
+  //· .env: encriptar/desencriptar secretos
   {
     id      : 'encryptEnv',
     icon    : 'lock',
@@ -42,7 +42,7 @@ export const CONFIGURATION_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── LICENSE: ver resumen de permisos ──
+  //· LICENSE: ver resumen de permisos
   {
     id      : 'showLicense',
     icon    : 'law',
@@ -60,7 +60,7 @@ export const CONFIGURATION_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── Prettier config: formatear todo el workspace ──
+  //· Prettier config: formatear todo el workspace
   {
     id      : 'formatWorkspace',
     icon    : 'wand',

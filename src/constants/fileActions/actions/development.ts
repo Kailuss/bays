@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from './types';
-import { byExtension, byPattern } from './matchers';
+import type { FileAction } from '../types';
+import { byExtension, byPattern } from '../matchers';
 
 export const DEVELOPMENT_ACTIONS: FileAction[] = [
 
-  // ── Tests: ejecutar archivo de test ──
+  //· Tests: ejecutar archivo de test
   {
     id      : 'runTest',
     icon    : 'beaker',
@@ -17,7 +17,7 @@ export const DEVELOPMENT_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── TypeScript / JavaScript: ejecutar con node/ts-node ──
+  //· TypeScript / JavaScript: ejecutar con node/ts-node
   {
     id      : 'runFile',
     icon    : 'play',
@@ -35,7 +35,7 @@ export const DEVELOPMENT_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── Python: ejecutar archivo ──
+  //· Python: ejecutar archivo
   {
     id      : 'runPython',
     icon    : 'play',
@@ -47,7 +47,7 @@ export const DEVELOPMENT_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── Jupyter Notebooks: abrir en modo interactivo ──
+  //· Jupyter Notebooks: abrir en modo interactivo
   {
     id      : 'openNotebook',
     icon    : 'notebook',
@@ -58,7 +58,7 @@ export const DEVELOPMENT_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── Shell scripts: ejecutar en terminal ──
+  //· Shell scripts: ejecutar en terminal
   {
     id      : 'runScript',
     icon    : 'terminal',

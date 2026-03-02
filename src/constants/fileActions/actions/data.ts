@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import type { FileAction } from './types';
-import { byExtension, byPattern } from './matchers';
+import type { FileAction } from '../types';
+import { byExtension, byPattern } from '../matchers';
 
 export const DATA_ACTIONS: FileAction[] = [
 
-  // ── Lock files: abrir npm scripts / audit ──
+  //· Lock files: abrir npm scripts / audit
   {
     id      : 'openLockFile',
     icon    : 'unlock',
@@ -17,7 +17,7 @@ export const DATA_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── JSON / JSONC: formatear documento ──
+  //· JSON / JSONC: formatear documento
   {
     id      : 'formatJson',
     icon    : 'bracket',
@@ -29,7 +29,7 @@ export const DATA_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── CSV / TSV: abrir como tabla (extensión Data Preview o similar) ──
+  //· CSV / TSV: abrir como tabla (extensión Data Preview o similar)
   {
     id      : 'previewData',
     icon    : 'table',
@@ -44,7 +44,7 @@ export const DATA_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── YAML: validar (con extensión YAML de Red Hat) ──
+  //· YAML: validar (con extensión YAML de Red Hat)
   {
     id      : 'validateYaml',
     icon    : 'check-all',

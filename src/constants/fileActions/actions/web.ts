@@ -1,53 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { VSCODE_COMMANDS } from '../commands';
-import type { FileAction, DynamicFileAction } from './types';
-import { byExtension } from './matchers';
-
-/**
- * Acción dinámica para Markdown: toggle entre preview y source.
- * - Si viewMode='source' → muestra icono "preview" → acción: abrir preview
- * - Si viewMode='preview' → muestra icono "edit" → acción: volver al source
- */
-export const MARKDOWN_TOGGLE_ACTION: DynamicFileAction = {
-  id: 'toggleMarkdownPreview',
-  setFocus: true, // Hacer focus al cambiar visualización
-  match: byExtension('.md', '.mdx', '.markdown'),
-  resolve: (context) => {
-    const isPreview = context?.viewMode === 'preview';
-    
-    if (isPreview) {
-      return {
-        icon: 'edit-code',
-        tooltip: 'Edit Source',
-        actionId: 'editMarkdownSource',
-      };
-    }
-    return {
-      icon: 'preview',
-      tooltip: 'Open Preview',
-      actionId: 'openMarkdownPreview',
-    };
-  },
-  execute: async (uri, context) => {
-    const isPreview = context?.viewMode === 'preview';
-    
-    if (isPreview) {
-      // Already in preview mode, switch back to source
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.VSCODE_OPEN, uri);
-    } else {
-      // In source mode, open preview
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, uri);
-    }
-  },
-};
+import type { FileAction } from '../types';
+import { byExtension } from '../matchers';
 
 export const WEB_ACTIONS: FileAction[] = [
 
-  // NOTE: Markdown is handled by MARKDOWN_TOGGLE_ACTION (dynamic)
-  // The static entry below is kept as fallback for registry compatibility
-
-  // ── HTML: abrir en Simple Browser ──
   {
     id      : 'previewHtml',
     icon    : 'globe',
@@ -58,7 +15,6 @@ export const WEB_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── CSS ──
   {
     id      : 'formatCss',
     icon    : 'symbol-ruler',
@@ -70,7 +26,6 @@ export const WEB_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── SCSS / Less: compilar a CSS ──
   {
     id      : 'compileCss',
     icon    : 'symbol-color',
@@ -88,7 +43,6 @@ export const WEB_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── REST/GraphQL: ejecutar request (extensión REST Client) ──
   {
     id      : 'sendRequest',
     icon    : 'send',

@@ -1,17 +1,20 @@
-// ───────────────────────────── Exports ──────────────────────────────
+//─────────────────────────── Exports────────────────────────────
 
 export * from './types';
 export * from './matchers';
 
-// ───────────────────────────── Builtin Actions ──────────────────────────────
+//─────────────────────────── Builtin Actions────────────────────────────
 
 import type { FileAction, DynamicFileAction } from './types';
-import { MEDIA_ACTIONS } from './media';
-import { WEB_ACTIONS, MARKDOWN_TOGGLE_ACTION } from './web';
-import { DEVELOPMENT_ACTIONS } from './development';
-import { CONFIGURATION_ACTIONS } from './configuration';
-import { DATA_ACTIONS } from './data';
-import { DOCKER_ACTIONS } from './docker';
+import {
+  MEDIA_ACTIONS,
+  WEB_ACTIONS,
+  MARKDOWN_TOGGLE_ACTION,
+  DEVELOPMENT_ACTIONS,
+  CONFIGURATION_ACTIONS,
+  DATA_ACTIONS,
+  DOCKER_ACTIONS,
+} from './actions';
 
 /**
  * Acciones dinámicas que se resuelven según el contexto de la bay.

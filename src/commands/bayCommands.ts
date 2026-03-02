@@ -3,8 +3,8 @@ import { BayStateService } from '../services/core/BayStateService';
 import { VSCODE_COMMANDS } from '../constants/commands';
 
 /**
- * Registra los comandos relacionados con bays (abrir, cerrar, mover, etc.).
- * Normalmente reciben un ID de bay desde el webview y resuelven el `SideBay`.
+ ** Registra los comandos relacionados con bays (abrir, cerrar, mover, etc.).
+ *  Normalmente reciben un ID de bay desde el webview y resuelven el `SideBay`.
  */
 export function registerBayCommands(
   context: vscode.ExtensionContext,
@@ -33,6 +33,7 @@ export function registerBayCommands(
 
     vscode.commands.registerCommand('bays.closeToRight', async (arg: unknown) => {
       const bay = resolve(arg);
+      // TODO: Aquí se cierra hacia abajo (no derecha) segun el orden de las bays en la extension. Hay que cambiar el comando.
       if (bay) { await bay.closeToRight(); }
     }),
 

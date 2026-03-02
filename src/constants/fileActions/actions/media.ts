@@ -1,33 +1,33 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from './types';
-import { byExtension } from './matchers';
+import type { FileAction } from '../types';
+import { byExtension } from '../matchers';
 
 export const MEDIA_ACTIONS: FileAction[] = [
 
-  // ── Abrir con app externa por defecto ──
+  //· Abrir con app externa por defecto
   {
     id      : 'openExternal',
     icon    : 'link-external',
     tooltip : 'Open with Default App',
     match   : byExtension(
-      // Imágenes vectoriales y especializadas
+      //! Imágenes vectoriales y especializadas
       '.svg', '.ai', '.eps', '.psd', '.sketch', '.fig', '.xd',
-      // Documentos
+      //! Documentos
       '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
-      // Audio
+      //! Audio
       '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.wma',
-      // Video
+      //! Video
       '.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.m4v',
-      // Archivos comprimidos
+      //! Archivos comprimidos
       '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
-      // Ejecutables y binarios
+      //! Ejecutables y binarios
       '.exe', '.dmg', '.app', '.msi', '.deb', '.rpm',
-      // Bases de datos
+      //! Bases de datos
       '.db', '.sqlite', '.sqlite3', '.mdb', '.accdb',
-      // Diseño 3D y CAD
+      //! Diseño 3D y CAD
       '.blend', '.obj', '.fbx', '.stl', '.dwg', '.dxf',
-      // Fuentes
+      //! Fuentes
       '.ttf', '.otf', '.woff', '.woff2', '.eot'
     ),
     execute : async (uri) => {
@@ -35,7 +35,7 @@ export const MEDIA_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── SVG: optimizar con SVGO ──
+  //· SVG: optimizar con SVGO
   {
     id      : 'optimizeSvg',
     icon    : 'sparkle',
@@ -48,7 +48,7 @@ export const MEDIA_ACTIONS: FileAction[] = [
     },
   },
 
-  // ── Imágenes/Archivos: copiar como Base64 ──
+  //· Imágenes/Archivos: copiar como Base64
   {
     id      : 'copyAsBase64',
     icon    : 'copy',
@@ -69,7 +69,7 @@ export const MEDIA_ACTIONS: FileAction[] = [
       };
       const ext = path.extname(uri.fsPath).toLowerCase();
       const mimeType = mimeTypes[ext] || 'application/octet-stream';
-      
+
       const dataUri = `data:${mimeType};base64,${base64}`;
       await vscode.env.clipboard.writeText(dataUri);
       vscode.window.showInformationMessage('✓ Copied as Base64 data URI');

@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import type { FileAction } from './types';
-import { byPattern } from './matchers';
+import type { FileAction } from '../types';
+import { byPattern } from '../matchers';
 
 export const DOCKER_ACTIONS: FileAction[] = [
 
-  // ── Dockerfile: build ──
+  //· Dockerfile: build
   {
     id      : 'dockerBuild',
     icon    : 'package',
