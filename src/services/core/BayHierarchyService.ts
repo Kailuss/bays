@@ -421,8 +421,3 @@ export type BayTreeNode = {
   bay: Bay;
   children: BayTreeNode[];
 };
-
-/**
- * @deprecated Use BayTreeNode instead
- */
-export type TabTreeNode = BayTreeNode;

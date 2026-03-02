@@ -3,7 +3,7 @@ import type { BayMetadata, BayState, ActionContext, BayIntegrations, CustomBayAc
 import * as actions from './actions';
 
 /**
- * SideTabActions
+ * BayActions
  * Compositional class that delegates to modular action functions.
  *
  * All actions receive `metadata` (immutable) and mutate `state` in place.

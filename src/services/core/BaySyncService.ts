@@ -22,7 +22,7 @@ import { Logger } from '../../utils/logger';
  * 
  * Este servicio actúa como coordinador delgado, no como implementador.
  * 
- * NOTA: Las tabs de Markdown Preview se filtran directamente en convertToSideTab()
+ * NOTA: Las tabs de Markdown Preview se filtran directamente en convertToBay()
  * y se manejan como estado toggle (viewMode) en la bay del archivo fuente.
  * 
  * REFACTORIZACIÓN MARZO 2026: Código modularizado en bay/ folder.
@@ -138,16 +138,16 @@ export class BaySyncService {
     }
 
     const allBays: Bay[] = [];
-    const childTabs: Array<{ sideTab: Bay; nativeTab: vscode.Tab }> = [];
+    const variants: Array<{ bay: Bay; nativeTab: vscode.Tab }> = [];
     
     // First pass: collect all tabs, separating parents from children
     for (const group of vscode.window.tabGroups.all) {
-      group.tabs.forEach((bay, idx) => {
-        const st = convertToBay(bay, this.gitSyncService, idx);
+      group.tabs.forEach((tab, idx) => {
+        const st = convertToBay(tab, this.gitSyncService, idx);
         if (st) {
           if (st.metadata.parentId) {
             // This is a variant bay (diff) - defer it
-            childTabs.push({ sideTab: st, nativeTab: bay });
+            variants.push({ bay: st, nativeTab: tab });
           } else {
             // This is a parent bay or standalone bay - add it immediately
             allBays.push(st);
@@ -158,10 +158,10 @@ export class BaySyncService {
     
     // Second pass: process child tabs after parents are loaded
     // Process sequentially to ensure parents are opened before children are added
-    for (const { sideTab, nativeTab } of childTabs) {
+    for (const { bay, nativeTab } of variants) {
       // Ensure parent exists (delegate to BayHeadService)
-      await this.bayHeadService.ensureParentExistsForSync(sideTab, nativeTab, allBays);
-      allBays.push(sideTab);
+      await this.bayHeadService.ensureParentExistsForSync(bay, nativeTab, allBays);
+      allBays.push(bay);
     }
     
     // Replace entire state with processed bays

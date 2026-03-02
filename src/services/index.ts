@@ -2,7 +2,7 @@
 export { BayStateService } from './core/BayStateService';
 export { BaySyncService } from './core/BaySyncService';
 export { BayHierarchyService } from './core/BayHierarchyService';
-export type { TabTreeNode, BayTreeNode } from './core/BayHierarchyService';
+export type { BayTreeNode } from './core/BayHierarchyService';
 export { DocumentManager } from './core/DocumentManager';
 export type { DocumentManagerOptions } from './core/DocumentManager';
 

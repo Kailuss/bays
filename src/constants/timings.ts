@@ -13,7 +13,7 @@ export const TIMINGS = {
   ACTIVATION_MAX_RETRIES: 3,
   
   // Sync delays (ms)
-  SYNC_PROPAGATION_DELAY: 5, // Tiempo para que VS Code propague el estado de tabs
+  SYNC_PROPAGATION_DELAY: 5, // Tiempo para que VS Code propague el estado de bays
   
   // Cache TTL (ms)
   ICON_CACHE_TTL: 300000, // 5 minutos

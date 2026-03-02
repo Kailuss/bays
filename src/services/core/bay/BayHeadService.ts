@@ -63,12 +63,12 @@ export class BayHeadService {
 
     // If found in the group, convert and add it
     if (parentNativeTab) {
-      const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
-      if (parentSideTab) {
-        Logger.log(`[BayHead] Creating parent bay for variant: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
-        this.stateService.addBay(parentSideTab);
+      const parentBay = convertToBay(parentNativeTab, this.gitSyncService);
+      if (parentBay) {
+        Logger.log(`[BayHead] Creating parent bay for variant: ${childTab.metadata.label} → ${parentBay.metadata.label}`);
+        this.stateService.addBay(parentBay);
         // Inherit state from parent
-        this.hierarchyService.inheritState(childTab, parentSideTab);
+        this.hierarchyService.inheritState(childTab, parentBay);
       }
     } else {
       // Parent bay doesn't exist in VS Code - open it automatically
@@ -88,11 +88,11 @@ export class BayHeadService {
         for (const bay of group.tabs) {
           if (bay.input instanceof vscode.TabInputText) {
             if (bay.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToBay(bay, this.gitSyncService);
-              if (parentSideTab) {
-                Logger.log(`[BayHead] Successfully opened and added parent bay: ${parentSideTab.metadata.label}`);
-                this.stateService.addBay(parentSideTab);
-                this.hierarchyService.inheritState(childTab, parentSideTab);
+              const parentBay = convertToBay(bay, this.gitSyncService);
+              if (parentBay) {
+                Logger.log(`[BayHead] Successfully opened and added parent bay: ${parentBay.metadata.label}`);
+                this.stateService.addBay(parentBay);
+                this.hierarchyService.inheritState(childTab, parentBay);
               }
               break;
             }
@@ -114,52 +114,53 @@ export class BayHeadService {
    * Contexto: syncAll (sincronización completa inicial)
    */
   async ensureParentExistsForSync(
-    childTab: Bay, 
-    nativeChildTab: vscode.Tab, 
-    allTabs: Bay[]
+    variant: Bay, 
+    variantVSTab: vscode.Tab, 
+    allBays: Bay[]
+    
   ): Promise<void> {
-    const parentId = childTab.metadata.parentId;
+    const parentId = variant.metadata.parentId;
     if (!parentId) { return; }
 
     // Check if parent already exists in the array
-    const existingParent = allTabs.find(t => t.metadata.id === parentId);
+    const existingParent = allBays.find(t => t.metadata.id === parentId);
     if (existingParent) {
       // Inherit state from parent
-      this.hierarchyService.inheritState(childTab, existingParent);
+      this.hierarchyService.inheritState(variant, existingParent);
       return; // Parent exists, all good
     }
 
     // Parent doesn't exist - we need to find or create it
-    const group = nativeChildTab.group;
-    const childUri = childTab.metadata.uri;
-    if (!childUri) { return; }
+    const group = variantVSTab.group;
+    const variantMetadataUri = variant.metadata.uri;
+    if (!variantMetadataUri) { return; }
 
-    // Search for a file bay with matching URI in the same group
-    let parentNativeTab: vscode.Tab | undefined;
-    for (const bay of group.tabs) {
-      if (bay.input instanceof vscode.TabInputText) {
-        if (bay.input.uri.toString() === childUri.toString()) {
-          parentNativeTab = bay;
+    // Search for a file vsTab with matching URI in the same group
+    let parentVSTab: vscode.Tab | undefined;
+    for (const VSTab of group.tabs) {
+      if (VSTab.input instanceof vscode.TabInputText) {
+        if (VSTab.input.uri.toString() === variantMetadataUri.toString()) {
+          parentVSTab = VSTab;
           break;
         }
       }
     }
 
     // If found, convert and add it to the array
-    if (parentNativeTab) {
-      const parentSideTab = convertToBay(parentNativeTab, this.gitSyncService);
-      if (parentSideTab) {
-        Logger.log(`[BayHead] Creating parent bay for variant during syncAll: ${childTab.metadata.label} → ${parentSideTab.metadata.label}`);
-        allTabs.push(parentSideTab);
-        this.hierarchyService.inheritState(childTab, parentSideTab);
+    if (parentVSTab) {
+      const parentBay = convertToBay(parentVSTab, this.gitSyncService);
+      if (parentBay) {
+        Logger.log(`[BayHead] Creating parent bay for variant during syncAll: ${variant.metadata.label} → ${parentBay.metadata.label}`);
+        allBays.push(parentBay);
+        this.hierarchyService.inheritState(variant, parentBay);
       }
     } else {
       // Parent bay doesn't exist in VS Code - open it automatically
-      Logger.log(`[BayHead] Parent bay not found during sync, opening automatically: ${childUri.fsPath}`);
+      Logger.log(`[BayHead] Parent bay not found during sync, opening automatically: ${variantMetadataUri.fsPath}`);
       
       try {
         // Open the file in the same group as the child bay
-        const doc = await vscode.workspace.openTextDocument(childUri);
+        const doc = await vscode.workspace.openTextDocument(variantMetadataUri);
         await vscode.window.showTextDocument(doc, {
           viewColumn: group.viewColumn,
           preview: false, // Open as non-preview to ensure it stays open
@@ -169,12 +170,12 @@ export class BayHeadService {
         // After opening, search for the newly created bay and add it to array
         for (const bay of group.tabs) {
           if (bay.input instanceof vscode.TabInputText) {
-            if (bay.input.uri.toString() === childUri.toString()) {
-              const parentSideTab = convertToBay(bay, this.gitSyncService);
-              if (parentSideTab) {
-                Logger.log(`[BayHead] Successfully opened and added parent bay during sync: ${parentSideTab.metadata.label}`);
-                allTabs.push(parentSideTab);
-                this.hierarchyService.inheritState(childTab, parentSideTab);
+            if (bay.input.uri.toString() === variantMetadataUri.toString()) {
+              const parentBay = convertToBay(bay, this.gitSyncService);
+              if (parentBay) {
+                Logger.log(`[BayHead] Successfully opened and added parent bay during sync: ${parentBay.metadata.label}`);
+                allBays.push(parentBay);
+                this.hierarchyService.inheritState(variant, parentBay);
               }
               break;
             }

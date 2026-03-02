@@ -1,10 +1,10 @@
-import { SideTab } from '../models/Bay';
+import { Bay } from '../models/Bay';
 
 /**
  * Builds the state indicator HTML + CSS class for a bay.
  * Priority: diagnostic error > diagnostic warning > git status > dirty > clean.
  */
-export function getStateIndicator(bay: SideTab): { html: string; nameClass: string } {
+export function getStateIndicator(bay: Bay): { html: string; nameClass: string } {
 
   // ── Diagnósticos ────────────────────────────────────────────────────────────
   if (bay.state.diagnosticSeverity === 0) {

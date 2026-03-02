@@ -189,7 +189,7 @@ export class BayEventService {
   }
 
   /**
-   * Genera un ID desde un native bay sin crear un SideTab completo.
+   * Genera un ID desde un native bay sin crear un Bay completo.
    * Usado para identificar tabs en eventos de cierre/cambio.
    */
   private generateIdFromTab(bay: vscode.Tab): string | undefined {

@@ -129,7 +129,7 @@ export class BayHelpers {
       return !!metadata.parentId
         && metadata.uri?.toString() === t.input.modified.toString();
     }
-    // A diff SideTab must only match TabInputTextDiff (handled above)
+    // A diff Bay must only match TabInputTextDiff (handled above)
     // Variants (bays with parentId) can still have preview mode
     // but typically they don't support toggle preview
     if (metadata.parentId) { return false; }
@@ -143,7 +143,7 @@ export class BayHelpers {
   }
 
   /**
-   * Finds the native VS Code bay that corresponds to this SideTab.
+   * Finds the native VS Code bay that corresponds to this Bay.
    */
   static findNativeTab(metadata: BayMetadata, state: BayState): vscode.Tab | undefined {
     const group = BayHelpers.nativeGroup(state.viewColumn);

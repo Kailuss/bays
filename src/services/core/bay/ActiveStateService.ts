@@ -102,10 +102,10 @@ export class ActiveStateService {
     }
 
     // Find tabs in state that don't exist in VS Code
-    const allTabs = this.stateService.getAllBays();
+    const allBays = this.stateService.getAllBays();
     const orphanedIds: string[] = [];
     
-    for (const st of allTabs) {
+    for (const st of allBays) {
       if (!nativeIds.has(st.metadata.id)) {
         orphanedIds.push(st.metadata.id);
       }
@@ -121,7 +121,7 @@ export class ActiveStateService {
   }
 
   /**
-   * Genera un ID ligero desde un native bay sin crear un SideTab completo.
+   * Genera un ID ligero desde un native bay sin crear un Bay completo.
    * Usado para comparación rápida de existencia.
    */
   private generateIdFromNativeTab(bay: vscode.Tab): string | undefined {

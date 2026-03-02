@@ -47,13 +47,13 @@ export type DocumentManagerConfig = {
  * - Crear y gestionar ciclo de vida de DocumentModels
  * - Mantener registro de documentos por URI
  * - Registrar versiones (diffs) de documentos
- * - Sincronizar con SideTabs (bidireccional)
+ * - Sincronizar con Bays (bidireccional)
  * - Cleanup automático de documentos inactivos
  * - Proveer API para consultar metadata de documentos/versiones
  * 
  * @remarks
  * Este servicio es la fuente de verdad para metadata de documentos.
- * SideTab mantiene solo referencias (documentModelId) y datos visuales.
+ * Bay mantiene solo referencias (documentModelId) y datos visuales.
  * 
  * Patrón de uso:
  * 1. TabSyncService detecta nuevo documento/diff

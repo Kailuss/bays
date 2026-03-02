@@ -113,8 +113,8 @@ export type BayMetadata = {
 
   //: FILE INFORMATION
   uri?          : vscode.Uri;    // File URI. Only present for file / custom / notebook tabs.
-  fileName?     : string;        // Base file name with extension (e.g. "SideTab.ts")
-  baseName?     : string;        // File name without extension (e.g. "SideTab")
+  fileName?     : string;        // Base file name with extension (e.g. "Bays.ts")
+  baseName?     : string;        // File name without extension (e.g. "Bays")
   fileExtension : string;        // File extension with dot (e.g. ".ts"). Empty for non-file tabs.
   dirPath?      : string;        // Parent directory path (for reveal/terminal actions)
 
@@ -252,6 +252,3 @@ export class Bay extends BayActions {
     super();
   }
 }
-
-// Backward-compatible alias used by modules still importing `SideTab`.
-export { Bay as SideTab };

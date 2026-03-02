@@ -59,7 +59,7 @@ export async function activate(context: vscode.ExtensionContext) {
     syncService.activate(context);
     themeService.activate(context);
 
-    // Preload icons for all open tabs in background
+    // Preload icons for all open bays in background
     iconManager.preloadIconsInBackground(context);
 
     // Register commands
