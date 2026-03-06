@@ -1,6 +1,6 @@
-/* ===================================================================
+/*
    BAYS - Main Stylesheet
-   
+
    Arquitectura modular de estilos:
    - base.css            → Reset, variables CSS, estilos globales
    - utilities.css       → Codicon base, empty state
@@ -19,7 +19,7 @@
    - Botones: 20px vs 16px
    - Padding: 0 8px 0 4px vs 0 11px 0 32px (indentación)
    - Hover: Sin cambio de fondo vs fondo sutil
-   ===================================================================== */
+*/
 
 /* Note: File icons are provided by VS Code's icon theme API */
 

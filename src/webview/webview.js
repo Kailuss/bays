@@ -3,6 +3,7 @@
 // Served as a static resource via webview.asWebviewUri().
 
 const vscode = acquireVsCodeApi();
+console.log('[webview.js] Script loaded');
 
 // Fade in body after initial render (solo si no tiene la clase loaded)
 if (!document.body.classList.contains('loaded')) {
@@ -23,14 +24,16 @@ if (!document.body.classList.contains('loaded')) {
 const closingTabs = new Set();
 
 document.addEventListener('click', e => {
+  console.log('[webview] Click event:', e.target, 'closest bay:', e.target.closest('.bay'));
   const btn = e.target.closest('button[data-action]');
   if (btn) {
+    console.log('[webview] Button clicked:', btn.dataset.action);
     e.stopPropagation();
     const action = btn.dataset.action;
 
     if (action === 'closeBay') {
       const bayId = btn.dataset.bayId;
-      const bay   = document.querySelector(`.bay[data-bayId="${CSS.escape(bayId)}"]`);
+      const bay   = document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
       if (bay && !closingTabs.has(bayId)) {
         closingTabs.add(bayId);
         bay.classList.add('closing');
@@ -86,6 +89,7 @@ document.addEventListener('click', e => {
   }
 
   const bay = e.target.closest('.bay');
+  console.log('[webview] Bay found:', bay, 'bayId:', bay?.dataset?.bayId);
   if (bay) { vscode.postMessage({ type: 'openBay', bayId: bay.dataset.bayId }); }
 });
 
@@ -110,7 +114,7 @@ window.addEventListener('message', e => {
 
   if (msg.type === 'tabStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
-    const bay = document.querySelector(`.bay[data-bayId="${CSS.escape(msg.bayId)}"]`);
+    const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(msg.bayId)}"]`);
     if (bay && !bay.classList.contains('closing')) {
       const tabName = bay.querySelector('.bay-name');
       const tabState = bay.querySelector('.bay-state');

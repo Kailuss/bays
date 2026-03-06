@@ -6,6 +6,8 @@
 // Un cloneNode(true) del bloque captura todo el contenido de una vez,
 // sin necesidad de gestionar clones hijos por separado.
 
+console.log('[dragdrop.js] Script loaded');
+
 const DRAG_THRESHOLD = 5;   // Pixels antes de iniciar el drag
 
 let isDragging         = false;
@@ -22,10 +24,11 @@ let blockHeight        = 0;     // Alto total del bloque (parent + children auto
 
 // --- Mousedown: preparar un posible drag ---
 document.addEventListener('mousedown', e => {
+  console.log('[dragdrop] Mousedown:', e.target);
   if (e.button !== 0) { return; }
   const block = e.target.closest('.bay-block');
-  if (!block) { return; }
-  if (e.target.closest('button')) { return; }
+  if (!block) { console.log('[dragdrop] No bay-block found'); return; }
+  if (e.target.closest('button')) { console.log('[dragdrop] Button clicked, ignoring'); return; }
 
   // Los child bays no actúan como handle — sólo la fila padre inicia el drag
   const clickedTab = e.target.closest('.bay');
@@ -135,18 +138,18 @@ function commitDrop() {
   if (currentInsertIndex !== sourceIndex) {
     let targetTabId, insertPosition;
     if (currentInsertIndex < originalOrder.length) {
-      targetTabId    = originalOrder[currentInsertIndex].el.dataset.bayid;
+      targetTabId    = originalOrder[currentInsertIndex].el.dataset.bayId;
       insertPosition = 'before';
     } else {
-      targetTabId    = originalOrder[originalOrder.length - 1].el.dataset.bayid;
+      targetTabId    = originalOrder[originalOrder.length - 1].el.dataset.bayId;
       insertPosition = 'after';
     }
 
     // Enviar mensaje primero para que el rebuild del HTML empiece ya
     vscode.postMessage({
       type           : 'dropBay',
-      sourceTabId    : sourceEl.dataset.bayid,
-      targetTabId    : targetTabId,
+      sourceBayId    : sourceEl.dataset.bayId,
+      targetBayId    : targetTabId,
       insertPosition : insertPosition,
       sourceGroupId  : parseInt(tabGroupId, 10),
       targetGroupId  : parseInt(tabGroupId, 10),

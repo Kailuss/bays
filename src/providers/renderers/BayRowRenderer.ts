@@ -38,7 +38,7 @@ export class BayRowRenderer {
         ? `<span class="bay-path-inline">${esc(bay.metadata.detailLabel)}</span>`
         : '';
 
-      return `<div class="bay compact${activeClass}" data-bayId="${esc(bay.metadata.id)}">
+      return `<div class="bay compact${activeClass}" data-bay-id="${esc(bay.metadata.id)}">
       <span class="bay-icon">${iconHtml}</span>
       <div class="bay-text">
         <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}${versionBadge}${pathSuffix}</div>
@@ -54,7 +54,7 @@ export class BayRowRenderer {
       ? `<div class="bay-path">${esc(bay.metadata.detailLabel)}</div>`
       : '';
 
-    return `<div class="bay${activeClass}" data-bayId="${esc(bay.metadata.id)}">
+    return `<div class="bay${activeClass}" data-bay-id="${esc(bay.metadata.id)}">
       <span class="bay-icon">${iconHtml}</span>
       <div class="bay-text">
         <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}${versionBadge}</div>

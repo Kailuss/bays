@@ -103,7 +103,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       
       Logger.log('[Bays] Building HTML, groups: ' + groups.length);
 
-      this._view.webview.html = await this.htmlBuilder.buildHtml({
+      const html = await this.htmlBuilder.buildHtml({
         webview        : this._view.webview,
         groups,
         getBaysInGroup : (groupId) => this.stateService.getBaysByGroupId(groupId),
@@ -115,12 +115,22 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
         initialLoad    : !this._initialLoadComplete,
       });
       
+      this._view.webview.html = html;
       this._initialLoadComplete = true;
 
       // Also update the native VS Code panel title
       this._view.title = this.getWorkspaceName();
       
       Logger.log('[Bays] HTML assigned to webview');
+      
+      // Debug: Verify data-bay-id attributes exist
+      const bayMatch = html.match(/<div class="bay[^>]+data-bay-id="([^"]+)"/);
+      if (bayMatch) {
+        Logger.log('[Bays] Sample bayId found: ' + bayMatch[1].substring(0, 50));
+      } else {
+        Logger.error('[Bays] ERROR: No data-bay-id found in HTML!');
+      }
+      
     }, TIMINGS.WEBVIEW_REFRESH_DEBOUNCE);
   }
 

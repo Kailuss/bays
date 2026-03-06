@@ -2,7 +2,7 @@
 
 /* Bay BLOCK WRAPPER */
 /* Contenedor que agrupa una Bay padre con sus VARIANTS.
-   Es la unidad de D&D: el alto total (parent + children) se obtiene
+   Es la unidad de D&D: el alto total (source + variants) se obtiene
    de forma natural con getBoundingClientRect() sobre este elemento. */
 .bay-block {
   position: relative;
@@ -121,7 +121,7 @@
 }
 
 /* LABELS & STATS */
-.child-type-label {
+.variant-type-label {
   font-size: 11px;
   font-weight: 500;
   opacity: 0.9;
@@ -133,13 +133,13 @@
   max-width: 180px;
 }
 
-.bay.variant.active .child-type-label {
+.bay.variant.active .variant-type-label {
   opacity: 1;
   font-weight: 600;
 }
 
 /* Stats */
-.child-stats {
+.variant-stats {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -158,12 +158,12 @@
   color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
 }
 
-.child-stats.conflict {
+.variant-stats.conflict {
   color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
 }
 
 /* Hide stats on hover to show actions */
-.bay.variant:hover .child-stats {
+.bay.variant:hover .variant-stats {
   display: none;
 }
 

@@ -101,7 +101,7 @@ Todos los mensajes siguen este patrón:
 
 Cada parent con sus children se envuelve en un `.bay-block`:
 ```html
-<div class="bay-block has-children" data-bayid="..." data-pinned="..." data-groupid="...">
+<div class="bay-block has-children" data-bay-id="..." data-pinned="..." data-groupid="...">
   <div class="bay">...</div>          <!-- parent -->
   <div class="bay child-bay">...</div> <!-- variant 1 -->
   <div class="bay child-bay">...</div> <!-- variant 2 -->
@@ -316,7 +316,7 @@ Input (Child Bays):
     diffStats: { linesAdded: 3, linesRemoved: 1 }
 
 Output (HTML):
-  <div class="bay-block has-children" data-bayid="file:///c:/src/file.ts-1" ...>
+  <div class="bay-block has-children" data-bay-id="file:///c:/src/file.ts-1" ...>
     <div class="bay">file.ts</div>
     <div class="bay child-bay working-tree">
       <span class="codicon codicon-git-commit"></span>
@@ -340,7 +340,7 @@ Input:
 Parent Bays: []  # Parent no existe en estado actual
 
 Output:
-  <div class="bay-block" data-bayid="..." data-pinned="false">
+  <div class="bay-block" data-bay-id="..." data-pinned="false">
     <div class="bay variant orphan working-tree">
       <span class="codicon codicon-git-commit"></span>
       <span>Working Tree</span>

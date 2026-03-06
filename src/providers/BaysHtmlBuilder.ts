@@ -164,7 +164,7 @@ export class BaysHtmlBuilder {
       const children = childrenByParent.get(parent.metadata.id) || [];
       const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
 
-      let block = `<div class="${blockClass}" data-bayId="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
+      let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
       block += await this.renderBay(parent, showPath, copilotReady, compactMode);
       for (const child of children) {
         block += this.renderVariantBay(child, parent);
@@ -177,7 +177,7 @@ export class BaysHtmlBuilder {
     for (const child of variantBays) {
       if (!parentBays.some(parent => parent.metadata.id === child.metadata.parentId)) {
         const orphanHtml = await this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode);
-        rendered.push(`<div class="bay-block" data-bayId="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
+        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
     
@@ -219,7 +219,7 @@ export class BaysHtmlBuilder {
     copilotReady: boolean,
     compactMode: boolean,
   ): Promise<string> {
-    // data-bayId only — data-pinned and data-groupid live on the parent .bay-block
+    // data-bay-id only — data-pinned and data-groupid live on the parent .bay-block
     const activeClass = bay.state.isActive ? ' active' : '';
     const stateIndicator = getStateIndicator(bay);
 
@@ -235,11 +235,11 @@ export class BaysHtmlBuilder {
       : '';
 
     const chatBtn = copilotReady && bay.metadata.uri
-      ? `<button data-action="addToChat" data-bayId="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
+      ? `<button data-action="addToChat" data-bay-id="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
       : '';
 
     const closeBtn = bay.state.capabilities.canClose
-      ? `<button data-action="closeBay" data-bayId="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
+      ? `<button data-action="closeBay" data-bay-id="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
       : '';
 
     const iconHtml = await this.iconRenderer.render(bay);
@@ -270,7 +270,7 @@ export class BaysHtmlBuilder {
     const resolved = this.fileActionRegistry.resolve(bay.metadata.label, bay.metadata.uri, context);
     if (!resolved) { return ''; }
 
-    return `<button data-action="fileAction" data-bayId="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
+    return `<button data-action="fileAction" data-bay-id="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
   }
   
   /**
