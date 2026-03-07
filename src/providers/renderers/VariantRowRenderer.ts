@@ -23,7 +23,7 @@ export class VariantRowRenderer {
     const statsHtml = this.renderStats(bay.state.diffStats);
 
     const closeBtn = bay.state.capabilities.canClose
-      ? `<button data-action="closeBay" data-bay-id="${esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-close"></span></button>`
+      ? `<button data-action="closeVariant" data-bay-id="${esc(bay.metadata.id)}" data-parent-id="${esc(parentId)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
       : '';
 
     return `<div class="bay variant${activeClass}${diffTypeClass}" data-bay-id="${esc(bay.metadata.id)}" data-parentid="${parentId}">

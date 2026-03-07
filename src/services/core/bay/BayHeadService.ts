@@ -22,13 +22,18 @@ export class BayHeadService {
   /**
    * Asegura que el parent bay de un variant exista.
    * Si no está abierto, lo abre automáticamente y asocia el variant.
+   * 
+   * @returns El parent bay si existe o fue creado exitosamente, undefined si falló
    */
-  async ensureParentExists(variant: Bay, VSTab: vscode.Tab): Promise<void> {
+  async ensureParentExists(variant: Bay, VSTab: vscode.Tab): Promise<Bay | undefined> {
     const variantParentId = variant.metadata.parentId;
-    if (!variantParentId) { return; }
+    if (!variantParentId) { return undefined; }
 
-    if (this.stateService.getBayById(variantParentId)) {
-      return;
+    // Verificar si el parent ya existe
+    const existingParent = this.stateService.getBayById(variantParentId);
+    if (existingParent) {
+      Logger.log(`[BayHead] Parent already exists: ${existingParent.metadata.label}`);
+      return existingParent;
     }
 
     const group = VSTab.group;
@@ -51,6 +56,7 @@ export class BayHeadService {
         Logger.log(`[BayHead] Creating parent bay for variant: ${variant.metadata.label} → ${parentBay.metadata.label}`);
         this.stateService.addBay(parentBay);
         this.hierarchyService.inheritState(variant, parentBay);
+        return parentBay;
       }
     } else {
       Logger.log(`[BayHead] Parent bay not found, opening automatically: ${childUri.fsPath}`);
@@ -63,42 +69,61 @@ export class BayHeadService {
           preserveFocus: true,
         });
 
+        // After showTextDocument resolves, the onDidChangeTabs event has already
+        // fired and handleTabChanges has added the parent bay to state.
+        // Check state directly first — this is more reliable than scanning group.tabs.
+        const parentInState = this.stateService.getBayById(variantParentId);
+        if (parentInState) {
+          Logger.log(`[BayHead] Parent found in state after open: ${parentInState.metadata.label}`);
+          this.hierarchyService.inheritState(variant, parentInState);
+          return parentInState;
+        }
+
+        // Fallback: scan group.tabs in case the event hasn't been processed yet
         for (const tab of group.tabs) {
           if (tab.input instanceof vscode.TabInputText) {
             if (tab.input.uri.toString() === childUri.toString()) {
               const parentBay = convertToBay(tab, this.gitSyncService);
               if (parentBay) {
-                Logger.log(`[BayHead] Successfully opened and added parent bay: ${parentBay.metadata.label}`);
+                Logger.log(`[BayHead] Parent created from tab scan after open: ${parentBay.metadata.label}`);
                 this.stateService.addBay(parentBay);
                 this.hierarchyService.inheritState(variant, parentBay);
+                return parentBay;
               }
               break;
             }
           }
         }
+
+        Logger.warn(`[BayHead] Parent not found in state or tabs after open: ${childUri.fsPath}`);
       } catch (error) {
-        Logger.log(`[BayHead] Failed to open parent bay: ${error}`);
+        Logger.warn(`[BayHead] Failed to open parent bay: ${error}`);
       }
     }
+    
+    return undefined;
   }
 
   /**
    * Asegura que el parent exista durante syncAll.
    * Busca en el array temporal y abre automáticamente si es necesario.
+   * 
+   * @returns El parent bay si existe o fue creado exitosamente, undefined si falló
    */
   async ensureParentExistsForSync(
     variant: Bay, 
     variantVSTab: vscode.Tab, 
     allBays: Bay[]
     
-  ): Promise<void> {
+  ): Promise<Bay | undefined> {
     const parentId = variant.metadata.parentId;
-    if (!parentId) { return; }
+    if (!parentId) { return undefined; }
 
     const existingParent = allBays.find(t => t.metadata.id === parentId);
     if (existingParent) {
       this.hierarchyService.inheritState(variant, existingParent);
-      return;
+      Logger.log(`[BayHead] Parent found in sync array: ${existingParent.metadata.label}`);
+      return existingParent;
     }
 
     const group = variantVSTab.group;
@@ -121,6 +146,7 @@ export class BayHeadService {
         Logger.log(`[BayHead] Creating parent bay for variant during syncAll: ${variant.metadata.label} → ${parentBay.metadata.label}`);
         allBays.push(parentBay);
         this.hierarchyService.inheritState(variant, parentBay);
+        return parentBay;
       }
     } else {
       Logger.log(`[BayHead] Parent bay not found during sync, opening automatically: ${variantMetadataUri.fsPath}`);
@@ -141,6 +167,7 @@ export class BayHeadService {
                 Logger.log(`[BayHead] Successfully opened and added parent bay during sync: ${parentBay.metadata.label}`);
                 allBays.push(parentBay);
                 this.hierarchyService.inheritState(variant, parentBay);
+                return parentBay;
               }
               break;
             }
@@ -150,5 +177,7 @@ export class BayHeadService {
         Logger.log(`[BayHead] Failed to open parent bay during sync: ${error}`);
       }
     }
+    
+    return undefined;
   }
 }

@@ -45,6 +45,20 @@ document.addEventListener('click', e => {
       return;
     }
 
+    if (action === 'closeVariant') {
+      const bayId = btn.dataset.bayId;
+      const bay   = document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
+      if (bay && !closingTabs.has(bayId)) {
+        closingTabs.add(bayId);
+        bay.classList.add('closing');
+        setTimeout(() => {
+          vscode.postMessage({ type: 'closeVariant', bayId });
+          closingTabs.delete(bayId);
+        }, 200);
+      }
+      return;
+    }
+
     if (action === 'fileAction') {
       vscode.postMessage({ type: 'fileAction', bayId: btn.dataset.bayId, actionId: btn.dataset.actionid });
       return;

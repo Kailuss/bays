@@ -87,14 +87,26 @@ export class BayEventService {
       const st = convertToBay(bay, this.gitSyncService);
       if (!st) { continue; }
 
+      // Si es una variant, asegurar que el parent existe PRIMERO
       if (st.metadata.parentId) {
-        await this.bayHeadService.ensureParentExists(st, bay);
+        const parent = await this.bayHeadService.ensureParentExists(st, bay);
+        
+        if (!parent) {
+          Logger.warn(`[BayEvent] Failed to ensure parent exists for variant: ${st.metadata.label}`);
+          // No añadir la variant si no pudimos garantizar el parent
+          continue;
+        }
+        
+        Logger.log(`[BayEvent] Parent confirmed for variant: ${st.metadata.label} → ${parent.metadata.label}`);
       }
 
+      // Añadir la bay/variant al estado
       this.stateService.addBay(st);
 
+      // Si es variant, registrar en hierarchy ahora que SABEMOS que el parent existe
       if (st.metadata.parentId) {
         this.hierarchyService.registerChild(st.metadata.id, st.metadata.parentId);
+        Logger.log(`[BayEvent] Variant registered in hierarchy: ${st.metadata.label}`);
       }
 
       hasChanges = true;
@@ -104,8 +116,18 @@ export class BayEventService {
       const id = generateIdFromNativeTab(bay);
       if (!id) { continue; }
 
+      // Verificar si es un cierre intencional (ya procesado).
+      // NO llamar clearIntentionalClose aquí: el mismo parent puede recibir
+      // múltiples eventos de cierre si varios variants cierran a la vez.
+      // El timeout de 2000ms en handleCloseVariant limpia los marcadores.
+      if (this.stateService.isIntentionalClose(id)) {
+        Logger.log(`[BayEvent] Ignoring intentional close (already processed): ${id}`);
+        continue;
+      }
+
       const existingBay = this.stateService.getBayById(id);
       if (existingBay) {
+        Logger.log(`[BayEvent] Processing external close: ${existingBay.metadata.label} (ID: ${id}, parentId: ${existingBay.metadata.parentId || 'none'}, hasChildren: ${existingBay.state.hasChildren})`);
         this.stateService.removeBay(id);
         hasChanges = true;
       }

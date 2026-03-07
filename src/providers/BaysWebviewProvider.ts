@@ -1,17 +1,18 @@
 import * as vscode from 'vscode';
-import { getConfiguration }         from '../constants/styles';
-import { TIMINGS }                  from '../constants/timings';
+import { getConfiguration }     from '../constants/styles'; //
+import { TIMINGS }              from '../constants/timings';
 import { Bay }                  from '../models/Bay';
-import type { BayViewMode }         from '../models/Bay';
-import { BayStateService }          from '../services/core/BayStateService';
-import type { DocumentManager }     from '../services/core/DocumentManager';
-import { BayIconManager }           from '../services/ui/BayIconManager';
-import { CopilotService }           from '../services/integration/CopilotService';
-import { BayDragDropService }       from '../services/ui/BayDragDropService';
-import { FileActionRegistry }       from '../services/registry/FileActionRegistry';
-import { Logger }                   from '../utils/logger';
-import { BaysHtmlBuilder }          from './BaysHtmlBuilder';
-import { BayContextMenu }           from './BayContextMenu';
+import type { BayViewMode }     from '../models/Bay';
+import { BayHelpers }           from '../models/BayHelpers';
+import { BayStateService }      from '../services/core/BayStateService';
+import type { DocumentManager } from '../services/core/DocumentManager';
+import { BayIconManager }       from '../services/ui/BayIconManager';
+import { CopilotService }       from '../services/integration/CopilotService';
+import { BayDragDropService }   from '../services/ui/BayDragDropService';
+import { FileActionRegistry }   from '../services/registry/FileActionRegistry';
+import { Logger }               from '../utils/logger';
+import { BaysHtmlBuilder }      from './BaysHtmlBuilder';
+import { BayContextMenu }       from './BayContextMenu';
 
 type BaySyncLike = {
   syncActiveState?: () => void;
@@ -181,6 +182,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private readonly messageHandlers = new Map<string, (msg: any) => Promise<void>>([
     ['openBay', async (msg)         => await this.handleOpenBay    (msg.bayId)              ],
     ['closeBay', async (msg)        => await this.handleCloseBay   (msg.bayId)              ],
+    ['closeVariant', async (msg)    => await this.handleCloseVariant(msg.bayId)             ],
     ['pinBay', async (msg)          => await this.handlePinBay     (msg.bayId)              ],
     ['unpinBay', async (msg)        => await this.handleUnpinBay   (msg.bayId)              ],
     ['addToChat', async (msg)       => await this.handleAddToChat  (msg.bayId)              ],
@@ -247,6 +249,137 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     if (bay) {
       await bay.close();
     }
+  }
+
+  private async handleCloseVariant(bayId: string): Promise<void> {
+    const variant = this.findBay(bayId);
+    if (!variant) {
+      Logger.warn('[Bays] Variant bay not found: ' + bayId);
+      this.refresh();
+      return;
+    }
+    
+    Logger.log(`[Bays] === CLOSE VARIANT START: ${variant.metadata.label} ===`);
+    
+    // Verify it's actually a variant (has parentId)
+    if (!variant.metadata.parentId) {
+      Logger.warn('[Bays] Not a variant (no parentId), closing normally: ' + bayId);
+      await variant.close();
+      return;
+    }
+
+    // Get parent bay BEFORE any operations
+    const parent = this.stateService.getBayById(variant.metadata.parentId);
+    if (!parent) {
+      Logger.warn('[Bays] Parent bay not found: ' + variant.metadata.parentId);
+      await variant.close();
+      return;
+    }
+
+    // Get hierarchy service
+    const hierarchyService = this.stateService.getHierarchyService();
+    if (!hierarchyService) {
+      Logger.warn('[Bays] Hierarchy service not available');
+      await variant.close();
+      return;
+    }
+
+    // Find the variant's native tab (diff)
+    const variantNativeTab = BayHelpers.findNativeTab(variant.metadata, variant.state);
+    if (!variantNativeTab) {
+      Logger.warn('[Bays] Variant native tab not found');
+      this.refresh();
+      return;
+    }
+
+    // Verify it's a diff tab
+    if (!(variantNativeTab.input instanceof vscode.TabInputTextDiff)) {
+      Logger.warn('[Bays] Not a diff tab, closing normally');
+      await variant.close();
+      return;
+    }
+
+    Logger.log(`[Bays] Variant diff URIs - original: ${variantNativeTab.input.original.toString()}`);
+    Logger.log(`[Bays] Variant diff URIs - modified: ${variantNativeTab.input.modified.toString()}`);
+    
+    // === FASE 0: PREVENCIÓN DE EVENTOS ===
+    // Marcar AMBOS (variant Y parent) como cierres intencionales
+    // Esto previene que BayEventService procese los eventos cuando VS Code los dispare
+    Logger.log(`[Bays] PHASE 0: Marking variant and parent as intentional closes`);
+    this.stateService.markAsIntentionalClose(variant.metadata.id);
+    this.stateService.markAsIntentionalClose(parent.metadata.id);
+    
+    // === FASE 1: ACTUALIZAR ESTADO INTERNO ===
+    // Actualizar jerarquía: desregistrar variant del parent
+    Logger.log(`[Bays] PHASE 1: Updating internal state`);
+    hierarchyService.unregisterChild(variant.metadata.id, parent.metadata.id);
+    
+    // Remover variant del estado interno (sin procesar jerarquía, ya lo hicimos)
+    this.stateService.removeBayFromState(variant.metadata.id);
+    Logger.log(`[Bays] Variant removed from state, parent childrenCount: ${parent.state.childrenCount}`);
+    
+    // === FASE 2: OPERACIÓN FÍSICA ===
+    // Cerrar el diff tab (VS Code puede cerrar también el parent)
+    Logger.log(`[Bays] PHASE 2: Closing diff tab physically`);
+    await vscode.window.tabGroups.close(variantNativeTab, true);
+    Logger.log(`[Bays] Close command completed`);
+    
+    // === FASE 3: VERIFICAR REALIDAD FÍSICA Y CORREGIR ===
+    // Dar un momento a VS Code para procesar completamente
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    Logger.log(`[Bays] PHASE 3: Verifying physical state`);
+    
+    // Verificar si el parent todavía existe físicamente en VS Code
+    const parentStillOpen = BayHelpers.findNativeTab(parent.metadata, parent.state);
+    
+    if (!parentStillOpen && parent.metadata.uri) {
+      // Parent fue cerrado por VS Code (side effect del cierre del diff)
+      Logger.log(`[Bays] Parent was closed by VS Code, reopening: ${parent.metadata.label}`);
+      
+      // Reabrir el parent en la misma posición
+      await vscode.window.showTextDocument(parent.metadata.uri, {
+        viewColumn: parent.state.viewColumn,
+        preview: false,
+        preserveFocus: true
+      });
+      
+      Logger.log(`[Bays] Parent reopened successfully`);
+    } else if (parentStillOpen) {
+      Logger.log(`[Bays] Parent still open, no reopening needed`);
+    } else {
+      Logger.log(`[Bays] Parent has no URI, cannot reopen`);
+    }
+    
+    // === FASE 4: LIMPIEZA ===
+    // En lugar de un timeout fijo, hacemos polling periódico.
+    // Una vez que confirmamos que el parent sigue abierto como native tab,
+    // sabemos que VS Code terminó de procesar los eventos en cascada.
+    // Máximo 3000ms como safety net por si el parent fue cerrado en cascada.
+    Logger.log(`[Bays] PHASE 4: Polling until VS Code events settle`);
+    const POLL_INTERVAL = 150;
+    const MAX_WAIT      = 3000;
+    let elapsed         = 0;
+    const parentMeta    = parent.metadata;
+    const parentState   = parent.state;
+
+    const poll = setInterval(() => {
+      elapsed += POLL_INTERVAL;
+      const parentNativeTab = BayHelpers.findNativeTab(parentMeta, parentState);
+      const settled         = !!parentNativeTab || elapsed >= MAX_WAIT;
+
+      if (settled) {
+        clearInterval(poll);
+        this.stateService.clearIntentionalClose(variant.metadata.id);
+        this.stateService.clearIntentionalClose(parent.metadata.id);
+        Logger.log(`[Bays] Markers cleared after ${elapsed}ms (native tab ${parentNativeTab ? 'confirmed open' : 'not found — max wait reached'})`);
+      }
+    }, POLL_INTERVAL);
+    
+    // Notificar cambio de UI
+    this.stateService.notifyChange();
+    
+    Logger.log(`[Bays] === CLOSE VARIANT END: ${variant.metadata.label} ===`);
   }
 
   private async handlePinBay(bayId: string): Promise<void> {

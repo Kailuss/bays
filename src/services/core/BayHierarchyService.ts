@@ -27,10 +27,13 @@ import { Logger } from '../../utils/logger';
  * @see DocumentManager for document metadata management
  */
 export class BayHierarchyService {
+  // --- Constructor y dependencias ---
   constructor(
     private stateService: BayStateService,
     private documentManager?: DocumentManager
   ) {}
+
+  // --- MÉTODOS PÚBLICOS DE JERARQUÍA ---
 
   /**
    * Registers a child bay under its parent.
@@ -142,6 +145,28 @@ export class BayHierarchyService {
   }
 
   /**
+   * Obtiene el árbol jerárquico de bays (parents con sus hijos).
+   * Útil para renderizado y navegación.
+   * 
+   * @param groupId Optional: filter by group
+   * @returns Bay tree
+   */
+  getBayTree(groupId?: number): BayTreeNode[] {
+    const allBays = groupId 
+      ? this.stateService.getBaysByGroupId(groupId)
+      : this.stateService.getAllBays();
+    
+    const parents = allBays.filter((bay: Bay) => !bay.metadata.parentId);
+    
+    return parents.map((parent: Bay) => ({
+      bay: parent,
+      children: this.buildChildrenTree(parent.metadata.id, allBays),
+    }));
+  }
+
+  // --- HERENCIA Y SINCRONIZACIÓN DE ESTADO ---
+
+  /**
    * Inherits state from parent to child bay.
    * 
    * IMPORTANT:
@@ -165,6 +190,66 @@ export class BayHierarchyService {
       this.calculateDiffStatsWithParent(childBay, parentBay);
     }
   }
+
+  /**
+   * Synchronizes cursor position (line and column) between a parent bay and all its children.
+   * If syncCursorPosition config is enabled, updates all related editors.
+   * 
+   * @param bayId Bay ID that changed cursor position
+   * @param line Cursor line (1-based)
+   * @param column Cursor column (1-based)
+   */
+  async syncCursorPosition(bayId: string, line: number, column: number): Promise<void> {
+    const config = vscode.workspace.getConfiguration('bays');
+    if (!config.get('syncCursorPosition', false)) {
+      return; // Feature disabled
+    }
+
+    const bay = this.stateService.getBayById(bayId);
+    if (!bay) {
+      return;
+    }
+
+    // Update position in current bay
+    bay.state.cursorLine = line;
+    bay.state.cursorColumn = column;
+
+    // Determine bay family (parent + children or just children if is parent)
+    const family: Bay[] = [];
+    let parentBay: Bay | undefined;
+
+    if (bay.metadata.parentId) {
+      // Is a child, find parent and siblings
+      parentBay = this.stateService.getBayById(bay.metadata.parentId);
+      if (parentBay) {
+        family.push(parentBay);
+        family.push(...this.getChildren(bay.metadata.parentId));
+      }
+    } else {
+      // Is a parent, find its children
+      family.push(...this.getChildren(bay.metadata.id));
+    }
+
+    // Update position in all family members
+    for (const familyBay of family) {
+      if (familyBay.metadata.id === bayId) {
+        continue; // Skip self
+      }
+
+      // Update state
+      familyBay.state.cursorLine = line;
+      familyBay.state.cursorColumn = column;
+
+      // If bay has URI, try updating editor if open
+      if (familyBay.metadata.uri) {
+        await this.updateEditorCursor(familyBay.metadata.uri, line, column);
+      }
+    }
+
+    Logger.log(`[BayHierarchy] Synced cursor position: line ${line}, col ${column} (${family.length} bays affected)`);
+  }
+
+  // --- MÉTODOS PRIVADOS Y HELPERS ---
 
   /**
    * Calculates diff statistics for a child bay based on its type.
@@ -289,26 +374,6 @@ export class BayHierarchyService {
   }
 
   /**
-   * Gets the hierarchical bay tree (parents with their children).
-   * Useful for rendering and navigation.
-   * 
-   * @param groupId Optional: filter by group
-   * @returns Bay tree
-   */
-  getBayTree(groupId?: number): BayTreeNode[] {
-    const allBays = groupId 
-      ? this.stateService.getBaysByGroupId(groupId)
-      : this.stateService.getAllBays();
-    
-    const parents = allBays.filter((bay: Bay) => !bay.metadata.parentId);
-    
-    return parents.map((parent: Bay) => ({
-      bay: parent,
-      children: this.buildChildrenTree(parent.metadata.id, allBays),
-    }));
-  }
-
-  /**
    * Recursively builds the children tree.
    * 
    * @param parentId Parent ID
@@ -322,64 +387,6 @@ export class BayHierarchyService {
       bay: child,
       children: this.buildChildrenTree(child.metadata.id, allBays),
     }));
-  }
-
-  /**
-   * Synchronizes cursor position (line and column) between a parent bay and all its children.
-   * If syncCursorPosition config is enabled, updates all related editors.
-   * 
-   * @param bayId Bay ID that changed cursor position
-   * @param line Cursor line (1-based)
-   * @param column Cursor column (1-based)
-   */
-  async syncCursorPosition(bayId: string, line: number, column: number): Promise<void> {
-    const config = vscode.workspace.getConfiguration('bays');
-    if (!config.get('syncCursorPosition', false)) {
-      return; // Feature disabled
-    }
-
-    const bay = this.stateService.getBayById(bayId);
-    if (!bay) {
-      return;
-    }
-
-    // Update position in current bay
-    bay.state.cursorLine = line;
-    bay.state.cursorColumn = column;
-
-    // Determine bay family (parent + children or just children if is parent)
-    const family: Bay[] = [];
-    let parentBay: Bay | undefined;
-
-    if (bay.metadata.parentId) {
-      // Is a child, find parent and siblings
-      parentBay = this.stateService.getBayById(bay.metadata.parentId);
-      if (parentBay) {
-        family.push(parentBay);
-        family.push(...this.getChildren(bay.metadata.parentId));
-      }
-    } else {
-      // Is a parent, find its children
-      family.push(...this.getChildren(bay.metadata.id));
-    }
-
-    // Update position in all family members
-    for (const familyBay of family) {
-      if (familyBay.metadata.id === bayId) {
-        continue; // Skip self
-      }
-
-      // Update state
-      familyBay.state.cursorLine = line;
-      familyBay.state.cursorColumn = column;
-
-      // If bay has URI, try updating editor if open
-      if (familyBay.metadata.uri) {
-        await this.updateEditorCursor(familyBay.metadata.uri, line, column);
-      }
-    }
-
-    Logger.log(`[BayHierarchy] Synced cursor position: line ${line}, col ${column} (${family.length} bays affected)`);
   }
 
   /**

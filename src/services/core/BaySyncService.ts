@@ -161,7 +161,14 @@ export class BaySyncService {
     // Process sequentially to ensure parents are opened before children are added
     for (const { bay, nativeTab } of variants) {
       // Ensure parent exists (delegate to BayHeadService)
-      await this.bayHeadService.ensureParentExistsForSync(bay, nativeTab, allBays);
+      const parent = await this.bayHeadService.ensureParentExistsForSync(bay, nativeTab, allBays);
+      
+      if (!parent) {
+        Logger.warn(`[BaySync] Failed to ensure parent for variant, skipping: ${bay.metadata.label}`);
+        continue;
+      }
+      
+      Logger.log(`[BaySync] Parent confirmed for variant: ${bay.metadata.label} → ${parent.metadata.label}`);
       allBays.push(bay);
     }
     

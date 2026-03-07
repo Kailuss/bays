@@ -30,6 +30,17 @@ export class BayStateService {
   private documentManager?: DocumentManager;
 
   /**
+   * Tracking de cierres intencionales con contador de referencias.
+   * Cuando cerramos variants programáticamente, marcamos el ID aquí.
+   * - markAsIntentionalClose: incrementa el contador (varios variants pueden marcar el mismo parent)
+   * - clearIntentionalClose: decrementa; solo se elimina cuando llega a 0
+   * - isIntentionalClose: true si contador > 0
+   * Esto evita que el primer timeout limpie el marcador antes de que llegue
+   * el evento de VS Code del segundo cierre.
+   */
+  private intentionalCloses = new Map<string, number>();
+
+  /**
    * ID de la última bay que activó el Markdown Preview.
    * Se usa para saber qué bay debe mostrarse como activa cuando el preview está visible.
    */
@@ -41,6 +52,39 @@ export class BayStateService {
 
   setLastMarkdownPreviewBayId(bayId: string | null): void {
     this._lastMarkdownPreviewBayId = bayId;
+  }
+
+  /**
+   * Marca un bay ID como cierre intencional.
+   * Usado cuando cerramos una bay programáticamente para evitar
+   * procesar el evento de cierre que VS Code disparará después.
+   */
+  markAsIntentionalClose(bayId: string): void {
+    const current = this.intentionalCloses.get(bayId) ?? 0;
+    this.intentionalCloses.set(bayId, current + 1);
+    Logger.log(`[BayState] Marked as intentional close: ${bayId} (count: ${current + 1})`);
+  }
+
+  /**
+   * Verifica si un bay ID está marcado como cierre intencional.
+   */
+  isIntentionalClose(bayId: string): boolean {
+    return (this.intentionalCloses.get(bayId) ?? 0) > 0;
+  }
+
+  /**
+   * Remueve un bay ID del tracking de cierres intencionales.
+   * Debe llamarse después de procesar el cierre para limpiar el estado.
+   */
+  clearIntentionalClose(bayId: string): void {
+    const current = this.intentionalCloses.get(bayId) ?? 0;
+    if (current <= 1) {
+      this.intentionalCloses.delete(bayId);
+      Logger.log(`[BayState] Cleared intentional close: ${bayId}`);
+    } else {
+      this.intentionalCloses.set(bayId, current - 1);
+      Logger.log(`[BayState] Decremented intentional close: ${bayId} (count: ${current - 1})`);
+    }
   }
 
   /**
@@ -59,6 +103,14 @@ export class BayStateService {
    */
   setHierarchyService(service: BayHierarchyService): void {
     this.hierarchyService = service;
+  }
+
+  /**
+   * Obtiene el hierarchy service.
+   * Retorna undefined si aún no ha sido inyectado.
+   */
+  getHierarchyService(): BayHierarchyService | undefined {
+    return this.hierarchyService;
   }
 
   /**
@@ -129,6 +181,15 @@ export class BayStateService {
       }
     }
     
+    this.removeBayInternal(id);
+  }
+
+  /**
+   * Remueve una bay del estado sin procesar jerarquía.
+   * SOLO usar cuando la jerarquía ya fue actualizada manualmente.
+   * Para cierres normales, usar removeBay() que maneja jerarquía automáticamente.
+   */
+  removeBayFromState(id: string): void {
     this.removeBayInternal(id);
   }
 
