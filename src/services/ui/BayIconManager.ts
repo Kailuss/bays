@@ -52,10 +52,10 @@ export class BayIconManager {
       .catch(err => {
         Logger.error('[Bays] Error building initial icon map:', err);
       });
-    
+
     return this._initPromise;
   }
-  
+
   /**
    * Espera a que la inicialización esté completa.
    */
@@ -71,7 +71,7 @@ export class BayIconManager {
    * en base64 aquí; solo analiza el JSON del tema.
    */
   public async buildIconMap(
-    context: vscode.ExtensionContext,
+    _context: vscode.ExtensionContext,
     forceRebuild: boolean = false
   ): Promise<void> {
     try {
@@ -328,7 +328,7 @@ export class BayIconManager {
 
         // Check for SVG-based theme (iconPath) or font-based theme (fontCharacter)
         iconPath = iconDef.iconPath || iconDef.path;
-        
+
         if (!iconPath && iconDef.fontCharacter) {
           // Font-based theme (like vs-seti): return special marker to use font rendering
           // The webview will handle this with CSS @font-face
@@ -336,7 +336,6 @@ export class BayIconManager {
           this._iconCache.set(cacheKey, fontIconData);
           return fontIconData;
         }
-        
         if (!iconPath) {
           // iconDef exists but has neither fontCharacter nor iconPath — use generic file icon
           const fallbackIcon = 'font-icon:\\E023:#d4d7d6';

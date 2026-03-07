@@ -6,7 +6,7 @@ import type { BayMetadata, BayState } from '../Bay';
  */
 
 export async function pin(
-  metadata: BayMetadata,
+  _metadata: BayMetadata,
   state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
@@ -20,7 +20,7 @@ export async function pin(
 }
 
 export async function unpin(
-  metadata: BayMetadata,
+  _metadata: BayMetadata,
   state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {

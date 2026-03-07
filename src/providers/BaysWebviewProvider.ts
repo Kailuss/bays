@@ -284,7 +284,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    await this.dragDropService.moveBetweenGroups(sourceBayId, targetGroupId, targetBayId, insertPosition);
+    await this.dragDropService.moveBetweenGroups(sourceBayId, targetGroupId, targetBayId);
   }
 
   private async handleFileAction(bayId: string, actionId?: string): Promise<void> {

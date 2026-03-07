@@ -69,7 +69,7 @@ export class BayHierarchyService {
    * @param childId Child bay ID
    * @param parentId Parent bay ID
    */
-  unregisterChild(childId: string, parentId: string): void {
+  unregisterChild(_childId: string, parentId: string): void {
     const parent = this.stateService.getBayById(parentId);
     if (!parent) {
       Logger.log(`[BayHierarchy] Cannot unregister child: parent not found (${parentId})`);

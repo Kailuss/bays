@@ -59,7 +59,7 @@ export async function duplicateFile(
 
 export async function compareWithActive(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -76,14 +76,14 @@ export async function compareWithActive(
   );
 }
 
-export async function openChanges(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function openChanges(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
   await vscode.commands.executeCommand('git.openChange', metadata.uri);
 }
 
-export async function splitRight(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function splitRight(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
@@ -95,7 +95,7 @@ export async function splitRight(metadata: BayMetadata, state: BayState): Promis
 
 export async function moveToNewWindow(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;

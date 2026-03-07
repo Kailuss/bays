@@ -105,7 +105,7 @@ export class BayDragDropService {
     sourceBayId: string,
     targetGroupId: number,
     targetBayId?: string,
-    insertPosition?: 'before' | 'after',
+    //insertPosition?: 'before' | 'after',
   ): Promise<boolean> {
     const sourceBay = this.stateService.getBayById(sourceBayId);
     if (!sourceBay || !sourceBay.metadata.uri) { return false; }
