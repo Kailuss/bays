@@ -34,7 +34,7 @@ export async function closeGroup(_metadata: BayMetadata, state: BayState): Promi
   await vscode.window.tabGroups.close(group);
 }
 
-export async function closeToRight(
+export async function closeToDown(
   metadata: BayMetadata,
   state: BayState
 ): Promise<void> {

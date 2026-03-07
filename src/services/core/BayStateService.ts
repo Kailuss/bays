@@ -136,7 +136,7 @@ export class BayStateService {
     }
 
     // Create/update document if this is a parent bay with URI
-    if (this.documentManager && bay.metadata.uri && !bay.metadata.parentId) {
+    if (this.documentManager && bay.metadata.uri && !bay.metadata.sourceBayId) {
       const document = this.documentManager.getOrCreateDocument(
         bay.metadata.uri,
         bay.metadata.languageId || 'plaintext',
@@ -147,8 +147,8 @@ export class BayStateService {
     }
 
     // Associate child bay with document if parent exists
-    if (this.documentManager && bay.metadata.parentId && bay.metadata.uri) {
-      const parentBay = this.bays.get(bay.metadata.parentId);
+    if (this.documentManager && bay.metadata.sourceBayId && bay.metadata.uri) {
+      const parentBay = this.bays.get(bay.metadata.sourceBayId);
       if (parentBay?.metadata.uri) {
         const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
         if (document) {
@@ -169,13 +169,13 @@ export class BayStateService {
     }
     
     // Si es child bay, desregistrar del parent
-    if (bay.metadata.parentId && this.hierarchyService) {
-      this.hierarchyService.unregisterChild(id, bay.metadata.parentId);
+    if (bay.metadata.sourceBayId && this.hierarchyService) {
+      this.hierarchyService.detachVariantFromParentBay(id, bay.metadata.sourceBayId);
     }
     
     // Si es parent bay con children, eliminar children primero
-    if (bay.state.hasChildren && this.hierarchyService) {
-      const children = this.hierarchyService.getChildren(id);
+    if (bay.state.hasVariant && this.hierarchyService) {
+      const children = this.hierarchyService.fetchVariants(id);
       for (const child of children) {
         this.removeBayInternal(child.metadata.id);
       }
@@ -204,10 +204,10 @@ export class BayStateService {
 
       // Cleanup document associations
       if (this.documentManager) {
-        if (bay.metadata.parentId) {
+        if (bay.metadata.sourceBayId) {
 
           // Desasociar child bay del documento
-          const parentBay = this.bays.get(bay.metadata.parentId);
+          const parentBay = this.bays.get(bay.metadata.sourceBayId);
           if (parentBay?.metadata.uri) {
             const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
             if (document) { this.documentManager.dissociateVariant(document.documentId, id); }

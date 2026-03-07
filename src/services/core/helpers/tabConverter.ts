@@ -179,7 +179,7 @@ export function convertToBay(
 
   const baseMetadata: BayMetadata = {
     id            : generateId(label, uri, viewColumn, tabType, !!parentId),
-    parentId,
+    sourceBayId: parentId,
     diffType,
     uri,
     label,
@@ -231,9 +231,9 @@ export function convertToBay(
     capabilities,
     permissions    : stateWithDefaults.permissions!,
 
-    hasChildren    : false,
-    isChild        : !!parentId, // Variants have parentId set
-    childrenCount  : 0,
+    hasVariant    : false,
+    isVariant        : !!parentId, // Variants have parentId set
+    variantCount  : 0,
 
     isLoading      : false,
     hasError       : false,

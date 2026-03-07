@@ -2,7 +2,7 @@
 name: Dr. Bay
 description: Specialist in Bays extension architecture, WebviewView, and modular actions
 tools: ['vscode/getProjectSetupInfo', 'vscode', execute, read, agent, edit, search, web, 'io.github.upstash/context7/*', todo]
-model: Claude Sonnet 4.5 (copilot)
+model: Claude Sonnet 4.6 (copilot)
 ---
 
 # Bays Extension Expert

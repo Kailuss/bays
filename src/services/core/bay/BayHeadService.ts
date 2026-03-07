@@ -26,7 +26,7 @@ export class BayHeadService {
    * @returns El parent bay si existe o fue creado exitosamente, undefined si falló
    */
   async ensureParentExists(variant: Bay, VSTab: vscode.Tab): Promise<Bay | undefined> {
-    const variantParentId = variant.metadata.parentId;
+    const variantParentId = variant.metadata.sourceBayId;
     if (!variantParentId) { return undefined; }
 
     // Verificar si el parent ya existe
@@ -116,7 +116,7 @@ export class BayHeadService {
     allBays: Bay[]
     
   ): Promise<Bay | undefined> {
-    const parentId = variant.metadata.parentId;
+    const parentId = variant.metadata.sourceBayId;
     if (!parentId) { return undefined; }
 
     const existingParent = allBays.find(t => t.metadata.id === parentId);

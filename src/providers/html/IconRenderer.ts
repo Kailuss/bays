@@ -45,7 +45,7 @@ export class IconRenderer {
    * Resuelve el nombre del archivo desde la bay.
    */
   private resolveFileName(bay: Bay): string | null {
-    const { bayType: tabType, uri, label, parentId } = bay.metadata;
+    const { bayType: tabType, uri, label, sourceBayId: parentId } = bay.metadata;
 
     // Variants have parentId set
     if (parentId && uri) {

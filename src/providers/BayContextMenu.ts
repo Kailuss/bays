@@ -65,7 +65,7 @@ export class BayContextMenu {
 
   private async executeAction(label: string, bay: Bay): Promise<void> {
     if      (label.includes('Close Others'))              { await bay.closeOthers(); }
-    else if (label.includes('Close to the Right'))        { await bay.closeToRight(); }
+    else if (label.includes('Close to the Right'))        { await bay.closeToDown(); }
     else if (label.includes('Close Group'))               { await bay.closeGroup(); }
     else if (label.includes('Close'))                     { await bay.close(); }
     else if (label.includes('Unpin'))                     { await bay.unpin();  this.stateService.reorderOnUnpin(bay.metadata.id); }

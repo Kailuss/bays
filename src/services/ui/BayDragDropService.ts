@@ -34,7 +34,7 @@ export class BayDragDropService {
     if (sourceBay.state.groupId !== targetBay.state.groupId) { return false; }
 
     // Restriction: child bays cannot be moved (linked to their parent)
-    if (sourceBay.metadata.parentId) {
+    if (sourceBay.metadata.sourceBayId) {
       Logger.log('[DragDrop] Blocked: Child bays cannot be dragged independently');
       return false;
     }

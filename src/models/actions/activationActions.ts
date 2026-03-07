@@ -57,7 +57,7 @@ async function activateWithRetry(
 
     // Para webview tabs, siempre usar el método nativo
     // Variants (with parentId) are also activated via native bay
-    if (metadata.bayType === 'webview' || metadata.parentId) {
+    if (metadata.bayType === 'webview' || metadata.sourceBayId) {
       return await BayHelpers.activateByNativeTab(metadata, state);
     }
 

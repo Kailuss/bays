@@ -26,8 +26,8 @@ export abstract class BayActions {
     return actions.closeGroup(this.metadata, this.state);
   }
 
-  async closeToRight(): Promise<void> {
-    return actions.closeToRight(this.metadata, this.state);
+  async closeToDown(): Promise<void> {
+    return actions.closeToDown(this.metadata, this.state);
   }
 
   //- PIN ACTIONS

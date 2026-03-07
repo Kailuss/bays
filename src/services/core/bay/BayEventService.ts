@@ -88,7 +88,7 @@ export class BayEventService {
       if (!st) { continue; }
 
       // Si es una variant, asegurar que el parent existe PRIMERO
-      if (st.metadata.parentId) {
+      if (st.metadata.sourceBayId) {
         const parent = await this.bayHeadService.ensureParentExists(st, bay);
         
         if (!parent) {
@@ -104,8 +104,8 @@ export class BayEventService {
       this.stateService.addBay(st);
 
       // Si es variant, registrar en hierarchy ahora que SABEMOS que el parent existe
-      if (st.metadata.parentId) {
-        this.hierarchyService.registerChild(st.metadata.id, st.metadata.parentId);
+      if (st.metadata.sourceBayId) {
+        this.hierarchyService.linkVariantToParentBay(st.metadata.id, st.metadata.sourceBayId);
         Logger.log(`[BayEvent] Variant registered in hierarchy: ${st.metadata.label}`);
       }
 
@@ -127,7 +127,7 @@ export class BayEventService {
 
       const existingBay = this.stateService.getBayById(id);
       if (existingBay) {
-        Logger.log(`[BayEvent] Processing external close: ${existingBay.metadata.label} (ID: ${id}, parentId: ${existingBay.metadata.parentId || 'none'}, hasChildren: ${existingBay.state.hasChildren})`);
+        Logger.log(`[BayEvent] Processing external close: ${existingBay.metadata.label} (ID: ${id}, parentId: ${existingBay.metadata.sourceBayId || 'none'}, hasChildren: ${existingBay.state.hasVariant})`);
         this.stateService.removeBay(id);
         hasChanges = true;
       }

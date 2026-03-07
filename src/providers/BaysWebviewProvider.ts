@@ -262,16 +262,16 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     Logger.log(`[Bays] === CLOSE VARIANT START: ${variant.metadata.label} ===`);
     
     // Verify it's actually a variant (has parentId)
-    if (!variant.metadata.parentId) {
+    if (!variant.metadata.sourceBayId) {
       Logger.warn('[Bays] Not a variant (no parentId), closing normally: ' + bayId);
       await variant.close();
       return;
     }
 
     // Get parent bay BEFORE any operations
-    const parent = this.stateService.getBayById(variant.metadata.parentId);
+    const parent = this.stateService.getBayById(variant.metadata.sourceBayId);
     if (!parent) {
-      Logger.warn('[Bays] Parent bay not found: ' + variant.metadata.parentId);
+      Logger.warn('[Bays] Parent bay not found: ' + variant.metadata.sourceBayId);
       await variant.close();
       return;
     }
@@ -312,11 +312,11 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     // === FASE 1: ACTUALIZAR ESTADO INTERNO ===
     // Actualizar jerarquía: desregistrar variant del parent
     Logger.log(`[Bays] PHASE 1: Updating internal state`);
-    hierarchyService.unregisterChild(variant.metadata.id, parent.metadata.id);
+    hierarchyService.detachVariantFromParentBay(variant.metadata.id, parent.metadata.id);
     
     // Remover variant del estado interno (sin procesar jerarquía, ya lo hicimos)
     this.stateService.removeBayFromState(variant.metadata.id);
-    Logger.log(`[Bays] Variant removed from state, parent childrenCount: ${parent.state.childrenCount}`);
+    Logger.log(`[Bays] Variant removed from state, parent childrenCount: ${parent.state.variantCount}`);
     
     // === FASE 2: OPERACIÓN FÍSICA ===
     // Cerrar el diff tab (VS Code puede cerrar también el parent)

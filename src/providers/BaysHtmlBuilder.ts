@@ -153,13 +153,13 @@ export class BaysHtmlBuilder {
     });
 
     // Separate parent bays (no parentId) from variant bays (have parentId)
-    const parentBays = filteredBays.filter(bay => !bay.metadata.parentId);
-    const variantBays = filteredBays.filter(bay => bay.metadata.parentId);
+    const parentBays = filteredBays.filter(bay => !bay.metadata.sourceBayId);
+    const variantBays = filteredBays.filter(bay => bay.metadata.sourceBayId);
 
     // Build a map of parentId -> children
     const childrenByParent = new Map<string, Bay[]>();
     for (const child of variantBays) {
-      const parentId = child.metadata.parentId!;
+      const parentId = child.metadata.sourceBayId!;
       if (!childrenByParent.has(parentId)) {
         childrenByParent.set(parentId, []);
       }
@@ -191,7 +191,7 @@ export class BaysHtmlBuilder {
 
     // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
     for (const child of variantBays) {
-      if (!parentBays.some(parent => parent.metadata.id === child.metadata.parentId)) {
+      if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
         const orphanHtml = await this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode);
         rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }

@@ -1,6 +1,22 @@
 import * as vscode from 'vscode';
 import { BayActions } from './BayActions';
 
+/**
+ * Tab representation in Bays sidebar.
+ * Delegates to DocumentModel for complex document metadata (diffs, snapshots).
+ *
+ * @see DocumentModel
+ * @see DocumentManager
+ */
+export class Bay extends BayActions {
+  constructor(
+    public readonly metadata: BayMetadata,
+    public state: BayState,
+  ) {
+    super();
+  }
+}
+
 //: Bay type - 4 core types according to Bay architecture
 export type BayType = 'file' | 'webview' | 'custom' | 'notebook';
 
@@ -13,24 +29,22 @@ export type EditMode = 'readonly' | 'editable';
 //: Diff type for child bays (diff visualizations)
 export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'unknown';
 
-/**
- * Diff statistics for child bays
- */
+/** Diff statistics for child bays */
 export type DiffStats = {
-  linesAdded?: number;      // Lines added (for working tree, staged)
-  linesRemoved?: number;    // Lines removed (for working tree, staged)
-  timestamp?: number;       // Snapshot timestamp
-  snapshotName?: string;    // Snapshot label/name
+  linesAdded?: number;       // Lines added (for working tree, staged)
+  linesRemoved?: number;     // Lines removed (for working tree, staged)
+  timestamp?: number;        // Snapshot timestamp
+  snapshotName?: string;     // Snapshot label/name
   conflictSections?: number; // Number of conflict sections
 };
 
 /** Dynamic action context (view/edit state). */
 export type ActionContext = {
-  viewMode?: BayViewMode;                        // How the bay is visualized
-  editMode?: EditMode;                           // Edit capability state
-  splitOrientation?: 'horizontal' | 'vertical';  // Split view orientation
-  compareMode?: boolean;                         // In diff/compare mode
-  debugMode?: boolean;                           // In debug mode
+  viewMode?: BayViewMode;                       // How the bay is visualized
+  editMode?: EditMode;                          // Edit capability state
+  splitOrientation?: 'horizontal' | 'vertical'; // Split view orientation
+  compareMode?: boolean;                        // In diff/compare mode
+  debugMode?: boolean;                          // In debug mode
 }
 
 /** Async operation state. */
@@ -87,8 +101,8 @@ export type BayShortcuts = {
 export type BayMetadata = {
   //: IDENTITY
   id            : string;        // Unique identifier (uri-based for file tabs, label-based for webview tabs).
-  parentId?     : string;        // ID of parent bay (for diff tabs that belong to a file bay).
-  bayType       : BayType;   // What kind of VS Code bay input this wraps.
+  sourceBayId?  : string;        // ID of parent bay (for diff tabs that belong to a file bay).
+  bayType       : BayType;       // What kind of VS Code bay input this wraps.
   diffType?     : DiffType;      // Type of diff (for child tabs only)
   
   //: DOCUMENT LINK (NEW)
@@ -149,7 +163,7 @@ export type BayState = {
   isActive           : boolean;
   isDirty            : boolean;
   isPinned           : boolean;
-  isPreview          : boolean;  // VS Code preview bay (italic, replaceable)
+  isPreview          : boolean;              // VS Code preview bay (italic, replaceable)
 
   //: LOCATION
   groupId            : number;
@@ -157,65 +171,48 @@ export type BayState = {
   indexInGroup       : number;
 
   //: VISUALIZATION MODE
-  viewMode           : BayViewMode;  // How the bay is visualized: source | preview | split
+  viewMode           : BayViewMode;          // How the bay is visualized: source | preview | split
 
   //: DIFF INFORMATION (for child tabs)
-  diffStats?         : DiffStats;    // Diff statistics (lines added/removed, etc.)
+  diffStats?         : DiffStats;            // Diff statistics (lines added/removed, etc.)
 
   //: ACTION CONTEXT (NEW)
   actionContext      : ActionContext;        // Dynamic action context
   operationState     : OperationState;       // Async operations state
 
   //: CAPABILITIES & PERMISSIONS
-  capabilities       : BayCapabilities;  // What actions can be performed
+  capabilities       : BayCapabilities;      // What actions can be performed
   permissions        : BayPermissions;       // Granular permissions
+
   //: HIERARCHY
-  hasChildren        : boolean;   // Has child tabs (diffs, previews)
-  isChild            : boolean;   // Is a child bay of another
-  childrenCount      : number;    // Number of child tabs (for badge display)
+  hasVariant         : boolean;              // Has child tabs (diffs, previews)
+  isVariant          : boolean;              // Is a child bay of another
+  variantCount       : number;               // Number of child tabs (for badge display)
 
   //: UI STATE
-  isLoading          : boolean;   // Loading content (large files, remote)
-  hasError           : boolean;   // Error loading/syncing
-  errorMessage?      : string;    // Error description
-  isHighlighted      : boolean;   // Temporarily highlighted (search, navigation)
+  isLoading          : boolean;              // Loading content (large files, remote)
+  hasError           : boolean;              // Error loading/syncing
+  errorMessage?      : string;               // Error description
+  isHighlighted      : boolean;              // Temporarily highlighted (search, navigation)
 
   //: TRACKING
-  lastAccessTime     : number;    // Timestamp of last access
-  syncVersion        : number;    // Sync version (prevent stale updates)
+  lastAccessTime     : number;               // Timestamp of last access
+  syncVersion        : number;               // Sync version (prevent stale updates)
 
-  //: CURSOR POSITION (for parent-child sync)
-  cursorLine?        : number;    // Current cursor line (1-based)
-  cursorColumn?      : number;    // Current cursor column (1-based)
+  //: CURSOR POSITION (for source-variant sync)
+  cursorLine?        : number;               // Current cursor line (1-based)
+  cursorColumn?      : number;               // Current cursor column (1-based)
 
   //: DECORATIONS
-  gitStatus          : GitStatus;  // Git decoration state
+  gitStatus          : GitStatus;            // Git decoration state
   diagnosticSeverity : vscode.DiagnosticSeverity | null;  // Highest severity (error > warning)
 
   //: PROTECTION
-  isTransient        : boolean;   // Closes automatically (like VS Code preview)
-  isProtected        : boolean;   // Requires confirmation to close
-
-  //: INTEGRATIONS (NEW)
+  isTransient        : boolean;              // Closes automatically (like VS Code preview)
+  isProtected        : boolean;              // Requires confirmation to close
+  //: INTEGRATIONS
   integrations       : BayIntegrations;      // External service states
-
-  //: CUSTOMIZATION (NEW)
+  //: CUSTOMIZATION
   customActions?     : CustomBayAction[];    // User-defined actions
   shortcuts?         : BayShortcuts;         // Custom keybindings
-}
-
-/**
- * Tab representation in Bays sidebar.
- * Delegates to DocumentModel for complex document metadata (diffs, snapshots).
- *
- * @see DocumentModel
- * @see DocumentManager
- */
-export class Bay extends BayActions {
-  constructor(
-    public readonly metadata: BayMetadata,
-    public state: BayState,
-  ) {
-    super();
-  }
 }

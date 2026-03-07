@@ -146,7 +146,7 @@ export class BaySyncService {
       group.tabs.forEach((tab, idx) => {
         const st = convertToBay(tab, this.gitSyncService, idx);
         if (st) {
-          if (st.metadata.parentId) {
+          if (st.metadata.sourceBayId) {
             // This is a variant bay (diff) - defer it
             variants.push({ bay: st, nativeTab: tab });
           } else {
@@ -203,7 +203,7 @@ export class BaySyncService {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && activeEditor.document.uri.toString() === activeUri.toString()) {
       const bay = this.stateService.findBayByUri(activeUri);
-      if (bay && (bay.metadata.parentId || bay.state.hasChildren)) {
+      if (bay && (bay.metadata.sourceBayId || bay.state.hasVariant)) {
         // This bay is part of a parent-child family, sync cursor position
         const selection = activeEditor.selection;
         const line = selection.active.line + 1;
