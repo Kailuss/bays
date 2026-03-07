@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState } from '../SideTab';
+import type { BayMetadata, BayState } from '../Bay';
 
 /**
  * Copy actions - Copiar paths y contenido
  */
 
 export async function copyRelativePath(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
-  if (!state.capabilities.canCopyPath) {
-    vscode.window.showWarningMessage('This tab has no path to copy');
+  if (!metadata.uri) {
+    vscode.window.showWarningMessage('This bay has no path to copy');
     return;
   }
   if (!metadata.uri) {
@@ -21,9 +21,9 @@ export async function copyRelativePath(
   vscode.window.showInformationMessage(`Copied: ${rel}`);
 }
 
-export async function copyPath(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
-  if (!state.capabilities.canCopyPath) {
-    vscode.window.showWarningMessage('This tab has no path to copy');
+export async function copyPath(metadata: BayMetadata, state: BayState): Promise<void> {
+  if (!metadata.uri) {
+    vscode.window.showWarningMessage('This bay has no path to copy');
     return;
   }
   if (!metadata.uri) {
@@ -34,8 +34,8 @@ export async function copyPath(metadata: SideTabMetadata, state: SideTabState): 
 }
 
 export async function copyFileContents(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;

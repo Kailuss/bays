@@ -9,7 +9,7 @@ export const PRODUCT_ICONS = {
   modified: new vscode.ThemeIcon('circle-filled'),
   saved: new vscode.ThemeIcon('circle-outline'),
 
-  // Tab states
+  // Bay states
   pinned: new vscode.ThemeIcon('pinned'),
   close: new vscode.ThemeIcon('close'),
 

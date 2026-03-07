@@ -1,30 +1,30 @@
 import * as vscode from 'vscode';
 import { CopilotService } from '../services/integration/CopilotService';
-import { TabStateService } from '../services/core/TabStateService';
+import { BayStateService } from '../services/core/BayStateService';
 
 /**
- * Registra comandos para añadir archivos al contexto de GitHub Copilot Chat.
+ ** Registra comandos para añadir archivos al contexto de GitHub Copilot Chat.
  */
 export function registerCopilotCommands(
   context: vscode.ExtensionContext,
   copilotService: CopilotService,
-  stateService: TabStateService
+  stateService: BayStateService
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('tabsLover.addToCopilotChat', async (tabId: string) => {
-      const tab = typeof tabId === 'string' ? stateService.getTab(tabId) : undefined;
-      if (tab) {
-        await copilotService.addFileToChat(tab.metadata.uri);
+    vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) => {
+      const bay = typeof bayId === 'string' ? stateService.getBayById(bayId) : undefined;
+      if (bay) {
+        await copilotService.addFileToChat(bay.metadata.uri);
       }
     }),
 
-    vscode.commands.registerCommand('tabsLover.addMultipleToCopilotChat', async () => {
-      const allTabs = stateService.getAllTabs();
-      if (allTabs.length === 0) {
-        vscode.window.showInformationMessage('No tabs open');
+    vscode.commands.registerCommand('bays.addMultipleToCopilotChat', async () => {
+      const allBays = stateService.getAllBays();
+      if (allBays.length === 0) {
+        vscode.window.showInformationMessage('No bays open');
         return;
       }
-      await copilotService.addMultipleFiles(allTabs);
+      await copilotService.addMultipleFiles(allBays);
     }),
   );
 }

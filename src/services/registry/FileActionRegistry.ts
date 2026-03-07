@@ -1,53 +1,37 @@
 import * as vscode from 'vscode';
+import { Logger }  from '../../utils/logger';
 import { 
-  FileAction, 
-  DynamicFileAction,
-  ResolvedFileAction, 
+  FileQuickAction, 
+  DynamicFileQuickAction,
+  ResolvedQuickAction, 
   FileActionContext,
   BUILTIN_ACTIONS,
   DYNAMIC_ACTIONS 
-} from '../../constants/fileActions/index';
+} from '../../constants/fileQuickActions/index';
 
 // Re-export for consumers that import from this module
-export type { FileAction, ResolvedFileAction, FileActionContext } from '../../constants/fileActions/index';
+export type { FileQuickAction, ResolvedQuickAction, FileActionContext } from '../../constants/fileQuickActions/index';
 
 // ──────────────────────────────── Registry ─────────────────────────────────────
 
 /**
- * Registro extensible de acciones contextuales por tipo de archivo.
- *
- * **Cómo añadir una acción nueva:**
- * ```ts
- * registry.register({
- *   id      : 'myAction',
- *   icon    : 'codicon-name',
- *   tooltip : 'Do something cool',
- *   match   : (name, uri) => name.endsWith('.xyz'),
- *   execute : async (uri) => { ... },
- * });
- * ```
- *
- * Las acciones se evalúan en orden de registro; la primera cuyo `match`
- * devuelva `true` gana.  Las acciones registradas manualmente tienen
- * prioridad sobre las built-in.
- * 
- * **Acciones dinámicas:** Para acciones que dependen del estado de la tab
- * (como toggle preview/source), se usa `DynamicFileAction` que resuelve
- * icono y tooltip según el contexto.
+ * Registry for file type quick actions.
+ * Evaluates in registration order (first match wins).
+ * Dynamic actions resolve icon/tooltip based on bay context.
  */
 export class FileActionRegistry {
 
   /** Acciones añadidas por el usuario / otros módulos (mayor prioridad). */
-  private custom: FileAction[] = [];
+  private custom: FileQuickAction[] = [];
 
   /** Acciones predefinidas estáticas (menor prioridad). */
-  private builtin: FileAction[] = [...BUILTIN_ACTIONS];
+  private builtin: FileQuickAction[] = [...BUILTIN_ACTIONS];
 
   /** Acciones dinámicas que se resuelven según contexto (mayor prioridad que estáticas). */
-  private dynamic: DynamicFileAction[] = [...DYNAMIC_ACTIONS];
+  private dynamic: DynamicFileQuickAction[] = [...DYNAMIC_ACTIONS];
 
   /** Registra una acción personalizada (se evalúa antes que las built-in). */
-  register(action: FileAction): void {
+  register(action: FileQuickAction): void {
     this.custom.push(action);
   }
 
@@ -65,10 +49,10 @@ export class FileActionRegistry {
    * 
    * @param fileName - Nombre del archivo (basename)
    * @param uri - URI completa del archivo
-   * @param context - Contexto opcional de la tab (viewMode, etc.)
+   * @param context - Contexto opcional de la bay (viewMode, etc.)
    */
-  resolve(fileName: string, uri: vscode.Uri, context?: FileActionContext): ResolvedFileAction | null {
-    // Dynamic actions first (they depend on tab state)
+  resolve(fileName: string, uri: vscode.Uri, context?: FileActionContext): ResolvedQuickAction | null {
+    // Dynamic actions first (they depend on bay state)
     for (const action of this.dynamic) {
       if (action.match(fileName, uri)) {
         const resolved = action.resolve(context);
@@ -111,7 +95,7 @@ export class FileActionRegistry {
    * 
    * @param actionId - ID de la acción a ejecutar
    * @param uri - URI del archivo
-   * @param context - Contexto opcional de la tab
+   * @param context - Contexto opcional de la bay
    */
   async execute(actionId: string, uri: vscode.Uri, context?: FileActionContext): Promise<boolean> {
     // Check dynamic actions first (they have context-aware execute)
@@ -122,7 +106,7 @@ export class FileActionRegistry {
           await action.execute(uri, context);
           return true;
         } catch (error) {
-          console.error(`[FileAction] Failed to execute dynamic "${actionId}":`, error);
+          Logger.error(`[FileAction] Failed to execute dynamic "${actionId}":`, error);
           return false;
         }
       }
@@ -139,13 +123,13 @@ export class FileActionRegistry {
       await action.execute(uri);
       return true;
     } catch (error) {
-      console.error(`[FileAction] Failed to execute "${actionId}":`, error);
+      Logger.error(`[FileAction] Failed to execute "${actionId}":`, error);
       return false;
     }
   }
 
   /** Devuelve todas las acciones registradas (para depuración). */
-  getAll(): ReadonlyArray<FileAction> {
+  getAll(): ReadonlyArray<FileQuickAction> {
     return [...this.custom, ...this.builtin];
   }
 

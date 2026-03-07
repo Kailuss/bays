@@ -5,8 +5,8 @@
 
 ---
 
-## ¿Qué es Tabs Lover?
-Tabs Lover es una extensión de Visual Studio Code que ofrece una vista lateral personalizada de las pestañas abiertas, con mejoras en control, acciones y servicios integrados (Git, Copilot, etc.). Está pensada para desarrolladores que abren muchos archivos y necesitan manejar pestañas de manera más eficiente.
+## ¿Qué es Bays?
+Bays es una extensión de Visual Studio Code que ofrece una vista lateral personalizada de las pestañas abiertas, con mejoras en control, acciones y servicios integrados (Git, Copilot, etc.). Está pensada para desarrolladores que abren muchos archivos y necesitan manejar pestañas de manera más eficiente.
 
 ### Requisitos
 - VS Code 1.85.0 o posterior (configurado en `package.json`).
@@ -25,7 +25,7 @@ npm run watch & code --extensionDevelopmentPath=. --disable-extensions
 ```
 ```
 
-Una vez en el host de desarrollo, la vista se activa en la barra lateral bajo el nombre **Tabs Lover**.
+Una vez en el host de desarrollo, la vista se activa en la barra lateral bajo el nombre **Bays**.
 
 ### Estructura de la documentación
 Cada documento explica un aspecto clave:

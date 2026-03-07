@@ -1,5 +1,25 @@
-/* ===== Tabs Lover - Main Stylesheet ===== */
-/* This file imports all modular stylesheets */
+/*
+   BAYS - Main Stylesheet
+
+   Arquitectura modular de estilos:
+   - base.css            → Reset, variables CSS, estilos globales
+   - utilities.css       → Codicon base, empty state
+   - group-header.css    → Encabezados de grupos de bays
+   - bay-layout.css      → Layout base de bays normales
+   - bay-content.css     → Iconos y contenido de texto (labels, paths)
+   - variants.css        → Bays variantes (diffs) con sus propios iconos
+   - bay-states.css      → Estados interactivos (active, drag & drop)
+   - bay-animations.css  → Transiciones y animaciones
+   - bay-file-states.css → Estados de archivos (git, dirty, etc.)
+   - bay-actions.css     → Botones de acción de bays normales
+   
+   Diferencias clave Normal Bays vs Variant Bays:
+   - Altura: 39px vs 22px
+   - Iconos: 22px/16px vs 14px/13px (container/fontSize)
+   - Botones: 20px vs 16px
+   - Padding: 0 8px 0 4px vs 0 11px 0 32px (indentación)
+   - Hover: Sin cambio de fondo vs fondo sutil
+*/
 
 /* Note: File icons are provided by VS Code's icon theme API */
 
@@ -13,13 +33,14 @@
   height: 16px;
 }
 
+/* Imports */
 @import './base.css';
-@import './view-header.css';
 @import './group-header.css';
-@import './tab-layout.css';
-@import './tab-states.css';
-@import './tab-animations.css';
-@import './tab-content.css';
-@import './tab-file-states.css';
-@import './tab-actions.css';
+@import './bay-layout.css';        /* Normal bays layout + icons */
+@import './bay-content.css';       /* Bay content (text, paths) - ANTES de variants */
+@import './variants.css';          /* Variant bays + icons + actions - DESPUÉS para override */
+@import './bay-states.css';
+@import './bay-animations.css';
+@import './bay-file-states.css';
+@import './bay-actions.css';       /* Normal bays actions */
 @import './utilities.css';

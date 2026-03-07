@@ -1,8 +1,10 @@
 /* ===== Utilities ===== */
 
-/* Codicon support */
+/* Codicon base */
 .codicon {
-  font-size: 16px;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ===== Empty state ===== */

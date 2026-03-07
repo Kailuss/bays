@@ -1,7 +1,7 @@
 /**
- * Tab Actions - Modular action functions
+ * Bay Actions - Modular action functions
  * 
- * This module exports all tab actions as pure functions that operate on
+ * This module exports all bay actions as pure functions that operate on
  * metadata and state. Actions are organized by category for better maintainability.
  */
 

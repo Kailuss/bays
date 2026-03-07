@@ -4,6 +4,5 @@ node_modules
 .vscode-test/
 .vscode/
 *.vsix
-INSTRUCTIONS.md
-PLAN.md
-ARCHITECTURE.md
+*.md
+!README.md

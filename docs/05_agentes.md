@@ -9,9 +9,9 @@ Este documento está diseñado para que un agente (como un modelo Copilot) entie
 
 ## Puntos clave para el agente
 1. **Estructura del repositorio**: Estar familiarizado con `src/models`, `src/services`, `src/providers`, `src/commands`, `src/constants`, `src/utils`. Cada carpeta tiene responsabilidad clara.
-2. **Flujo de datos**: `TabSyncService` → `TabStateService` → `TabsLoverWebviewProvider` → Webview HTML. Muchas acciones se encuentran en `src/models/actions`.
+2. **Flujo de datos**: `TabSyncService` → `TabStateService` → `BaysWebviewProvider` → Webview HTML. Muchas acciones se encuentran en `src/models/actions`.
 3. **Tipado estrictamente en TypeScript**: todos los datos importantes tienen interfaces exportadas (`SideTabMetadata`, `SideTabState`, etc.). Cualquier añadido debe importar y usar estos tipos.
-4. **Comunicaciones con VS Code**: comandos (`tabsLover.*`) definidos en `package.json`; evocar `vscode.commands.executeCommand` con el `tab.id` como argumento.
+4. **Comunicaciones con VS Code**: comandos (`bays.*`) definidos en `package.json`; evocar `vscode.commands.executeCommand` con el `tab.id` como argumento.
 5. **Ejemplos como guía**: el subdirectorio `src/examples` contiene patrones de uso (operaciones, permisos, contexto). Revisarlos antes de implementar nuevas funcionalidades.
 6. **Documentación auto‑referenciada**: cada MD comienza con enlaces a los demás para facilitar la navegación interna.
 7. **Nombres claros**: los identificadores de acciones, permisos, etc., son literales en español/inglés, evita abreviaciones.
@@ -49,4 +49,4 @@ El agente también puede proponer añadir tests y actualizar el webview para mos
 - Mantén los MD actualizados cuando introduces nuevas APIs.
 - Respeta el estilo de código existente: `async/await`, preferencia por `fs/promises`, logs mínimos.
 
-Al seguir estas indicaciones, un agente podrá trabajar con eficacia en Tabs Lover.
+Al seguir estas indicaciones, un agente podrá trabajar con eficacia en Bays.

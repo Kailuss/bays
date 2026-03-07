@@ -1,4 +1,4 @@
-import type { SideTabState, ActionContext, TabIntegrations } from '../SideTab';
+import type { BayState, ActionContext, BayIntegrations } from '../Bay';
 
 /**
  * State management actions - Operaciones, contexto, integraciones
@@ -7,7 +7,7 @@ import type { SideTabState, ActionContext, TabIntegrations } from '../SideTab';
 //- Operations State
 
 export function startOperation(
-  state: SideTabState,
+  state: BayState,
   operationName: string,
   canCancel: boolean = false
 ): void {
@@ -19,13 +19,13 @@ export function startOperation(
   };
 }
 
-export function updateOperationProgress(state: SideTabState, progress: number): void {
+export function updateOperationProgress(state: BayState, progress: number): void {
   if (state.operationState.isProcessing) {
     state.operationState.progress = Math.max(0, Math.min(100, progress));
   }
 }
 
-export function finishOperation(state: SideTabState): void {
+export function finishOperation(state: BayState): void {
   state.operationState = {
     isProcessing    : false,
     canCancel       : false,
@@ -35,7 +35,7 @@ export function finishOperation(state: SideTabState): void {
 //- Action Context
 
 export function updateActionContext(
-  state: SideTabState,
+  state: BayState,
   context: Partial<ActionContext>
 ): void {
   state.actionContext = {
@@ -44,28 +44,28 @@ export function updateActionContext(
   };
 }
 
-export function isActionRestricted(state: SideTabState, actionId: string): boolean {
+export function isActionRestricted(state: BayState, actionId: string): boolean {
   return state.permissions.restrictedActions?.includes(actionId) || false;
 }
 
 //- Integrations
 
-export function addToCopilotContext(state: SideTabState): void {
+export function addToCopilotContext(state: BayState): void {
   state.integrations.copilot = {
     inContext    : true,
     lastAddedTime: Date.now(),
   };
 }
 
-export function removeFromCopilotContext(state: SideTabState): void {
+export function removeFromCopilotContext(state: BayState): void {
   state.integrations.copilot = {
     inContext    : false,
   };
 }
 
 export function updateGitIntegration(
-  state: SideTabState,
-  gitInfo: Partial<TabIntegrations['git']>
+  state: BayState,
+  gitInfo: Partial<BayIntegrations['git']>
 ): void {
   state.integrations.git = {
     hasUncommittedChanges: false, // Default

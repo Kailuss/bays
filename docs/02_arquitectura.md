@@ -6,7 +6,7 @@
 ---
 
 ## Visión general
-Tabs Lover se apoya en dos servicios internos (`TabSyncService` y `TabStateService`) que convierten la API nativa de pestañas de VS Code en un modelo propio llamado `SideTab`. La vista lateral está implementada como un **WebviewViewProvider** para máxima flexibilidad en HTML/CSS.
+Bays se apoya en dos servicios internos (`TabSyncService` y `TabStateService`) que convierten la API nativa de pestañas de VS Code en un modelo propio llamado `SideTab`. La vista lateral está implementada como un **WebviewViewProvider** para máxima flexibilidad en HTML/CSS.
 ### Estructura del proyecto
 La organización de carpetas sigue un patrón claro:
 ```
@@ -77,7 +77,7 @@ const tab = new SideTab(
 - **CopilotService** y **GitSyncService**: integraciones opcionales que actualizan campos dentro de `SideTab.state.integrations`.
 
 ### Diseño del Webview
-El HTML generado por `TabsLoverHtmlBuilder` crea filas de tabs con icono, nombre, estado y acciones, y se actualiza (debounced) en cada cambio de estado. La comunicación usa `postMessage`/`onDidReceiveMessage`.
+El HTML generado por `BaysHtmlBuilder` crea filas de tabs con icono, nombre, estado y acciones, y se actualiza (debounced) en cada cambio de estado. La comunicación usa `postMessage`/`onDidReceiveMessage`.
 
 ### Decisiones importantes
 - **WebviewView** en lugar de `TreeView` para controlar altura, bordes y hover buttons.

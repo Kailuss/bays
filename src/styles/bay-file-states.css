@@ -1,0 +1,45 @@
+/* File State Colors */
+
+.bay-name.changing {
+  transition: color 1000ms ease-in-out;
+}
+
+.bay .bay-name.modified,
+.bay.active .bay-name.modified {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+.bay .bay-name.added,
+.bay.active .bay-name.added {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+.bay .bay-name.deleted,
+.bay.active .bay-name.deleted {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+}
+
+.bay .bay-name.untracked,
+.bay.active .bay-name.untracked {
+  color: var(--vscode-gitDecoration-untrackedResourceForeground, #73c991);
+}
+
+.bay .bay-name.ignored,
+.bay.active .bay-name.ignored {
+  color: var(--vscode-gitDecoration-ignoredResourceForeground, #8c8c8c);
+}
+
+.bay .bay-name.conflict,
+.bay.active .bay-name.conflict {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}
+
+.bay .bay-name.warning,
+.bay.active .bay-name.warning {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.bay .bay-name.error,
+.bay.active .bay-name.error {
+  color: var(--vscode-editorError-foreground, #f48771);
+}

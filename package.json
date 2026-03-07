@@ -1,17 +1,17 @@
 {
-  "name": "tabs-lover",
-  "displayName": "Tabs Lover",
-  "description": "Vertical tabs panel with advanced features",
-  "version": "0.0.1",
+  "name": "bays",
+  "displayName": "Bays",
+  "description": "Vertical bays panel with advanced features",
+  "version": "0.3.3",
   "publisher": "Kailuss",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kailuss/tabs-lover.git"
+    "url": "https://github.com/Kailuss/bays.git"
   },
   "bugs": {
-    "url": "https://github.com/Kailuss/tabs-lover/issues"
+    "url": "https://github.com/Kailuss/bays/issues"
   },
-  "homepage": "https://github.com/Kailuss/tabs-lover#readme",
+  "homepage": "https://github.com/Kailuss/bays#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -26,244 +26,254 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "tabsLoverContainer",
-          "title": "Tabs Lover",
+          "id": "baysContainer",
+          "title": "Bays",
           "icon": "$(files)"
         }
       ]
     },
     "views": {
-      "tabsLoverContainer": [
+      "baysContainer": [
         {
           "type" : "webview",
-          "id"   : "tabsLover",
-          "name" : "Tabs Lover",
+          "id"   : "bays",
+          "name" : "Bays",
           "icon" : "./icon.png"
         }
       ]
     },
     "commands": [
       {
-        "command"  :"tabsLover.refresh",
+        "command"  :"bays.refresh",
         "title"    :"Refresh",
         "icon"     :"$(refresh)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.openTab",
-        "title"    :"Open Tab",
-        "category" :"Tabs Lover"
+        "command"  :"bays.openBay",
+        "title"    :"Open Bay",
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.closeTab",
-        "title"    :"Close Tab",
+        "command"  :"bays.closeBay",
+        "title"    :"Close Bay",
         "icon"     :"$(close)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.closeOthers",
+        "command"  :"bays.closeOthers",
         "title"    :"Close Others",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.closeToRight",
+        "command"  :"bays.closeToRight",
         "title"    :"Close to the Right",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.closeAll",
+        "command"  :"bays.closeAll",
         "title"    :"Close All",
         "icon"     :"$(close-all)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.pinTab",
-        "title"    :"Pin Tab",
+        "command"  :"bays.pinBay",
+        "title"    :"Pin Bay",
         "icon"     :"$(pinned)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.unpinTab",
-        "title"    :"Unpin Tab",
+        "command"  :"bays.unpinBay",
+        "title"    :"Unpin Bay",
         "icon"     :"$(pin)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.revealInExplorer",
+        "command"  :"bays.revealInExplorer",
         "title"    :"Reveal in Explorer",
         "icon"     :"$(go-to-file)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.copyRelativePath",
+        "command"  :"bays.copyRelativePath",
         "title"    :"Copy Relative Path",
         "icon"     :"$(clippy)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.copyFileContents",
+        "command"  :"bays.copyFileContents",
         "title"    :"Copy File Contents",
         "icon"     :"$(copy)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.compareWithActive",
+        "command"  :"bays.compareWithActive",
         "title"    :"Compare with Active Editor",
         "icon"     :"$(diff)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.moveToGroup",
+        "command"  :"bays.moveToGroup",
         "title"    :"Move to Group…",
         "icon"     :"$(split-horizontal)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.addToCopilotChat",
+        "command"  :"bays.addToCopilotChat",
         "title"    :"Add to Copilot Chat",
         "icon"     :"$(add)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.addMultipleToCopilotChat",
+        "command"  :"bays.addMultipleToCopilotChat",
         "title"    :"Add Files to Copilot Chat…",
         "icon"     :"$(sparkle)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.closeGroup",
+        "command"  :"bays.closeGroup",
         "title"    :"Close Group",
         "icon"     :"$(close-all)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.copyPath",
+        "command"  :"bays.copyPath",
         "title"    :"Copy Path",
         "icon"     :"$(copy)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.openTimeline",
+        "command"  :"bays.openTimeline",
         "title"    :"Open Timeline",
         "icon"     :"$(history)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.splitRight",
+        "command"  :"bays.splitRight",
         "title"    :"Split Right",
         "icon"     :"$(split-horizontal)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.openChanges",
+        "command"  :"bays.openChanges",
         "title"    :"Open Changes",
         "icon"     :"$(git-compare)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.revealInFileExplorer",
+        "command"  :"bays.revealInFileExplorer",
         "title"    :"Reveal in File Explorer",
         "icon"     :"$(folder-opened)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.revealInExplorerView",
+        "command"  :"bays.revealInExplorerView",
         "title"    :"Reveal in Explorer View",
         "icon"     :"$(files)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.moveToNewWindow",
+        "command"  :"bays.moveToNewWindow",
         "title"    :"Move to New Window",
         "icon"     :"$(multiple-windows)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.duplicateFile",
+        "command"  :"bays.duplicateFile",
         "title"    :"Duplicate File",
         "icon"     :"$(files)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.saveAll",
+        "command"  :"bays.saveAll",
         "title"    :"Save All",
         "icon"     :"$(save-all)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.reorder",
-        "title"    :"Reorder Tabs",
+        "command"  :"bays.reorder",
+        "title"    :"Reorder Bays",
         "icon"     :"$(list-ordered)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       },
       {
-        "command"  :"tabsLover.toggleCompactMode",
+        "command"  :"bays.toggleCompactMode",
         "title"    :"Toggle Compact Mode",
         "icon"     :"$(list-flat)",
-        "category" :"Tabs Lover"
+        "category" :"Bays"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "tabsLover.refresh",
-          "when": "view == tabsLover",
+          "command": "bays.refresh",
+          "when": "view == bays",
           "group": "navigation@1"
         },
         {
-          "command": "tabsLover.reorder",
-          "when": "view == tabsLover",
+          "command": "bays.reorder",
+          "when": "view == bays",
           "group": "navigation@2"
         },
         {
-          "command": "tabsLover.toggleCompactMode",
-          "when": "view == tabsLover",
+          "command": "bays.toggleCompactMode",
+          "when": "view == bays",
           "group": "navigation@3"
         },
         {
-          "command": "tabsLover.saveAll",
-          "when": "view == tabsLover",
+          "command": "bays.saveAll",
+          "when": "view == bays",
           "group": "navigation@4"
         },
         {
-          "command": "tabsLover.addMultipleToCopilotChat",
-          "when": "view == tabsLover && tabsLover.copilotAvailable",
+          "command": "bays.addMultipleToCopilotChat",
+          "when": "view == bays && bays.copilotAvailable",
           "group": "navigation@5"
         }
       ]
     },
     "configuration": {
-      "title": "Tabs Lover",
+      "title": "Bays",
       "properties": {
-        "tabsLover.showFilePath": {
+        "bays.showFilePath": {
           "type": "boolean",
           "default": true,
-          "description": "Show the relative file path as description next to each tab."
+          "description": "Show the relative file path as description next to each bay."
         },
-        "tabsLover.compactMode": {
+        "bays.compactMode": {
           "type": "boolean",
           "default": false,
-          "description": "Enable compact mode: tabs show file name and path in a single line with reduced height (26px)."
+          "description": "Enable compact mode: bays show file name and path in a single line with reduced height (28px)."
         },
-        "tabsLover.iconSize": {
+        "bays.iconSize": {
           "type": "number",
           "default": 16,
           "description": "Size of the file icon in pixels."
         },
-        "tabsLover.enableHoverActions": {
+        "bays.enableHoverActions": {
           "type": "boolean",
           "default": true,
-          "description": "Show action buttons when hovering over a tab."
+          "description": "Show action buttons when hovering over a bay."
         },
-        "tabsLover.showStateIcons": {
+        "bays.showStateIcons": {
           "type": "boolean",
           "default": true,
-          "description": "Show state icons (pinned, modified, Copilot-edited) on tabs."
+          "description": "Show state icons (pinned, modified, Copilot-edited) on bays."
         },
-        "tabsLover.enableDragDrop": {
+        "bays.enableDragDrop": {
           "type": "boolean",
           "default": true,
-          "description": "Enable drag & drop reordering of tabs within and across groups."
+          "description": "Enable drag & drop reordering of bays within and across groups."
+        },
+        "bays.syncCursorPosition": {
+          "type": "boolean",
+          "default": false,
+          "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
+        },
+        "bays.openPreviewableInPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open previewable files (Markdown, HTML, etc.) in preview mode when first opened."
         }
       }
     }

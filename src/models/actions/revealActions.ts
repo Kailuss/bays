@@ -1,16 +1,16 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState } from '../SideTab';
+import type { BayMetadata, BayState } from '../Bay';
 
 /**
  * Reveal actions - Revelar archivos en exploradores
  */
 
 export async function revealInExplorer(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (!state.capabilities.canRevealInExplorer) {
-    vscode.window.showWarningMessage('This tab has no file to reveal');
+    vscode.window.showWarningMessage('This bay has no file to reveal');
     return;
   }
   if (metadata.uri) {
@@ -19,8 +19,8 @@ export async function revealInExplorer(
 }
 
 export async function revealInExplorerView(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (metadata.uri) {
     await vscode.commands.executeCommand('revealInExplorer', metadata.uri);
@@ -28,8 +28,8 @@ export async function revealInExplorerView(
 }
 
 export async function revealInFileExplorer(
-  metadata: SideTabMetadata,
-  state: SideTabState
+  metadata: BayMetadata,
+  state: BayState
 ): Promise<void> {
   if (metadata.uri) {
     await vscode.commands.executeCommand('revealFileInOS', metadata.uri);
@@ -37,8 +37,8 @@ export async function revealInFileExplorer(
 }
 
 export async function openTimeline(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
   if (!metadata.uri) {

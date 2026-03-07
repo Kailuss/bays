@@ -3,32 +3,50 @@
 // Served as a static resource via webview.asWebviewUri().
 
 const vscode = acquireVsCodeApi();
+console.log('[webview.js] Script loaded');
+
+// Fade in body after initial render (solo si no tiene la clase loaded)
+if (!document.body.classList.contains('loaded')) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      requestAnimationFrame(() => {
+        document.body.classList.add('loaded');
+      });
+    });
+  } else {
+    requestAnimationFrame(() => {
+      document.body.classList.add('loaded');
+    });
+  }
+}
 
 // Evitar mensajes duplicados durante la animación de cierre
 const closingTabs = new Set();
 
 document.addEventListener('click', e => {
+  console.log('[webview] Click event:', e.target, 'closest bay:', e.target.closest('.bay'));
   const btn = e.target.closest('button[data-action]');
   if (btn) {
+    console.log('[webview] Button clicked:', btn.dataset.action);
     e.stopPropagation();
     const action = btn.dataset.action;
 
-    if (action === 'closeTab') {
-      const tabId = btn.dataset.tabid;
-      const tab   = document.querySelector(`.tab[data-tabid="${CSS.escape(tabId)}"]`);
-      if (tab && !closingTabs.has(tabId)) {
-        closingTabs.add(tabId);
-        tab.classList.add('closing');
+    if (action === 'closeBay') {
+      const bayId = btn.dataset.bayId;
+      const bay   = document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
+      if (bay && !closingTabs.has(bayId)) {
+        closingTabs.add(bayId);
+        bay.classList.add('closing');
         setTimeout(() => {
-          vscode.postMessage({ type: 'closeTab', tabId });
-          closingTabs.delete(tabId);
+          vscode.postMessage({ type: 'closeBay', bayId });
+          closingTabs.delete(bayId);
         }, 200);
       }
       return;
     }
 
     if (action === 'fileAction') {
-      vscode.postMessage({ type: 'fileAction', tabId: btn.dataset.tabid, actionId: btn.dataset.actionid });
+      vscode.postMessage({ type: 'fileAction', bayId: btn.dataset.bayId, actionId: btn.dataset.actionid });
       return;
     }
 
@@ -66,46 +84,47 @@ document.addEventListener('click', e => {
       return;
     }
 
-    vscode.postMessage({ type: action, tabId: btn.dataset.tabid });
+    vscode.postMessage({ type: action, bayId: btn.dataset.bayId });
     return;
   }
 
-  const tab = e.target.closest('.tab');
-  if (tab) { vscode.postMessage({ type: 'openTab', tabId: tab.dataset.tabid }); }
+  const bay = e.target.closest('.bay');
+  console.log('[webview] Bay found:', bay, 'bayId:', bay?.dataset?.bayId);
+  if (bay) { vscode.postMessage({ type: 'openBay', bayId: bay.dataset.bayId }); }
 });
 
 document.addEventListener('contextmenu', e => {
-  const tab = e.target.closest('.tab');
-  if (tab) {
+  const bay = e.target.closest('.bay');
+  if (bay) {
     e.preventDefault();
-    vscode.postMessage({ type: 'contextMenu', tabId: tab.dataset.tabid });
+    vscode.postMessage({ type: 'contextMenu', bayId: bay.dataset.bayId });
   }
 });
 
-// Actualización parcial desde el host (evita rebuild completo al cambiar tab activa)
+// Actualización parcial desde el host (evita rebuild completo al cambiar bay activa)
 window.addEventListener('message', e => {
   const msg = e.data;
 
   if (msg.type === 'updateActiveTab') {
     const activeSet = new Set(msg.activeTabIds);
-    document.querySelectorAll('.tab').forEach(t => {
-      t.classList.toggle('active', activeSet.has(t.dataset.tabid));
+    document.querySelectorAll('.bay').forEach(t => {
+      t.classList.toggle('active', activeSet.has(t.dataset.bayId));
     });
   }
 
   if (msg.type === 'tabStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
-    const tab = document.querySelector(`.tab[data-tabid="${CSS.escape(msg.tabId)}"]`);
-    if (tab && !tab.classList.contains('closing')) {
-      const tabName = tab.querySelector('.tab-name');
-      const tabState = tab.querySelector('.tab-state');
+    const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(msg.bayId)}"]`);
+    if (bay && !bay.classList.contains('closing')) {
+      const tabName = bay.querySelector('.bay-name');
+      const tabState = bay.querySelector('.bay-state');
 
       if (tabName) {
         // Remover clases de estado anteriores
-        tabName.className = 'tab-name';
+        tabName.className = 'bay-name';
         // Agregar nueva clase de estado
         if (msg.stateClass) {
-          tabName.className = 'tab-name' + msg.stateClass;
+          tabName.className = 'bay-name' + msg.stateClass;
         }
         // Aplicar animación de cambio
         tabName.classList.add('changing');

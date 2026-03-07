@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState, CustomTabAction } from '../SideTab';
+import type { BayMetadata, BayState, CustomBayAction } from '../Bay';
 import { isActionRestricted, startOperation, finishOperation } from './stateActions';
 
 /**
  * Custom actions management - Gestión de acciones personalizadas
  */
 
-export function addCustomAction(state: SideTabState, action: CustomTabAction): void {
+export function addCustomAction(state: BayState, action: CustomBayAction): void {
   if (!state.customActions) {
     state.customActions = [];
   }
@@ -16,8 +16,8 @@ export function addCustomAction(state: SideTabState, action: CustomTabAction): v
 }
 
 export async function executeCustomAction(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   actionId: string
 ): Promise<void> {
   const action = state.customActions?.find((a) => a.id === actionId);
@@ -41,7 +41,7 @@ export async function executeCustomAction(
   }
 }
 
-export function removeCustomAction(state: SideTabState, actionId: string): void {
+export function removeCustomAction(state: BayState, actionId: string): void {
   if (state.customActions) {
     state.customActions = state.customActions.filter((a) => a.id !== actionId);
   }

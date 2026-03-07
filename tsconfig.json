@@ -17,6 +17,7 @@
 		"TabIconManager.ts",
 		"node_modules",
 		"dist",
-		"out"
+		"out",
+		"docs"
 	]
 }

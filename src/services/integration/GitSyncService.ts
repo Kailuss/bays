@@ -1,18 +1,18 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import { TabStateService } from '../core/TabStateService';
-import type { GitStatus } from '../../models/SideTab';
+import * as vscode         from 'vscode';
+import * as path           from 'path';
+import { BayStateService } from '../core/BayStateService';
+import type { GitStatus }  from '../../models/Bay';
 
 /**
  * Encapsula toda la sincronización con Git (status + listeners de repositorio).
  */
 export class GitSyncService {
-  private disposables: vscode.Disposable[] = [];
-  private _gitApi: any | null = null;
-  private _gitRepoListeners = new Set<string>();
+  private disposables                  : vscode.Disposable[] = [];
+  private _gitApi                      : any | null = null;
+  private _gitRepoListeners            = new Set<string>();
   private _gitOpenRepoListenerAttached = false;
 
-  constructor(private stateService: TabStateService) {}
+  constructor(private stateService: BayStateService) {}
 
   activate(context: vscode.ExtensionContext): void {
     this._gitApi = this.resolveGitApi();
@@ -34,14 +34,14 @@ export class GitSyncService {
       this.setupGitListeners();
       this.refreshAllGitStatuses();
     } else {
-      
+
       // Setup listener for when Git opens a repository
       const setupOnRepoOpen = () => {
         const gitApi = this.resolveGitApi();
         if (gitApi && !this._gitOpenRepoListenerAttached) {
           this._gitApi = gitApi;
           this._gitOpenRepoListenerAttached = true;
-          
+
           this.disposables.push(
             gitApi.onDidOpenRepository((repo: any) => {
               this.attachGitRepoListener(repo);
@@ -180,14 +180,14 @@ export class GitSyncService {
   }
 
   private refreshAllGitStatuses(): void {
-    for (const tab of this.stateService.getAllTabs()) {
-      const uri = tab.metadata.uri;
+    for (const bay of this.stateService.getAllBays()) {
+      const uri = bay.metadata.uri;
       if (!uri) { continue; }
 
       const newGitStatus = this.getGitStatus(uri);
-      if (tab.state.gitStatus !== newGitStatus) {
-        tab.state.gitStatus = newGitStatus;
-        this.stateService.updateTabStateWithAnimation(tab);
+      if (bay.state.gitStatus !== newGitStatus) {
+        bay.state.gitStatus = newGitStatus;
+        this.stateService.updateBayStateWithAnimation(bay);
       }
     }
   }
@@ -196,17 +196,17 @@ export class GitSyncService {
     const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
     if (!repoRoot) { return; }
 
-    for (const tab of this.stateService.getAllTabs()) {
-      const uri = tab.metadata.uri;
+    for (const bay of this.stateService.getAllBays()) {
+      const uri = bay.metadata.uri;
       if (!uri) { continue; }
       const targetPath = this.normalizeFsPath(uri.fsPath);
       if (!targetPath || !this.isPathInsideRepo(targetPath, repoRoot)) { continue; }
 
       const newGitStatus = this.getGitStatus(uri);
 
-      if (tab.state.gitStatus !== newGitStatus) {
-        tab.state.gitStatus = newGitStatus;
-        this.stateService.updateTabStateWithAnimation(tab);
+      if (bay.state.gitStatus !== newGitStatus) {
+        bay.state.gitStatus = newGitStatus;
+        this.stateService.updateBayStateWithAnimation(bay);
       }
     }
   }

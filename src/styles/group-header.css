@@ -1,40 +1,39 @@
 /* ===== Group header ===== */
 .group-header {
-  display        : flex;
-  align-items    : center;
-  gap            : 4px;
-  height         : 22px;
-  padding        : 0 2px 0 8px;
-  font-size      : 11px;
-  font-weight    : 600;
-  letter-spacing : 0.4px;
-  color          : var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
-  background     : var(--vscode-sideBarSectionHeader-background, transparent);
-  opacity        : 0.8;
-  border-bottom  : 1px solid var(--vscode-sideBarSectionHeader-border, rgba(0,0,0,0.1));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 2px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+  background: var(--vscode-sideBarSectionHeader-background, transparent);
+  opacity: 0.8;
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(0,0,0,0.1));
 }
 
 .group-icon {
-  font-size      : 12px;
-  text-transform : none !important;
-  letter-spacing : 0 !important;
-  flex-shrink    : 0;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .group-label {
-  flex          : 1 1 auto;
-  min-width     : 0;
-  overflow      : hidden;
-  text-overflow : ellipsis;
-  white-space   : nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-actions {
-  display     : flex;
-  align-items : center;
-  gap         : 1px;
-  opacity     : 0;
-  flex-shrink : 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 150ms ease;
 }
 
 .group-header:hover .group-actions {
@@ -43,25 +42,24 @@
 
 /* Group action buttons — same style as view-header-btn */
 .group-btn {
-  display         : flex;
-  align-items     : center;
-  justify-content : center;
-  width           : 20px;
-  height          : 20px;
-  background      : transparent;
-  border          : none;
-  border-radius   : 4px;
-  cursor          : pointer;
-  padding         : 0;
-  color           : var(--vscode-icon-foreground, var(--vscode-foreground));
-  /* Hard-reset all inherited text styles that break codicon rendering */
-  font-size       : 14px !important;
-  font-family     : var(--vscode-font-family) !important;
-  text-transform  : none !important;
-  letter-spacing  : 0 !important;
-  font-weight     : normal !important;
-  line-height     : 1;
-  opacity         : 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  font-size: 14px;
+  font-family: var(--vscode-font-family);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  line-height: 1;
+  opacity: 0.8;
 }
 
 .group-btn:hover {
@@ -69,17 +67,15 @@
   opacity    : 1;
 }
 
-/* Codicon spans inside group buttons — force correct rendering */
+/* Codicon spans inside group buttons */
 .group-btn .codicon {
-  display        : flex;
-  align-items    : center;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  font-size      : 14px !important;
-  text-transform : none !important;
-  letter-spacing : 0 !important;
-  line-height    : 1;
-  width          : 14px;
-  height         : 14px;
+  font-size: 14px;
+  line-height: 1;
+  width: 14px;
+  height: 14px;
 }
 
 .group-header.collapsed {

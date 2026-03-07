@@ -1,0 +1,216 @@
+/* VARIANTS - bays hijas (diffs, comparisons) adjuntas a un parent */
+
+/* Bay BLOCK WRAPPER */
+/* Contenedor que agrupa una Bay padre con sus VARIANTS.
+   Es la unidad de D&D: el alto total (source + variants) se obtiene
+   de forma natural con getBoundingClientRect() sobre este elemento. */
+.bay-block {
+  position: relative;
+}
+
+/* BASE STRUCTURE */
+.bay.variant {
+
+  /* Layout */
+  height: 22px;
+  contain: strict;
+  display: inline-flex;
+  align-items: center;
+
+  /* Text */
+  font-size: inherit;
+
+  /* Visual */
+  background: #0003;
+  padding-left: 36px;
+  opacity: 1;
+
+  /* Flexbox */
+  display: flex;
+  position: relative;
+  cursor: pointer;
+}
+
+.bay.variant.active {
+  background: var(--vscode-list-activeSelectionBackground, #5a5d5e40);
+  border-left: 4px solid var(--vscode-focusBorder, #007acc);
+  padding-left: 0;
+}
+
+.bay.variant.active:hover {
+  background: var(--vscode-list-activeSelectionBackground, rgba(90,93,94,0.3));
+}
+
+/* ICONS */
+.bay.variant .bay-icon .codicon {
+  font-size: 12px;
+  padding-right: 0.3rem;
+}
+
+.bay.variant .bay-icon img {
+  width: 12px;
+  height: 12px;
+}
+
+/* DIFF TYPE COLORS */
+/* Working Tree */
+.bay.variant.diff-working-tree .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+/* Staged */
+.bay.variant.diff-staged .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+/* Snapshot */
+.bay.variant.diff-snapshot .bay-icon .codicon {
+  color: var(--vscode-charts-purple, #b180d7);
+}
+
+/* Commit */
+.bay.variant.diff-commit .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-submoduleResourceForeground, #8db9e2);
+}
+
+/* Edit (AI) */
+.bay.variant.diff-edit .bay-icon .codicon {
+  color: var(--vscode-editorWarning-foreground, #ffcc00);
+}
+
+/* Merge Conflict */
+.bay.variant.diff-conflict .bay-icon .codicon {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}
+
+/* Incoming */
+.bay.variant.diff-incoming .bay-icon .codicon {
+  color: var(--vscode-editorInfo-foreground, #3794ff);
+}
+
+/* Current */
+.bay.variant.diff-current .bay-icon .codicon {
+  color: var(--vscode-foreground, #cccccc);
+}
+
+/* Incoming-Current */
+.bay.variant.diff-merge .bay-icon .codicon {
+  color: var(--vscode-editorWarning-foreground, #eca700);
+}
+
+/* Unknown */
+.bay.variant.diff-compare .bay-icon .codicon {
+  color: var(--vscode-charts-orange, #cccccc80);
+}
+
+/* LABELS & STATS */
+.variant-label {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.9;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  margin-right: 8px;
+}
+
+.bay.variant.active .variant-label {
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Stats */
+.variant-stats {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    opacity: 0.82;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.stats-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+.stats-removed {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
+}
+
+.variant-stats.conflict {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}
+
+/* Hide stats on hover to show actions */
+.bay.variant:hover .variant-stats {
+  display: none;
+}
+
+/* ACTION BUTTONS */
+.bay.variant .bay-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.bay.variant:hover .bay-actions {
+  display: flex;
+}
+
+.bay.variant .bay-actions button {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  opacity: 0.7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms ease;
+}
+
+.bay.variant .bay-actions button:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.2));
+}
+
+.bay.variant .bay-actions button:active {
+  transform: scale(0.95);
+}
+
+.bay.variant .bay-actions button img {
+  width: 11px;
+  height: 11px;
+  object-fit: contain;
+}
+
+/* STATE INDICATORS */
+.bay.variant .state-indicator-error,
+.bay.variant .state-indicator-warning,
+.bay.variant .state-indicator-conflict {
+  font-size: 12px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.bay.variant .state-indicator-error {
+  color: var(--vscode-editorError-foreground, #f48771);
+}
+
+.bay.variant .state-indicator-warning {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.bay.variant .state-indicator-conflict {
+  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
+}

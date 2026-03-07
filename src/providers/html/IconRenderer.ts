@@ -4,14 +4,11 @@
  */
 
 import * as vscode from 'vscode';
-import { TabIconManager } from '../../services/ui/TabIconManager';
-import { SideTab } from '../../models/SideTab';
+import { TabIconManager } from '../../services/ui/BayIconManager';
+import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
-import {
-  IconData,
-  // VSCODE_FILE_EXTENSIONS,  // Comentado: ya no se usan iconos especiales de VS Code
-  // VSCODE_FILE_PATTERNS,    // Comentado: ya no se usan iconos especiales de VS Code
-} from './types';
+import { Logger } from '../../utils/logger';
+import { IconData } from './types';
 
 export class IconRenderer {
   constructor(
@@ -20,25 +17,20 @@ export class IconRenderer {
   ) {}
 
   /**
-   * Genera el HTML del icono para una tab.
+   * Genera el HTML del icono para una bay.
    */
-  async render(tab: SideTab): Promise<string> {
-    const { tabType, viewType, label, uri, fileExtension: fileType } = tab.metadata;
+  async render(bay: Bay): Promise<string> {
+    const { bayType: tabType, viewType, label, uri, fileExtension: fileType } = bay.metadata;
 
-    // Webviews y tabs desconocidas usan codicons con color estándar
-    if (tabType === 'webview' || tabType === 'unknown') {
+    // Webviews use codicons with standard color
+    if (tabType === 'webview') {
       return this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6');
     }
 
-    const fileName = this.resolveFileName(tab);
+    const fileName = this.resolveFileName(bay);
     if (!fileName) {
       return this.renderFallback(fileType);
     }
-
-    // Archivos de VS Code: comentado, ahora usan iconos del tema activo
-    // if (this.isVSCodeFile(fileName)) {
-    //   return this.renderCodicon('vscode', '#2196f3');
-    // }
 
     // Intentar resolver icono del tema
     const iconData = await this.resolveIconData(fileName);
@@ -50,43 +42,18 @@ export class IconRenderer {
   }
 
   /**
-   * Resuelve el nombre del archivo desde la tab.
+   * Resuelve el nombre del archivo desde la bay.
    */
-  private resolveFileName(tab: SideTab): string | null {
-    const { tabType, uri, label } = tab.metadata;
+  private resolveFileName(bay: Bay): string | null {
+    const { bayType: tabType, uri, label, parentId } = bay.metadata;
 
-    if (tabType === 'diff' && uri) {
+    // Variants have parentId set
+    if (parentId && uri) {
       return uri.path.split('/').pop() || label;
     }
 
     return label || null;
   }
-
-  /**
-   * Verifica si el archivo es relacionado con VS Code.
-   * Comentado: ahora todos los archivos usan iconos del tema activo
-   */
-  /*
-  private isVSCodeFile(fileName: string): boolean {
-    const lower = fileName.toLowerCase();
-
-    // Verificar extensiones exactas
-    for (const ext of VSCODE_FILE_EXTENSIONS) {
-      if (lower.endsWith(ext) || lower === ext) {
-        return true;
-      }
-    }
-
-    // Verificar patrones
-    for (const pattern of VSCODE_FILE_PATTERNS) {
-      if (lower.includes(pattern)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-  */
 
   /**
    * Resuelve los datos del icono desde el IconManager.
@@ -105,7 +72,7 @@ export class IconRenderer {
         return this.parseIconString(iconData);
       }
     } catch (error) {
-      console.warn(`[TabsLover] Icon resolution failed for ${fileName}:`, error);
+      Logger.error(`[Bays] Icon resolution failed for ${fileName}`, error);
     }
 
     return null;

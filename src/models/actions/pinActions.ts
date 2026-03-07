@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
-import type { SideTabMetadata, SideTabState } from '../SideTab';
+import type { BayMetadata, BayState } from '../Bay';
 
 /**
  * Pin/Unpin actions - Pinear y despinear tabs
  */
 
 export async function pin(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
   if (!state.capabilities.canPin) {
-    vscode.window.showWarningMessage('This tab cannot be pinned');
+    vscode.window.showWarningMessage('This bay cannot be pinned');
     return;
   }
   await activateFn();
@@ -20,12 +20,12 @@ export async function pin(
 }
 
 export async function unpin(
-  metadata: SideTabMetadata,
-  state: SideTabState,
+  metadata: BayMetadata,
+  state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
-  if (!state.capabilities.canUnpin) {
-    vscode.window.showWarningMessage('This tab is not pinned');
+  if (!state.isPinned) {
+    vscode.window.showWarningMessage('This bay is not pinned');
     return;
   }
   await activateFn();

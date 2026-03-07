@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 
 export const STYLE_CONSTANTS = {
-  // Tab dimensions
-  TAB_HEIGHT              : 40,
-  TAB_ICON_SIZE           : 16,
-  TAB_PADDING_LEFT        : 8,
-  TAB_PADDING_RIGHT       : 4,
+  // Bay dimensions
+  BAY_HEIGHT              : 40,
+  BAY_ICON_SIZE           : 16,
+  BAY_PADDING_LEFT        : 8,
+  BAY_PADDING_RIGHT       : 4,
   // Internal spacing
   ICON_TEXT_GAP           : 8,
   STATE_ICON_SIZE         : 14,
@@ -17,8 +17,8 @@ export const STYLE_CONSTANTS = {
   // Hover
   HOVER_ICON_SPACING      : 4,
   // Borders
-  TAB_TOP_BORDER_WIDTH    : 1,
-  TAB_BOTTOM_BORDER_WIDTH : 1,
+  BAY_TOP_BORDER_WIDTH    : 1,
+  BAY_BOTTOM_BORDER_WIDTH : 1,
   // Dirty indicator
   DIRTY_INDICATOR_SIZE    : 8,
   // VS Code codicons (for reference)
@@ -43,14 +43,14 @@ export const STYLE_CONSTANTS = {
     iconForeground                  : 'icon.foreground',
     editorWarningForeground         : 'editorWarning.foreground',
     buttonHoverBackground           : 'button.hoverBackground',
-    tabBorder                       : 'tab.border',
-    editorGroupHeaderTabsBorder     : 'editorGroupHeader.tabsBorder',
+    bayBorder                       : 'bay.border',
+    editorGroupHeaderBaysBorder     : 'editorGroupHeader.baysBorder',
     panelBorder                     : 'panel.border',
   },
 } as const;
 
-/** Configuration shape for tabsLover settings */
-export type TabsLoverConfiguration = {
+/** Configuration shape for bays settings */
+export type BaysConfiguration = {
   showFilePath       : boolean;
   compactMode        : boolean;
   iconSize           : number;
@@ -60,16 +60,16 @@ export type TabsLoverConfiguration = {
 };
 
 /**
- * Lee la configuración `tabsLover` del workspace y devuelve valores con los
+ * Lee la configuración `bays` del workspace y devuelve valores con los
  * valores por defecto ya aplicados.
  */
-export function getConfiguration(): TabsLoverConfiguration {
-  const config = vscode.workspace.getConfiguration('tabsLover');
+export function getConfiguration(): BaysConfiguration {
+  const config = vscode.workspace.getConfiguration('bays');
 
   return {
     showFilePath       : config.get('showFilePath'      ,true)                         ,
     compactMode        : config.get('compactMode'       ,false)                        ,
-    iconSize           : config.get('iconSize'          ,STYLE_CONSTANTS.TAB_ICON_SIZE),
+    iconSize           : config.get('iconSize'          ,STYLE_CONSTANTS.BAY_ICON_SIZE),
     enableHoverActions : config.get('enableHoverActions',true)                         ,
     showStateIcons     : config.get('showStateIcons'    ,true)                         ,
     enableDragDrop     : config.get('enableDragDrop'    ,true)                         ,
