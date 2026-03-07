@@ -9,7 +9,6 @@ type BayRowRenderOptions = {
   iconHtml: string;
   stateIndicator: StateIndicator;
   pinBadge: string;
-  versionBadge: string;
   fileActionBtn: string;
   chatBtn: string;
   closeBtn: string;
@@ -26,7 +25,6 @@ export class BayRowRenderer {
       iconHtml,
       stateIndicator,
       pinBadge,
-      versionBadge,
       fileActionBtn,
       chatBtn,
       closeBtn,
@@ -34,14 +32,15 @@ export class BayRowRenderer {
     } = options;
 
     if (compactMode) {
-      const pathSuffix = showPath && bay.metadata.detailLabel
-        ? `<span class="bay-path-inline">${esc(bay.metadata.detailLabel)}</span>`
+      const pathHtml = showPath && bay.metadata.detailLabel
+        ? `<span class="bay-path-inline" data-path-parts="${esc(JSON.stringify(bay.metadata.pathParts || []))}">${esc(bay.metadata.detailLabel)}</span>`
         : '';
 
       return `<div class="bay compact${activeClass}" data-bay-id="${esc(bay.metadata.id)}">
       <span class="bay-icon">${iconHtml}</span>
       <div class="bay-text">
-        <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}${versionBadge}${pathSuffix}</div>
+        <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}</div>
+        ${pathHtml}
       </div>
       ${stateIndicator.html}
       <span class="bay-actions">
@@ -51,13 +50,13 @@ export class BayRowRenderer {
     }
 
     const pathHtml = showPath && bay.metadata.detailLabel
-      ? `<div class="bay-path">${esc(bay.metadata.detailLabel)}</div>`
+      ? `<div class="bay-path" data-path-parts="${esc(JSON.stringify(bay.metadata.pathParts || []))}">${esc(bay.metadata.detailLabel)}</div>`
       : '';
 
     return `<div class="bay${activeClass}" data-bay-id="${esc(bay.metadata.id)}">
       <span class="bay-icon">${iconHtml}</span>
       <div class="bay-text">
-        <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}${versionBadge}</div>
+        <div class="bay-name${stateIndicator.nameClass}">${esc(bay.metadata.label)}${pinBadge}</div>
         ${pathHtml}
       </div>
       ${stateIndicator.html}

@@ -4,13 +4,15 @@ import { Bay                                 } from '../../../models/Bay';
 import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers                          } from '../../../models/BayHelpers';
 import type { GitSyncService                 } from '../../integration/GitSyncService';
-import { formatFilePath                      } from '../../../utils/pathFormatters';
+import { formatFilePathWithParts             } from '../../../utils/pathFormatters';
+import { Logger                              } from '../../../utils/logger';
 import { classifyDiffType, determineParentId } from './tabClassifier';
 
 type TabInputData = {
   uri?         : vscode.Uri;
   label        : string;
   description? : string;
+  pathParts?   : string[];
   tooltip      : string;
   fileType     : string;
   tabType      : BayType;
@@ -24,10 +26,12 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
 
   if (input instanceof vscode.TabInputText) {
     const uri = input.uri;
+    const pathData = formatFilePathWithParts(uri, { useWorkspaceRelative: true });
     return {
       uri,
       label       : path.basename(uri.fsPath),
-      description : formatFilePath(uri, { useWorkspaceRelative: true }),
+      description : pathData.formatted,
+      pathParts   : pathData.parts,
       tooltip     : uri.fsPath,
       fileType    : path.extname(uri.fsPath),
       tabType     : 'file',
@@ -40,10 +44,12 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
     const uri = modifiedUri;
 
     if (uri) {
+      const pathData = formatFilePathWithParts(uri, { useWorkspaceRelative: true });
       return {
         uri,
         label       : VSTab.label,
-        description : formatFilePath(uri, { useWorkspaceRelative: true }),
+        description : pathData.formatted,
+        pathParts   : pathData.parts,
         tooltip     : `${originalUri?.fsPath || '?'} ↔ ${uri.fsPath}`,
         fileType    : path.extname(uri.fsPath),
         tabType     : 'file',
@@ -78,10 +84,12 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
 
   if (input instanceof vscode.TabInputCustom) {
     const uri = input.uri;
+    const pathData = formatFilePathWithParts(uri, { useWorkspaceRelative: true });
     return {
       uri,
       label       : path.basename(uri.fsPath) || VSTab.label || 'Custom',
-      description : formatFilePath(uri, { useWorkspaceRelative: true }),
+      description : pathData.formatted,
+      pathParts   : pathData.parts,
       tooltip     : uri.fsPath,
       fileType    : path.extname(uri.fsPath),
       tabType     : 'custom',
@@ -91,10 +99,12 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
 
   if (input instanceof vscode.TabInputNotebook) {
     const uri = input.uri;
+    const pathData = formatFilePathWithParts(uri, { useWorkspaceRelative: true });
     return {
       uri,
       label       : path.basename(uri.fsPath),
-      description : formatFilePath(uri, { useWorkspaceRelative: true }),
+      description : pathData.formatted,
+      pathParts   : pathData.parts,
       tooltip     : uri.fsPath,
       fileType    : path.extname(uri.fsPath),
       tabType     : 'notebook',
@@ -114,6 +124,9 @@ function extractTabInputData(VSTab: vscode.Tab): TabInputData {
 /**
  * Convierte una tab nativa de VS Code a Bay.
  * Extrae metadata, calcula parentId para diffs, y construye el estado completo.
+ * 
+ * FILTRADO: Las tabs de Markdown Preview (viewType === 'markdown.preview') NO se convierten
+ * a Bays. Solo se rastrea su existencia para actualizar el viewMode de la bay source.
  */
 export function convertToBay(
   VSTab      : vscode.Tab,
@@ -121,7 +134,20 @@ export function convertToBay(
   index?     : number
 ): Bay | null {
   const inputData = extractTabInputData(VSTab);
-  const { uri, label, description, tooltip, fileType, tabType, viewType, originalUri, modifiedUri } = inputData;
+  const { uri, label, description, pathParts, tooltip, fileType, tabType, viewType, originalUri, modifiedUri } = inputData;
+  
+  // Filtrar tabs de Markdown Preview - NO crear Bay para ellas
+  // Se manejan como estado toggle (viewMode) en la bay source
+  if (viewType === 'markdown.preview') {
+    Logger.log(`[TabConverter] Filtering markdown preview tab: ${label}`);
+    return null;
+  }
+  
+  // También filtrar por label (fallback para casos donde viewType no está disponible)
+  if (tabType === 'webview' && label.startsWith('Preview ')) {
+    Logger.log(`[TabConverter] Filtering preview tab by label: ${label}`);
+    return null;
+  }
   const viewColumn = VSTab.group.viewColumn;
 
   let parentId  : string | undefined;
@@ -158,6 +184,7 @@ export function convertToBay(
     uri,
     label,
     detailLabel   : description,
+    pathParts,
     tooltipText   : tooltip,
     fileExtension : fileType,
     bayType       : tabType,

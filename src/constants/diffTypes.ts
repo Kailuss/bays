@@ -55,7 +55,7 @@ export type DiffTypeDisplayInfo = {
 export const DIFF_TYPE_DISPLAY: Record<DiffType, DiffTypeDisplayInfo> = {
   'working-tree':{
     // TODO: El Icono debería ser 'Workingtree' pero no FunctionBreakpoint.
-    icon     :'worktree',
+    icon     :'source-control',
     label    :'Working Tree',
     tooltip  :'Uncommitted changes in working tree',
     cssClass :'diff-working-tree',

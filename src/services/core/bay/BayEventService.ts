@@ -21,7 +21,8 @@ export class BayEventService {
     private gitSyncService: GitSyncService,
     private hierarchyService: BayHierarchyService,
     private bayHeadService: BayHeadService,
-    private activeStateService: ActiveStateService
+    private activeStateService: ActiveStateService,
+    private syncPreviewOwnership?: () => void
   ) {}
 
   /**
@@ -44,7 +45,14 @@ export class BayEventService {
 
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => {
+        // Sync active state first
         const { hasChanges } = this.activeStateService.syncActiveState();
+        
+        // Then sync preview ownership
+        if (this.syncPreviewOwnership) {
+          this.syncPreviewOwnership();
+        }
+        
         if (hasChanges) {
           this.stateService.notifyChange();
         }
@@ -133,7 +141,14 @@ export class BayEventService {
     }
 
     if (hasChanges) {
+      // First sync active state from native tabs
       const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
+      
+      // Then sync preview ownership (this can override isActive for preview owners)
+      if (this.syncPreviewOwnership) {
+        this.syncPreviewOwnership();
+      }
+      
       if (activeChanges || hasChanges) {
         this.stateService.notifyChange();
       }
@@ -144,7 +159,14 @@ export class BayEventService {
    * Maneja cambios en grupos de editores.
    */
   private handleGroupChanges(): void {
+    // Sync active state first
     const { hasChanges } = this.activeStateService.syncActiveState();
+    
+    // Then sync preview ownership (overrides active for preview owners)
+    if (this.syncPreviewOwnership) {
+      this.syncPreviewOwnership();
+    }
+    
     if (hasChanges) {
       this.stateService.notifyChange();
     }

@@ -12,5 +12,5 @@ body {
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
   overflow-x: hidden;
   user-select: none;
-  border-top: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--vscode-panel-border, rgba(128,128,128,0.35)));
+  border-top: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--vscode-panel-border, #010103));
 }

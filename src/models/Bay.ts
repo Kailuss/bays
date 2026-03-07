@@ -109,6 +109,7 @@ export type BayMetadata = {
   //: DISPLAY
   label         : string;        // Display name shown in the sidebar.
   detailLabel?  : string;        // Relative path (description line).
+  pathParts?    : string[];      // Path parts for dynamic truncation (e.g. ['src', 'services', 'core'])
   tooltipText?  : string;        // Tooltip text (can be enriched with size, date, etc.)
 
   //: VISUAL IDENTITY

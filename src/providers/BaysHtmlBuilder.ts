@@ -66,6 +66,7 @@ export class BaysHtmlBuilder {
       codiconCss: asUri(['dist', 'codicons', 'codicon.css']),
       webviewCss: asUri(['dist', 'styles', 'webview.css']),
       webviewScript: asUri(['dist', 'webview', 'webview.js']),
+      pathTruncationScript: asUri(['dist', 'webview', 'pathTruncation.js']),
       dragDropScript: enableDragDrop ? asUri(['dist', 'webview', 'dragdrop.js']) : null,
     };
   }
@@ -96,6 +97,7 @@ export class BaysHtmlBuilder {
 <body class="${bodyClass}">
   ${baysHtml || '<div class="empty">No open bays</div>'}
   <script nonce="${nonce}" src="${uris.webviewScript}"></script>
+  <script nonce="${nonce}" src="${uris.pathTruncationScript}"></script>
   ${uris.dragDropScript ? `<script nonce="${nonce}" src="${uris.dragDropScript}"></script>` : ''}
 </body>
 </html>`;
@@ -136,10 +138,24 @@ export class BaysHtmlBuilder {
     copilotReady: boolean,
     compactMode: boolean,
   ): Promise<string> {
+    // CRITICAL: Filter out markdown preview bays - they should NEVER be rendered
+    // Preview tabs are managed as viewMode state on source bays
+    const filteredBays = bays.filter(bay => {
+      // Filter by viewType (webview tabs)
+      if (bay.metadata.viewType === 'markdown.preview') {
+        return false;
+      }
+      // Filter by label pattern (fallback)
+      if (bay.metadata.bayType === 'webview' && bay.metadata.label.startsWith('Preview ')) {
+        return false;
+      }
+      return true;
+    });
+
     // Separate parent bays (no parentId) from variant bays (have parentId)
-    const parentBays = bays.filter(bay => !bay.metadata.parentId);
-    const variantBays = bays.filter(bay => bay.metadata.parentId);
-    
+    const parentBays = filteredBays.filter(bay => !bay.metadata.parentId);
+    const variantBays = filteredBays.filter(bay => bay.metadata.parentId);
+
     // Build a map of parentId -> children
     const childrenByParent = new Map<string, Bay[]>();
     for (const child of variantBays) {
@@ -149,7 +165,7 @@ export class BaysHtmlBuilder {
       }
       childrenByParent.get(parentId)!.push(child);
     }
-    
+
     // Sort parent bays: pinned first
     const sortedParents = [...parentBays].sort((a, b) => {
       if (a.state.isPinned && !b.state.isPinned) { return -1; }
@@ -180,7 +196,6 @@ export class BaysHtmlBuilder {
         rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
-    
     return rendered.join('');
   }
 
@@ -226,9 +241,6 @@ export class BaysHtmlBuilder {
     const pinBadge = bay.state.isPinned
       ? '<span class="pin-badge codicon codicon-pinned" title="Pinned"></span>'
       : '';
-    
-    // Version badge for parent bays with multiple versions
-    const versionBadge = this.renderVersionBadge(bay);
 
     const fileActionBtn = bay.state.capabilities.canTogglePreview
       ? this.renderFileActionButton(bay)
@@ -252,7 +264,6 @@ export class BaysHtmlBuilder {
       iconHtml,
       stateIndicator,
       pinBadge,
-      versionBadge,
       fileActionBtn,
       chatBtn,
       closeBtn,
@@ -271,54 +282,6 @@ export class BaysHtmlBuilder {
     if (!resolved) { return ''; }
 
     return `<button data-action="fileAction" data-bay-id="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
-  }
-  
-  /**
-   * Renderiza un badge con el número de versiones del documento.
-   * Solo se muestra para parent bays que tienen document model con versiones.
-   */
-  private renderVersionBadge(bay: Bay): string {
-    // Only show for parent bays (not children)
-    if (bay.metadata.parentId || !bay.metadata.uri || !this.documentManager) {
-      return '';
-    }
-    
-    const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
-    if (!document || document.versionCount === 0) {
-      return '';
-    }
-    
-    const stats = this.documentManager.getDocumentStats(document.documentId);
-    if (!stats) {
-      return '';
-    }
-    
-    // Build tooltip with version breakdown
-    const tooltipParts: string[] = [];
-    if (stats.workingTreeVersions > 0) {
-      tooltipParts.push(`${stats.workingTreeVersions} working tree`);
-    }
-    if (stats.stagedVersions > 0) {
-      tooltipParts.push(`${stats.stagedVersions} staged`);
-    }
-    if (stats.snapshots > 0) {
-      tooltipParts.push(`${stats.snapshots} snapshots`);
-    }
-    if (stats.aiEdits > 0) {
-      tooltipParts.push(`${stats.aiEdits} AI edits`);
-    }
-    if (stats.commits > 0) {
-      tooltipParts.push(`${stats.commits} commits`);
-    }
-    
-    const tooltip = tooltipParts.length > 0
-      ? `${stats.totalVersions} versions (${tooltipParts.join(', ')})`
-      : `${stats.totalVersions} versions`;
-    
-    return `<span class="version-badge" title="${this.esc(tooltip)}">
-      <span class="codicon codicon-versions"></span>
-      <span class="version-count">${stats.totalVersions}</span>
-    </span>`;
   }
 
   //= UTILIDADES

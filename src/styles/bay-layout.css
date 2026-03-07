@@ -7,10 +7,9 @@
   display: flex;
   align-items: center;
   height: 39px;
-  padding: 0 8px 0 4px;
+  padding: 0 8px 0 8px;
   background: var(--vscode-bay-inactiveBackground, transparent);
   color: var(--vscode-bay-inactiveForeground, var(--vscode-foreground));
-  border-left: 4px solid transparent;
   border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--vscode-panel-border, rgba(128,128,128,0.35)));
   cursor: pointer;
   position: relative;
@@ -24,9 +23,23 @@
 
 /* Text Layout */
 
-/* Inline path in compact mode (inside .bay-name) */
+/* Inline path in compact mode (now sibling of .bay-name) */
 .bay-path-inline {
-  opacity    : 0.55;
-  font-size  : 0.9em;
-  margin-left: 4px;
+  opacity: 0.55;
+  font-size: 11px;
+  margin-left: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+
+/* Compact mode text adjustment */
+.bay.compact .bay-text {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.bay.compact .bay-name {
+  flex-shrink: 0;
 }

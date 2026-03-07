@@ -11,6 +11,17 @@ const MARKDOWN_PREVIEW_PREFIX = 'Preview ';
 const MARKDOWN_PREVIEW_VIEWTYPE = 'markdown.preview';
 
 /**
+ * Extensiones de archivos que soportan preview en VS Code.
+ */
+const PREVIEWABLE_EXTENSIONS = [
+  '.md', '.mdx', '.markdown',      // Markdown
+  '.html', '.htm',                  // HTML
+  '.svg',                           // SVG
+  '.pdf',                           // PDF (si hay extensión)
+  '.ipynb',                         // Jupyter notebooks
+];
+
+/**
  * Utilidades auxiliares para interactuar con pestañas nativas de VS Code.
  * Separado de SideTabActions para mantener responsabilidades claras.
  */
@@ -50,6 +61,17 @@ export class BayHelpers {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Detecta si un archivo es previsualizable basándose en su extensión.
+   */
+  static isPreviewableFile(metadata: BayMetadata): boolean {
+    if (!metadata.uri || metadata.bayType !== 'file') {
+      return false;
+    }
+    const ext = metadata.fileExtension?.toLowerCase() || '';
+    return PREVIEWABLE_EXTENSIONS.includes(ext);
   }
 
   /**

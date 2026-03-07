@@ -269,6 +269,11 @@
           "type": "boolean",
           "default": false,
           "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
+        },
+        "bays.openPreviewableInPreview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open previewable files (Markdown, HTML, etc.) in preview mode when first opened."
         }
       }
     }

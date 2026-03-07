@@ -66,7 +66,8 @@ export class BaySyncService {
       this.gitSyncService,
       this.hierarchyService,
       this.bayHeadService,
-      this.activeStateService
+      this.activeStateService,
+      () => this.syncPreviewOwnership() // Pass callback to sync preview
     );
     
     // Inject services into state service to avoid circular dependencies
@@ -169,6 +170,9 @@ export class BaySyncService {
     
     // Recalculate hierarchy after sync complete
     this.hierarchyService.recalculateAllCounts();
+    
+    // Sync preview ownership after all bays are loaded
+    this.syncPreviewOwnership();
     
     Logger.log(`[BaySync] syncAll complete - ${allBays.length} tabs loaded`);
   }
@@ -332,6 +336,121 @@ export class BaySyncService {
    */
   getVersionIdForBay(bayId: string): string | undefined {
     return this.tabIdToVersionId.get(bayId);
+  }
+
+  /**
+   * Sincroniza el estado de preview ownership.
+   * 
+   * Busca tabs de Markdown Preview activas y actualiza el viewMode de sus bays source:
+   * - Si hay un preview activo → bay source: viewMode = 'preview', se marca como activa
+   * - Si el preview cambió de bay → bay anterior: viewMode = 'source'
+   * - Las tabs de preview nunca se renderizan como bay (filtradas en convertToBay)
+   * 
+   * Comportamiento de isActive:
+   * - Cuando se abre preview: source bay mantiene isActive = true
+   * - Cuando cambia a otra bay o preview desaparece: source bay solo será activa si su tab nativa lo es
+   * 
+   * Invariant: Solo 1 Bay puede tener viewMode: 'preview' globalmente.
+   */
+  syncPreviewOwnership(): void {
+    // Find all markdown preview tabs in VS Code
+    const allGroups = vscode.window.tabGroups.all;
+    let activePreviewTab: vscode.Tab | null = null;
+    
+    for (const group of allGroups) {
+      for (const tab of group.tabs) {
+        if (tab.input instanceof vscode.TabInputWebview) {
+          const viewType = tab.input.viewType;
+          if (viewType === 'markdown.preview' && tab.isActive) {
+            activePreviewTab = tab;
+            break;
+          }
+        }
+      }
+      if (activePreviewTab) {
+        break;
+      }
+    }
+
+    // Reset all bays that were in preview mode
+    for (const bay of this.stateService.getAllBays()) {
+      if (bay.state.viewMode === 'preview') {
+        bay.state.viewMode = 'source';
+        // Bay is no longer the preview owner, deactivate it
+        // unless its actual source tab is active
+        const nativeTab = this.findNativeTab(bay);
+        if (nativeTab) {
+          bay.state.isActive = nativeTab.isActive;
+        } else {
+          bay.state.isActive = false;
+        }
+      }
+    }
+
+    // If there's an active preview, find its source bay and mark it
+    if (activePreviewTab) {
+      // Extract filename from preview label: "Preview filename.md" → "filename.md"
+      const previewLabel = activePreviewTab.label;
+      const filenameMatch = previewLabel.match(/^Preview\s+(.+)$/);
+      
+      if (filenameMatch) {
+        const filename = filenameMatch[1];
+        
+        // Find bay with matching filename in the same group
+        const previewGroup = activePreviewTab.group;
+        const sourceBay = this.stateService.getAllBays().find(bay => 
+          bay.metadata.fileName === filename && 
+          bay.metadata.bayType === 'file' &&
+          bay.metadata.fileExtension.match(/\.mdx?|\.markdown/) &&
+          bay.state.viewColumn === previewGroup.viewColumn
+        );
+        
+        if (sourceBay) {
+          sourceBay.state.viewMode = 'preview';
+          // Source bay is the preview owner, mark it as active
+          // This keeps it visually active in the sidebar even though preview tab is displayed
+          sourceBay.state.isActive = true;
+          Logger.log(`[BaySync] Preview active for: ${sourceBay.metadata.label}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Encuentra la tab nativa de VS Code correspondiente a una bay.
+   * Usado internamente para verificar el estado real de la tab.
+   */
+  private findNativeTab(bay: Bay): vscode.Tab | null {
+    for (const group of vscode.window.tabGroups.all) {
+      if (group.viewColumn !== bay.state.viewColumn) {
+        continue;
+      }
+      
+      for (const tab of group.tabs) {
+        const input = tab.input;
+        
+        // Match by URI for file tabs
+        if (bay.metadata.uri && input) {
+          if (input instanceof vscode.TabInputText && input.uri.toString() === bay.metadata.uri.toString()) {
+            return tab;
+          }
+          if (input instanceof vscode.TabInputTextDiff && input.modified.toString() === bay.metadata.uri.toString()) {
+            return tab;
+          }
+          if (input instanceof vscode.TabInputCustom && input.uri.toString() === bay.metadata.uri.toString()) {
+            return tab;
+          }
+          if (input instanceof vscode.TabInputNotebook && input.uri.toString() === bay.metadata.uri.toString()) {
+            return tab;
+          }
+        }
+        // Match by label for webview tabs
+        else if (!bay.metadata.uri && tab.label === bay.metadata.label) {
+          return tab;
+        }
+      }
+    }
+    return null;
   }
 
   /**

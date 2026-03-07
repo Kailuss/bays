@@ -44,38 +44,9 @@
   font-size: 13px;
 }
 
-/* Version badge - shows number of document versions */
-.version-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 6px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.2));
-  color: var(--vscode-badge-foreground, currentColor);
-  font-size: 10px;
-  font-weight: 500;
-  opacity: 0.8;
-  transition: opacity 0.2s;
-}
-
-.version-badge:hover {
-  opacity: 1;
-}
-
-.version-badge .codicon {
-  font-size: 11px;
-  margin-right: 2px;
-}
-
-.version-count {
-  line-height: 1;
-}
-
 .bay-path {
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 11px;
   opacity: 0.64;
   margin-top: 1px;

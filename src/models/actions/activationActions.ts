@@ -23,13 +23,22 @@ async function activateWithRetry(
   const maxAttempts = 2;
 
   try {
-    // MARKDOWN PREVIEW MODE: Si viewMode está en preview, abrir el preview
+    // Determine if we should open in preview mode
+    const config = vscode.workspace.getConfiguration('bays');
+    const openPreviewableInPreview = config.get<boolean>('openPreviewableInPreview', true);
+    
+    // Auto-enable preview mode for previewable files if config is active
+    const shouldOpenInPreview = 
+      state.viewMode === 'preview' || 
+      (openPreviewableInPreview && BayHelpers.isPreviewableFile(metadata));
+
+    // MARKDOWN PREVIEW MODE: If should open in preview, open the preview
     if (
-      state.viewMode === 'preview' &&
+      shouldOpenInPreview &&
       metadata.uri &&
       MARKDOWN_EXTENSIONS.some((ext) => metadata.fileExtension.toLowerCase() === ext)
     ) {
-      Logger.log('[BayAction] Activating in viewMode=preview: ' + metadata.label);
+      Logger.log('[BayAction] Activating in preview mode: ' + metadata.label);
       await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, metadata.uri);
       return;
     }

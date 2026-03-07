@@ -7,8 +7,6 @@ import * as path from 'path';
 export interface PathFormatterOptions {
   /** Si true, muestra la ruta relativa al workspace; si false, muestra solo el directorio padre */
   useWorkspaceRelative?: boolean;
-  /** Número máximo de caracteres antes de truncar */
-  maxLength?: number;
   /** Si true, muestra el path completo (fsPath); si false, usa lógica relativa */
   useFullPath?: boolean;
   /** Separador personalizado (por defecto ' • ') */
@@ -47,27 +45,44 @@ export function formatFilePath(
   uri: vscode.Uri | undefined,
   options: PathFormatterOptions = {}
 ): string {
+  const result = formatFilePathWithParts(uri, options);
+  return result.formatted;
+}
+
+/**
+ * Similar a formatFilePath pero devuelve también las partes del path.
+ * Útil para truncado dinámico en el frontend (ver webview/pathTruncation.js).
+ * 
+ * @param uri - URI del archivo a formatear  
+ * @param options - Opciones de formateo
+ * @returns Objeto con path formateado y array de partes individuales
+ */
+export function formatFilePathWithParts(
+  uri: vscode.Uri | undefined,
+  options: PathFormatterOptions = {}
+): { formatted: string; parts: string[] } {
   if (!uri) {
-    return '';
+    return { formatted: '', parts: [] };
   }
 
   const {
     useWorkspaceRelative = true,
-    maxLength,
     useFullPath = false,
     separator = ' • ',
     includeFileName = false,
   } = options;
 
   let formattedPath: string;
+  let parts: string[] = [];
 
   if (useFullPath) {
     formattedPath = uri.fsPath;
+    parts = [uri.fsPath];
   } else if (useWorkspaceRelative) {
     // Ruta relativa al workspace
     const relativePath = vscode.workspace.asRelativePath(uri, false);
     // Normalizar separadores: asRelativePath usa '/' en todas las plataformas
-    let parts = relativePath.split('/');
+    parts = relativePath.split('/');
     
     // Si NO queremos el nombre del archivo, lo quitamos
     if (!includeFileName && parts.length > 0) {
@@ -79,7 +94,7 @@ export function formatFilePath(
     
     // Si no quedan directorios (archivo en root), no mostrar nada
     if (parts.length === 0) {
-      return '';
+      return { formatted: '', parts: [] };
     }
     
     // Construir la ruta: directorios separados por •
@@ -90,14 +105,10 @@ export function formatFilePath(
     const dirName  = path.dirname(fullPath);
     const baseName = path.basename(dirName);
     formattedPath  = baseName || dirName;
+    parts = [formattedPath];
   }
 
-  // Truncar si excede la longitud máxima
-  if (maxLength && formattedPath.length > maxLength) {
-    formattedPath = '...' + formattedPath.slice(-(maxLength - 3));
-  }
-
-  return formattedPath;
+  return { formatted: formattedPath, parts };
 }
 
 /**
