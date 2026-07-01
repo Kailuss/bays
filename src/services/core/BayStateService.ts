@@ -98,6 +98,18 @@ export class BayStateService {
   }
 
   /**
+   * Notifica un cambio ligero de solo estado activo (isActive).
+   * Dispara el emisor "silent" para que el provider haga una actualización
+   * parcial por postMessage (toggle de la clase .active) en lugar de
+   * reconstruir todo el HTML del webview.
+   */
+  notifyActiveChange(): void {
+    if (!this._isBulkLoading) {
+      this._onDidChangeStateSilent.fire();
+    }
+  }
+
+  /**
    * Inyecta el hierarchy service para evitar dependencia circular.
    * Llamado desde BaySyncService después de crear BayHierarchyService.
    */

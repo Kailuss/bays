@@ -5,6 +5,7 @@ import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { BayHeadService } from './BayHeadService';
 import { ActiveStateService } from './ActiveStateService';
+import type { Bay } from '../../../models/Bay';
 import { Logger } from '../../../utils/logger';
 
 /**
@@ -47,14 +48,15 @@ export class BayEventService {
       vscode.window.onDidChangeActiveTextEditor(() => {
         // Sync active state first
         const { hasChanges } = this.activeStateService.syncActiveState();
-        
+
         // Then sync preview ownership
         if (this.syncPreviewOwnership) {
           this.syncPreviewOwnership();
         }
-        
+
+        // Active-only change → partial update (toggle .active), no full rebuild
         if (hasChanges) {
-          this.stateService.notifyChange();
+          this.stateService.notifyActiveChange();
         }
       })
     );
@@ -82,6 +84,10 @@ export class BayEventService {
    */
   private async handleTabChanges(event: vscode.TabChangeEvent): Promise<void> {
     let hasChanges = false;
+    // Structural changes (open/close/pin/preview) need a full rebuild.
+    // Dirty-only changes can be patched in place via the state animation channel.
+    let structuralChange = false;
+    const dirtyChangedBays: Bay[] = [];
 
     for (const bay of event.opened) {
       const st = convertToBay(bay, this.gitSyncService);
@@ -110,6 +116,7 @@ export class BayEventService {
       }
 
       hasChanges = true;
+      structuralChange = true;
     }
 
     for (const bay of event.closed) {
@@ -130,6 +137,7 @@ export class BayEventService {
         Logger.log(`[BayEvent] Processing external close: ${existingBay.metadata.label} (ID: ${id}, parentId: ${existingBay.metadata.sourceBayId || 'none'}, hasChildren: ${existingBay.state.hasVariant})`);
         this.stateService.removeBay(id);
         hasChanges = true;
+        structuralChange = true;
       }
     }
 
@@ -139,40 +147,48 @@ export class BayEventService {
 
       const existingBay = this.stateService.getBayById(id);
       if (existingBay) {
-        let bayChanged = false;
-        
+        // isPreview/isPinned affect layout/order → structural (full rebuild)
         if (existingBay.state.isPreview !== bay.isPreview) {
           existingBay.state.isPreview = bay.isPreview;
-          bayChanged = true;
-        }
-        
-        if (existingBay.state.isPinned !== bay.isPinned) {
-          existingBay.state.isPinned = bay.isPinned;
-          bayChanged = true;
-        }
-        
-        if (existingBay.state.isDirty !== bay.isDirty) {
-          existingBay.state.isDirty = bay.isDirty;
-          bayChanged = true;
+          hasChanges = true;
+          structuralChange = true;
         }
 
-        if (bayChanged) {
+        if (existingBay.state.isPinned !== bay.isPinned) {
+          existingBay.state.isPinned = bay.isPinned;
           hasChanges = true;
+          structuralChange = true;
+        }
+
+        // isDirty is a purely visual per-bay change → patch in place
+        if (existingBay.state.isDirty !== bay.isDirty) {
+          existingBay.state.isDirty = bay.isDirty;
+          hasChanges = true;
+          dirtyChangedBays.push(existingBay);
         }
       }
     }
 
     if (hasChanges) {
-      // First sync active state from native tabs
+      // Sync active state from native tabs
       const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
-      
+
       // Then sync preview ownership (this can override isActive for preview owners)
       if (this.syncPreviewOwnership) {
         this.syncPreviewOwnership();
       }
-      
-      if (activeChanges || hasChanges) {
+
+      if (structuralChange) {
+        // Full rebuild also refreshes active highlight and dirty indicators
         this.stateService.notifyChange();
+      } else {
+        // Only lightweight changes → partial updates, no full DOM rebuild
+        for (const b of dirtyChangedBays) {
+          this.stateService.updateBayStateWithAnimation(b);
+        }
+        if (activeChanges) {
+          this.stateService.notifyActiveChange();
+        }
       }
     }
   }
@@ -183,14 +199,16 @@ export class BayEventService {
   private handleGroupChanges(): void {
     // Sync active state first
     const { hasChanges } = this.activeStateService.syncActiveState();
-    
+
     // Then sync preview ownership (overrides active for preview owners)
     if (this.syncPreviewOwnership) {
       this.syncPreviewOwnership();
     }
-    
+
+    // Group add/remove arrives as tab open/close (handled structurally in
+    // handleTabChanges); here only the active bay changed → partial update.
     if (hasChanges) {
-      this.stateService.notifyChange();
+      this.stateService.notifyActiveChange();
     }
   }
 

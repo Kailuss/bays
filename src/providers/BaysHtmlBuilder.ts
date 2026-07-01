@@ -15,7 +15,7 @@ import { Bay } from '../models/Bay';
 import { BayGroup } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
-import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris } from './html';
+import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris, PendingIcon, BuildHtmlResult } from './html';
 import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './renderers';
 
 export class BaysHtmlBuilder {
@@ -37,8 +37,12 @@ export class BaysHtmlBuilder {
 
   /**
    * Construye el HTML completo del webview.
+   *
+   * El render es SÍNCRONO: los iconos se resuelven solo desde caché para no
+   * bloquear el primer pintado. Los que fallan la caché se devuelven en
+   * `pendingIcons` para resolverse en paralelo y parchearse por postMessage.
    */
-  async buildHtml(options: BuildHtmlOptions): Promise<string> {
+  async buildHtml(options: BuildHtmlOptions): Promise<BuildHtmlResult> {
     const {
       webview,
       groups,
@@ -51,9 +55,18 @@ export class BaysHtmlBuilder {
 
     const uris = this.resolveResourceUris(webview, enableDragDrop);
     const nonce = this.generateNonce();
-    const baysHtml = await this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode);
+    const pendingIcons: PendingIcon[] = [];
+    const baysHtml = this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode, pendingIcons);
 
-    return this.assembleHtml(webview, uris, nonce, baysHtml, options.initialLoad);
+    const html = this.assembleHtml(webview, uris, nonce, baysHtml, options.initialLoad);
+    return { html, pendingIcons };
+  }
+
+  /**
+   * Resuelve el HTML de un icono por nombre de archivo (parche diferido).
+   */
+  resolveIconHtml(fileName: string, languageId?: string): Promise<string> {
+    return this.iconRenderer.renderByFileName(fileName, languageId);
   }
 
   //= RESOLUCIÓN DE RECURSOS
@@ -105,17 +118,18 @@ export class BaysHtmlBuilder {
 
   //= RENDERIZADO DE BAYS
 
-  private async renderAllBays(
+  private renderAllBays(
     groups: BayGroup[],
     getBaysInGroup: (groupId: number) => Bay[],
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
-  ): Promise<string> {
+    pendingIcons: PendingIcon[],
+  ): string {
     if (groups.length <= 1) {
       const groupId = groups[0]?.id;
       if (groupId !== undefined) {
-        return this.renderBayList(getBaysInGroup(groupId), showPath, copilotReady, compactMode);
+        return this.renderBayList(getBaysInGroup(groupId), showPath, copilotReady, compactMode, pendingIcons);
       }
       return '';
     }
@@ -123,7 +137,7 @@ export class BaysHtmlBuilder {
     let html = '';
     for (const group of groups) {
       html += this.renderGroupHeader(group);
-      html += await this.renderBayList(getBaysInGroup(group.id), showPath, copilotReady, compactMode);
+      html += this.renderBayList(getBaysInGroup(group.id), showPath, copilotReady, compactMode, pendingIcons);
     }
     return html;
   }
@@ -132,12 +146,13 @@ export class BaysHtmlBuilder {
     return GroupHeaderRenderer.render(group, this.esc);
   }
 
-  private async renderBayList(
+  private renderBayList(
     bays: Bay[],
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
-  ): Promise<string> {
+    pendingIcons: PendingIcon[],
+  ): string {
     // CRITICAL: Filter out markdown preview bays - they should NEVER be rendered
     // Preview tabs are managed as viewMode state on source bays
     const filteredBays = bays.filter(bay => {
@@ -181,7 +196,7 @@ export class BaysHtmlBuilder {
       const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
 
       let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
-      block += await this.renderBay(parent, showPath, copilotReady, compactMode);
+      block += this.renderBay(parent, showPath, copilotReady, compactMode, pendingIcons);
       for (const child of children) {
         block += this.renderVariantBay(child, parent);
       }
@@ -192,7 +207,7 @@ export class BaysHtmlBuilder {
     // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
     for (const child of variantBays) {
       if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
-        const orphanHtml = await this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode);
+        const orphanHtml = this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode, pendingIcons);
         rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
@@ -218,22 +233,24 @@ export class BaysHtmlBuilder {
    * Renders an orphan variant bay (diff whose parent file is not open).
    * Shown with full info since there's no parent context.
    */
-  private async renderOrphanVariantBay(
+  private renderOrphanVariantBay(
     bay: Bay,
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
-  ): Promise<string> {
+    pendingIcons: PendingIcon[],
+  ): string {
     // Render like a normal bay but with diff icon prefix
-    return this.renderBay(bay, showPath, copilotReady, compactMode);
+    return this.renderBay(bay, showPath, copilotReady, compactMode, pendingIcons);
   }
 
-  private async renderBay(
+  private renderBay(
     bay: Bay,
     showPath: boolean,
     copilotReady: boolean,
     compactMode: boolean,
-  ): Promise<string> {
+    pendingIcons: PendingIcon[],
+  ): string {
     // data-bay-id only — data-pinned and data-groupid live on the parent .bay-block
     const activeClass = bay.state.isActive ? ' active' : '';
     const stateIndicator = getStateIndicator(bay);
@@ -254,7 +271,10 @@ export class BaysHtmlBuilder {
       ? `<button data-action="closeBay" data-bay-id="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
       : '';
 
-    const iconHtml = await this.iconRenderer.render(bay);
+    const { html: iconHtml, pending } = this.iconRenderer.renderImmediate(bay);
+    if (pending) {
+      pendingIcons.push({ bayId: bay.metadata.id, fileName: pending.fileName, languageId: pending.languageId });
+    }
 
     return BayRowRenderer.render({
       bay,

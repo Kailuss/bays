@@ -136,16 +136,21 @@ function updateSiblingPositions(cloneCenter) {
 
 function commitDrop() {
   if (currentInsertIndex !== sourceIndex) {
-    let targetTabId, insertPosition;
+    let targetTabId, insertPosition, refEl, insertAfter;
     if (currentInsertIndex < originalOrder.length) {
-      targetTabId    = originalOrder[currentInsertIndex].el.dataset.bayId;
+      refEl          = originalOrder[currentInsertIndex].el;
+      targetTabId    = refEl.dataset.bayId;
       insertPosition = 'before';
+      insertAfter    = false;
     } else {
-      targetTabId    = originalOrder[originalOrder.length - 1].el.dataset.bayId;
+      refEl          = originalOrder[originalOrder.length - 1].el;
+      targetTabId    = refEl.dataset.bayId;
       insertPosition = 'after';
+      insertAfter    = true;
     }
 
-    // Enviar mensaje primero para que el rebuild del HTML empiece ya
+    // El host actualiza el modelo en silencio (sin rebuild). El movimiento
+    // visual lo confirma el propio cliente al terminar la animación.
     vscode.postMessage({
       type           : 'dropBay',
       sourceBayId    : sourceEl.dataset.bayId,
@@ -155,12 +160,17 @@ function commitDrop() {
       targetGroupId  : parseInt(tabGroupId, 10),
     });
 
-    // Animar el clon hasta su slot como puente visual mientras llega el rebuild
+    // Animar el clon hasta su slot como puente visual
     const finalDy = (currentInsertIndex - sourceIndex) * blockHeight;
     cloneEl.style.transition = 'transform 150ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 150ms ease-out';
     cloneEl.style.transform  = 'translateY(' + finalDy + 'px)';
     cloneEl.style.opacity    = '0';
-    setTimeout(() => teardown(), 160);
+
+    const movedSrc = sourceEl, movedRef = refEl, movedAfter = insertAfter;
+    setTimeout(() => {
+      commitDomMove(movedSrc, movedRef, movedAfter);
+      teardown();
+    }, 160);
 
   } else {
     // Sin cambio de posición — fade-out en sitio
@@ -168,6 +178,17 @@ function commitDrop() {
     cloneEl.style.transform  = 'translateY(0)';
     cloneEl.style.opacity    = '0';
     setTimeout(() => teardown(), 160);
+  }
+}
+
+// Mueve físicamente el bloque arrastrado a su nueva posición en el DOM,
+// de modo que el orden sea correcto sin reconstruir todo el HTML.
+function commitDomMove(src, ref, after) {
+  if (!src || !ref || src === ref || !ref.parentNode) { return; }
+  if (after) {
+    ref.parentNode.insertBefore(src, ref.nextSibling);
+  } else {
+    ref.parentNode.insertBefore(src, ref);
   }
 }
 

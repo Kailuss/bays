@@ -236,7 +236,11 @@ export class BayIconManager {
         ? fileNameLower.substring(firstDotIndex + 1)
         : '';
 
-      const cacheKey = `${fileNameLower}|${languageId || ''}`;
+      // Key the cache purely on the (lowercased) file name so that the
+      // background preload and the render-path lookup always agree. languageId
+      // still refines resolution below, but must NOT be part of the key or the
+      // preloaded entry would never be read back (cold reads on every paint).
+      const cacheKey = fileNameLower;
 
       // Check path cache
       let iconPath = this._iconPathCache.get(cacheKey);
@@ -455,8 +459,10 @@ export class BayIconManager {
                 }
               }
 
-              const cacheKey = `${fileName}|${languageId || ''}`;
+              const cacheKey = fileName.toLowerCase();
               if (!this._iconCache.has(cacheKey) || forceRefresh) {
+                // getFileIconAsBase64 already caches under the same key; the
+                // explicit set is a harmless belt-and-suspenders.
                 const iconBase64 = await this.getFileIconAsBase64(fileName, context, languageId);
                 if (iconBase64) {
                   this._iconCache.set(cacheKey, iconBase64);
@@ -482,10 +488,9 @@ export class BayIconManager {
     }
   }
 
-  /** Retrieve an icon from the in-memory cache. */
-  public getCachedIcon(fileName: string, languageId?: string): string | undefined {
-    const cacheKey = `${fileName.toLowerCase()}|${languageId || ''}`;
-    return this._iconCache.get(cacheKey);
+  /** Retrieve an icon from the in-memory cache (keyed by lowercased file name). */
+  public getCachedIcon(fileName: string): string | undefined {
+    return this._iconCache.get(fileName.toLowerCase());
   }
 
   /** Clear all icon caches. */

@@ -63,6 +63,19 @@ export type SvgIcon = {
 /** Unión de todos los tipos de icono */
 export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon;
 
+/** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
+export type PendingIcon = {
+  bayId: string;
+  fileName: string;
+  languageId?: string;
+};
+
+/** Resultado de construir el HTML: markup + iconos a resolver en paralelo después */
+export type BuildHtmlResult = {
+  html: string;
+  pendingIcons: PendingIcon[];
+};
+
 //= URIS DE RECURSOS
 
 /** URIs de recursos para el webview */

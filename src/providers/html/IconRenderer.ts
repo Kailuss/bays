@@ -17,28 +17,53 @@ export class IconRenderer {
   ) {}
 
   /**
-   * Genera el HTML del icono para una bay.
+   * Render inmediato y SÍNCRONO para el primer pintado: usa solo la caché.
+   * Si el icono está cacheado, lo devuelve resuelto; si no, devuelve un
+   * placeholder y marca la bay como pendiente para resolverla en paralelo
+   * después (ver BaysHtmlBuilder.pendingIcons / provider.patchIcons).
    */
-  async render(bay: Bay): Promise<string> {
-    const { bayType: tabType, viewType, label, uri, fileExtension: fileType } = bay.metadata;
+  renderImmediate(bay: Bay): { html: string; pending: { fileName: string; languageId?: string } | null } {
+    const { bayType: tabType, viewType, label, fileExtension: fileType } = bay.metadata;
 
-    // Webviews use codicons with standard color
     if (tabType === 'webview') {
-      return this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6');
+      return { html: this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6'), pending: null };
     }
 
     const fileName = this.resolveFileName(bay);
     if (!fileName) {
-      return this.renderFallback(fileType);
+      return { html: this.renderFallback(fileType), pending: null };
     }
 
-    // Intentar resolver icono del tema
-    const iconData = await this.resolveIconData(fileName);
-    if (iconData) {
-      return this.renderIconData(iconData);
+    const cached = this.iconManager.getCachedIcon(fileName);
+    if (cached) {
+      return { html: this.renderIconData(this.parseIconString(cached)), pending: null };
     }
 
-    return this.renderFallback(fileType);
+    // Cache miss → placeholder ahora, resolución diferida en paralelo
+    return {
+      html: this.renderFallback(fileType),
+      pending: { fileName, languageId: bay.metadata.languageId },
+    };
+  }
+
+  /**
+   * Resolución asíncrona de un icono por nombre de archivo, para el parche
+   * diferido tras el primer pintado. Devuelve el HTML del icono ya resuelto.
+   */
+  async renderByFileName(fileName: string, languageId?: string): Promise<string> {
+    try {
+      const cached = this.iconManager.getCachedIcon(fileName);
+      if (cached) {
+        return this.renderIconData(this.parseIconString(cached));
+      }
+      const data = await this.iconManager.getFileIconAsBase64(fileName, this.context, languageId);
+      if (data) {
+        return this.renderIconData(this.parseIconString(data));
+      }
+    } catch (error) {
+      Logger.error(`[Bays] Deferred icon resolution failed for ${fileName}`, error);
+    }
+    return this.renderFallback();
   }
 
   /**
@@ -53,29 +78,6 @@ export class IconRenderer {
     }
 
     return label || null;
-  }
-
-  /**
-   * Resuelve los datos del icono desde el IconManager.
-   */
-  private async resolveIconData(fileName: string): Promise<IconData | null> {
-    try {
-      // Primero intentar caché
-      const cached = this.iconManager.getCachedIcon(fileName);
-      if (cached) {
-        return this.parseIconString(cached);
-      }
-
-      // Luego resolver desde el tema
-      const iconData = await this.iconManager.getFileIconAsBase64(fileName, this.context);
-      if (iconData) {
-        return this.parseIconString(iconData);
-      }
-    } catch (error) {
-      Logger.error(`[Bays] Icon resolution failed for ${fileName}`, error);
-    }
-
-    return null;
   }
 
   /**

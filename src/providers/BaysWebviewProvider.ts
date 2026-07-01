@@ -12,6 +12,7 @@ import { BayDragDropService }   from '../services/ui/BayDragDropService';
 import { FileActionRegistry }   from '../services/registry/FileActionRegistry';
 import { Logger }               from '../utils/logger';
 import { BaysHtmlBuilder }      from './BaysHtmlBuilder';
+import type { PendingIcon }     from './html';
 import { BayContextMenu }       from './BayContextMenu';
 
 type BaySyncLike = {
@@ -104,7 +105,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       
       Logger.log('[Bays] Building HTML, groups: ' + groups.length);
 
-      const html = await this.htmlBuilder.buildHtml({
+      const { html, pendingIcons } = await this.htmlBuilder.buildHtml({
         webview        : this._view.webview,
         groups,
         getBaysInGroup : (groupId) => this.stateService.getBaysByGroupId(groupId),
@@ -115,13 +116,17 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
         enableDragDrop : config.enableDragDrop,
         initialLoad    : !this._initialLoadComplete,
       });
-      
+
       this._view.webview.html = html;
       this._initialLoadComplete = true;
 
       // Also update the native VS Code panel title
       this._view.title = this.getWorkspaceName();
-      
+
+      // Resolve icons that missed the cache in parallel and patch them in
+      // (first paint isn't blocked on disk I/O — rows render with a placeholder)
+      void this.patchIcons(pendingIcons);
+
       Logger.log('[Bays] HTML assigned to webview');
       
       // Debug: Verify data-bay-id attributes exist
@@ -153,6 +158,28 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       type: 'updateActiveBay',
       activeBayIds,
     });
+  }
+
+  /**
+   * Resuelve en paralelo los iconos que fallaron la caché durante el render
+   * síncrono y los envía al webview para parchear cada `.bay-icon` en su sitio.
+   * Así el primer pintado no se bloquea esperando I/O de disco por cada bay.
+   */
+  private async patchIcons(pending: PendingIcon[]): Promise<void> {
+    if (!this._view || pending.length === 0) { return; }
+
+    const view = this._view;
+    const icons = await Promise.all(
+      pending.map(async (p) => ({
+        bayId: p.bayId,
+        html : await this.htmlBuilder.resolveIconHtml(p.fileName, p.languageId),
+      })),
+    );
+
+    // Bail out if a full rebuild replaced the view/DOM while we were resolving
+    if (this._view !== view || this._fullRefreshPending) { return; }
+
+    view.webview.postMessage({ type: 'updateIcons', icons });
   }
 
   /**
@@ -413,7 +440,10 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private async handleDropBay(msg: any): Promise<void> {
     const { sourceBayId, targetBayId, insertPosition, sourceGroupId, targetGroupId } = msg;
     if (sourceGroupId === targetGroupId) {
-      this.dragDropService.reorderWithinGroup(sourceBayId, targetBayId, insertPosition);
+      // The webview already committed the DOM move; only reconcile the model.
+      // If the reorder was rejected, refresh to restore the authoritative order.
+      const ok = this.dragDropService.reorderWithinGroup(sourceBayId, targetBayId, insertPosition);
+      if (!ok) { this.refresh(); }
       return;
     }
 

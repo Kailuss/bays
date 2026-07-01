@@ -87,9 +87,10 @@ export class BayDragDropService {
       bay.state.indexInGroup = idx;
     });
 
-    // Notify change
-    this.stateService.updateBay(sourceBay);
-
+    // No UI notification here: the webview commits the DOM move client-side as
+    // part of the drop animation, so firing a full rebuild would only fight it.
+    // The in-memory order is already updated above. If this reorder is rejected
+    // (returns false), the caller refreshes to restore the authoritative order.
     return true;
   }
 

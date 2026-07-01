@@ -5,6 +5,29 @@
 const vscode = acquireVsCodeApi();
 console.log('[webview.js] Script loaded');
 
+// Preserve scroll across full HTML rebuilds. Reassigning webview.html reloads
+// the document (scroll resets to 0), but vscode.getState()/setState() persist
+// across reloads within the webview's lifetime, so we restore from there.
+(function restoreScroll() {
+  const st = vscode.getState();
+  if (st && typeof st.scrollY === 'number' && st.scrollY > 0) {
+    const y = st.scrollY;
+    // Restore after layout so the target offset exists
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  }
+})();
+
+let scrollSaveTimer = null;
+window.addEventListener('scroll', () => {
+  if (scrollSaveTimer) { return; }
+  scrollSaveTimer = setTimeout(() => {
+    scrollSaveTimer = null;
+    const st = vscode.getState() || {};
+    st.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    vscode.setState(st);
+  }, 100);
+}, { passive: true });
+
 // Fade in body after initial render (solo si no tiene la clase loaded)
 if (!document.body.classList.contains('loaded')) {
   if (document.readyState === 'loading') {
@@ -124,6 +147,17 @@ window.addEventListener('message', e => {
     document.querySelectorAll('.bay').forEach(t => {
       t.classList.toggle('active', activeSet.has(t.dataset.bayId));
     });
+  }
+
+  if (msg.type === 'updateIcons') {
+    // Deferred icons resolved by the host — swap each placeholder in place
+    for (const it of msg.icons) {
+      const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(it.bayId)}"]`);
+      if (bay) {
+        const iconEl = bay.querySelector('.bay-icon');
+        if (iconEl) { iconEl.innerHTML = it.html; }
+      }
+    }
   }
 
   if (msg.type === 'bayStateChanged') {
