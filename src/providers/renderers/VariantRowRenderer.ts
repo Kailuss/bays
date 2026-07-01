@@ -28,7 +28,7 @@ export class VariantRowRenderer {
 
     return `<div class="bay variant${activeClass}${diffTypeClass}" data-bay-id="${esc(bay.metadata.id)}" data-parentid="${parentId}">
       <span class="bay-icon">${iconHtml}</span>
-      <span class="variant-label">${labelHtml}</span>
+      <span class="child-type-label">${labelHtml}</span>
       ${statsHtml}
       <span class="bay-actions">${closeBtn}</span>
     </div>`;
@@ -42,16 +42,16 @@ export class VariantRowRenderer {
     const { linesAdded, linesRemoved, timestamp, conflictSections } = diffStats;
 
     if (linesAdded !== undefined && linesRemoved !== undefined) {
-      return `<span class="variant-stats" title="${linesAdded} lines added, ${linesRemoved} lines removed"><span class="stats-added">+${linesAdded}</span><span class="stats-removed">-${linesRemoved}</span></span>`;
+      return `<span class="child-stats" title="${linesAdded} lines added, ${linesRemoved} lines removed"><span class="stats-added">+${linesAdded}</span><span class="stats-removed">-${linesRemoved}</span></span>`;
     }
 
     if (timestamp) {
       const relativeTime = this.formatRelativeTime(timestamp);
-      return `<span class="variant-stats" title="${new Date(timestamp).toLocaleString()}">${relativeTime}</span>`;
+      return `<span class="child-stats" title="${new Date(timestamp).toLocaleString()}">${relativeTime}</span>`;
     }
 
     if (conflictSections) {
-      return `<span class="variant-stats conflict" title="${conflictSections} conflict sections">${conflictSections} conflicts</span>`;
+      return `<span class="child-stats conflict" title="${conflictSections} conflict sections">${conflictSections} conflicts</span>`;
     }
 
     return '';

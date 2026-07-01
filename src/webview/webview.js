@@ -119,14 +119,14 @@ document.addEventListener('contextmenu', e => {
 window.addEventListener('message', e => {
   const msg = e.data;
 
-  if (msg.type === 'updateActiveTab') {
-    const activeSet = new Set(msg.activeTabIds);
+  if (msg.type === 'updateActiveBay') {
+    const activeSet = new Set(msg.activeBayIds);
     document.querySelectorAll('.bay').forEach(t => {
       t.classList.toggle('active', activeSet.has(t.dataset.bayId));
     });
   }
 
-  if (msg.type === 'tabStateChanged') {
+  if (msg.type === 'bayStateChanged') {
     // Use attribute selector with proper escaping for special characters in IDs
     const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(msg.bayId)}"]`);
     if (bay && !bay.classList.contains('closing')) {
