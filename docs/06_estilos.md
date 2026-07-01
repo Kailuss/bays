@@ -1,467 +1,147 @@
-# Guía de Estilos - Bays
+# 6. Guía de Estilos
 
-## Índice
-1. [Arquitectura de Estilos](#arquitectura-de-estilos)
-2. [Normal Tabs vs Child Tabs](#normal-tabs-vs-child-tabs)
-3. [Sistema de Iconos](#sistema-de-iconos)
-4. [Sistema de Hover](#sistema-de-hover)
-5. [Botones de Acción](#botones-de-acción)
-6. [Guía de Modificación](#guía-de-modificación)
+[📄 Índice](INDEX.md) | [🏁 Introducción](01_introduccion.md) | [🏗️ Arquitectura](02_arquitectura.md) | [🤖 Agentes](05_agentes.md)
 
 ---
 
-## Arquitectura de Estilos
-
-Los estilos están organizados en módulos especializados ubicados en `src/styles/`:
+## Archivos CSS
 
 ```
 src/styles/
-├── webview.css           # Punto de entrada, imports y documentación
+├── webview.css           # Punto de entrada + imports
 ├── base.css              # Reset, variables CSS, estilos globales
-├── group-header.css      # Encabezados de grupos de tabs
-├── tab-layout.css        # Layout base + iconos de TABS NORMALES
-├── child-tabs.css        # Todo lo relacionado con CHILD TABS
-├── tab-states.css        # Estados interactivos (active, hover, drag)
-├── tab-animations.css    # Transiciones y animaciones
-├── tab-content.css       # Contenido de texto (labels, paths)
-├── tab-file-states.css   # Estados de archivos (git, dirty, etc.)
-├── tab-actions.css       # Botones de acción de TABS NORMALES
+├── group-header.css      # Cabeceras de grupos de tabs
+├── bay-layout.css        # Layout de BAYS NORMALES (altura, padding, flex)
+├── bay-content.css       # Texto: label, path, truncation
+├── bay-states.css        # Estados interactivos (active, hover, drag)
+├── bay-animations.css    # Transiciones y animaciones
+├── bay-file-states.css   # Estados de archivo (git, dirty, diagnostics)
+├── bay-actions.css       # Botones de acción de BAYS NORMALES
+├── variants.css          # Todo lo de VARIANTS (layout + iconos + acciones)
 └── utilities.css         # Clases utilitarias
 ```
 
-### Principio de Separación
+### Separación crítica
 
-**CRÍTICO**: Normal tabs y child tabs tienen sistemas de estilos completamente separados.
+**Normal bays** y **variants** tienen sistemas de estilos **completamente separados**.
 
-- **Normal tabs**: Estilos en `tab-layout.css` + `tab-actions.css`
-- **Child tabs**: TODO en `child-tabs.css` (layout, iconos, acciones)
+- Bays normales: `bay-layout.css` + `bay-actions.css`
+- Variants: todo en `variants.css`
 
-**No usar selectores genéricos que afecten ambos tipos**. Siempre especificar:
-- `.tab:not(.child-tab)` para tabs normales
-- `.tab.child-tab` para child tabs
+**NO usar selectores genéricos que afecten ambos**. Especificar siempre:
+- `.bay:not(.variant)` para bays normales
+- `.bay.variant` para variants
 
 ---
 
-## Normal Tabs vs Child Tabs
+## Estructura HTML
 
-### Comparación Visual
-
-| Propiedad | Normal Tabs | Child Tabs |
-|-----------|-------------|------------|
-| **Altura** | 39px (29px compact) | 20px |
-| **Padding** | `0 8px 0 0` | `0 12px 0 32px` |
-| **Iconos** | 22×22px, fontSize 16px | 14×14px, fontSize 13px |
-| **Iconos img** | 18×18px | 14×14px |
-| **Botones** | 20×20px, fontSize 13px | 16×16px, fontSize 11px |
-| **Botones img** | 14×14px | 12×12px |
-| **Gap botones** | 4px | 2px |
-| **Border-left** | 5px (transparente) | 3px (coloreado) |
-| **Hover fondo** | No cambia | `rgba(128,128,128,0.12)` |
-| **Margin iconos** | `0 8px 0 0` | `0 6px 0 0` |
-
-### Normal Tab Structure
+### Bay normal
 
 ```html
-<div class="tab" data-tabid="..." data-pinned="..." data-groupid="...">
-  <span class="tab-icon">🔵</span>
-  <div class="tab-text">
-    <div class="tab-name">index.ts</div>
-    <div class="tab-path">src/</div>
-  </div>
-  <span class="tab-state state-modified">M</span>
-  <span class="tab-actions">
-    <button data-action="...">▶</button>
-    <button data-action="closeTab">×</button>
-  </span>
-</div>
-```
-
-### Child Tab Structure
-
-```html
-<div class="tab child-tab" data-tabid="..." data-parentid="..." data-groupid="...">
-  <span class="tab-icon">📊</span>
-  <div class="child-label">
-    <span class="child-name">Working Tree</span>
-    <span class="child-stats">
-      <span class="stats-added">+12</span>
-      <span class="stats-removed">-5</span>
+<div class="bay-block">
+  <div class="bay [active] [pinned] [dirty] [compact]"
+       data-bayid="..."
+       data-pinned="true|false"
+       data-groupid="1">
+    <span class="bay-icon">
+      <img src="...base64..." />   <!-- o codicon -->
+    </span>
+    <div class="bay-text">
+      <div class="bay-name">index.ts</div>
+      <div class="bay-path">src/services/</div>
+    </div>
+    <span class="bay-state">M</span>   <!-- git / dirty badge -->
+    <span class="bay-actions">
+      <button data-action="pinBay">...</button>
+      <button data-action="closeBay">×</button>
     </span>
   </div>
-  <span class="state-indicator-error">⚠</span>
-  <span class="tab-actions">
-    <button data-action="closeTab">×</button>
+
+  <!-- Variants (si las hay) -->
+  <div class="bay variant [active] diff-working-tree" data-bayid="...">
+    ...
+  </div>
+</div>
+```
+
+### Variant (child bay / diff)
+
+```html
+<div class="bay variant [active] [diff-working-tree|diff-staged|diff-snapshot|diff-commit|diff-edit|diff-conflict]"
+     data-bayid="...">
+  <span class="bay-icon"><i class="codicon codicon-diff"></i></span>
+  <div class="bay-text">
+    <div class="bay-name">Working Tree</div>
+  </div>
+  <span class="bay-actions">
+    <button data-action="closeBay">×</button>
   </span>
 </div>
 ```
 
 ---
 
-## Sistema de Iconos
+## Comparativa Normal vs Variant
 
-### Normal Tabs
-
-**Archivo**: `tab-layout.css`
-
-```css
-.tab:not(.child-tab) .tab-icon {
-  width: 22px;
-  min-width: 22px;
-  height: 22px;
-  margin: 0 8px 0 0;
-  opacity: 0.9;
-}
-
-/* CRÍTICO: Selector específico para codicon con !important */
-.tab:not(.child-tab) .tab-icon .codicon[class*='codicon-'] {
-  font-size: 16px !important;
-}
-
-.tab:not(.child-tab) .tab-icon img {
-  width: 18px;
-  height: 18px;
-}
-```
-
-**Uso**:
-- Iconos codicon: `<span class="codicon codicon-file"></span>`
-- Iconos base64: `<img src="data:image/png;base64,..." />`
-- Renderizado por `IconRenderer.render()`
-
-### Child Tabs
-
-**Archivo**: `child-tabs.css`
-
-```css
-.tab.child-tab .tab-icon {
-  width: 14px;
-  min-width: 14px;
-  height: 14px;
-  margin: 0 6px 0 0;
-  opacity: 0.75;
-}
-
-/* CRÍTICO: Selector específico para codicon con !important */
-.tab.child-tab .tab-icon .codicon[class*='codicon-'] {
-  font-size: 13px !important;
-}
-
-.tab.child-tab .tab-icon img {
-  width: 14px;
-  height: 14px;
-}
-```
-
-**Tipos de iconos child**:
-- `codicon-diff`: Diff genérico
-- `codicon-source-control`: Working tree
-- `codicon-git-stage`: Staged
-- `codicon-history`: Snapshot
-- `codicon-git-merge`: Merge conflict
-- `codicon-arrow-down`: Incoming
-- `codicon-arrow-right`: Current
-
-**Renderizado**: `BaysHtmlBuilder.renderChildTab()`
+| Propiedad | Bay normal | Variant |
+|-----------|------------|---------|
+| **Altura** | 39px (29px compact) | 22px |
+| **CSS class** | `.bay` | `.bay.variant` |
+| **Padding** | `0 8px` | `padding-left: 36px` |
+| **Icono (codicon)** | 16px | 12px |
+| **Icono (img)** | 18×18px | 14×14px |
+| **Fondo** | `transparent` | `#0003` |
+| **Fondo active** | `vscode-list-activeSelectionBackground` | igual + `border-left: 4px` |
+| **Contenedor** | `.bay-block` (wrapper) | dentro del mismo `.bay-block` |
 
 ---
 
-## Sistema de Hover
-
-### Normal Tabs
-
-**NO** cambian fondo en hover (como las tabs nativas de VS Code).
+## Variables CSS importantes
 
 ```css
-.tab:not(.child-tab):hover {
-  /* Solo cambia opacidad de iconos, NO fondo */
-}
+/* Definidas en :root (base.css) */
+--vscode-bay-inactiveBackground
+--vscode-bay-inactiveForeground
+--vscode-bay-activeBackground
+--vscode-bay-activeForeground
 
-.tab:not(.child-tab):hover .tab-icon {
-  opacity: 1;
-}
-
-.tab:not(.child-tab):hover .tab-state {
-  display: none;  /* Ocultar estado */
-}
-
-.tab:not(.child-tab):hover .tab-actions {
-  display: flex;  /* Mostrar botones */
-}
-```
-
-### Child Tabs
-
-**SÍ** cambian fondo en hover (indican interactividad).
-
-```css
-.tab.child-tab:hover {
-  opacity: 1;
-  background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.12));
-  border-left-color: var(--vscode-list-hoverForeground, #e2c08d);
-}
-
-.tab.child-tab:hover .tab-icon {
-  opacity: 0.9;
-}
-
-.tab.child-tab:hover .child-stats {
-  display: none;  /* Ocultar stats */
-}
-
-.tab.child-tab:hover .tab-actions {
-  display: flex;  /* Mostrar botones */
-}
-```
-
-**Transiciones**:
-- Normal tabs: 200ms cubic-bezier (drag & drop)
-- Child tabs: 120ms ease (más rápido)
-
----
-
-## Botones de Acción
-
-### Normal Tabs
-
-**Archivo**: `tab-actions.css`
-
-**Dimensiones**:
-```css
-.tab:not(.child-tab) .tab-actions button {
-  width: 20px;
-  height: 20px;
-  font-size: 13px;  /* Codicons */
-  gap: 4px;         /* Entre botones */
-}
-
-.tab:not(.child-tab) .tab-actions button img {
-  width: 14px;      /* Iconos de imagen */
-  height: 14px;
-}
-```
-
-**Hover**:
-```css
-.tab:not(.child-tab) .tab-actions button:hover {
-  opacity: 1;
-  background: var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.31));
-  transform: scale(1.08);
-}
-```
-
-**Tipos**:
-- `data-action="fileAction"`: Acción personalizada por tipo de archivo
-- `data-action="addToChat"`: Agregar a Copilot Chat
-- `data-action="closeTab"`: Cerrar tab
-
-### Child Tabs
-
-**Archivo**: `child-tabs.css`
-
-**Dimensiones**:
-```css
-.tab.child-tab .tab-actions button {
-  width: 16px;
-  height: 16px;
-  font-size: 11px;
-  gap: 2px;
-}
-
-.tab.child-tab .tab-actions button img {
-  width: 12px;
-  height: 12px;
-}
-```
-
-**Hover**:
-```css
-.tab.child-tab .tab-actions button:hover {
-  opacity: 1;
-  background: var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.2));
-  transform: scale(1.05);  /* Menos zoom que normal tabs */
-}
-```
-
-**Tipos**:
-- `data-action="closeTab"`: Cerrar diff (único botón disponible)
-
----
-
-## Guía de Modificación
-
-### Cambiar Tamaño de Iconos
-
-**Normal tabs**:
-```css
-/* En tab-layout.css */
-.tab:not(.child-tab) .tab-icon {
-  width: 24px;        /* Cambiar aquí */
-  min-width: 24px;
-  height: 24px;
-}
-
-.tab:not(.child-tab) .tab-icon .codicon[class*='codicon-'] {
-  font-size: 18px !important;  /* Codicons escalan proporcional */
-}
-```
-
-**Child tabs**:
-```css
-/* En child-tabs.css */
-.tab.child-tab .tab-icon {
-  width: 18px;        /* Cambiar aquí */
-  min-width: 18px;
-  height: 18px;
-}
-
-.tab.child-tab .tab-icon .codicon[class*='codicon-'] {
-  font-size: 16px !important;  /* Codicons escalan proporcional */
-}
-```
-
-### Cambiar Altura de Tabs
-
-**Normal tabs**:
-```css
-/* En tab-layout.css */
-.tab {
-  height: 42px;  /* Cambiar aquí */
-}
-
-.tab.compact {
-  height: 32px;  /* Cambiar aquí */
-}
-```
-
-**Child tabs**:
-```css
-/* En child-tabs.css */
-.tab.child-tab {
-  height: 26px;  /* Cambiar aquí */
-}
-```
-
-### Cambiar Comportamiento de Hover
-
-**Normal tabs**:
-```css
-/* En tab-layout.css o tab-states.css */
-.tab:not(.child-tab):hover {
-  background: var(--vscode-list-hoverBackground);  /* Agregar fondo */
-}
-```
-
-**Child tabs**:
-```css
-/* En child-tabs.css */
-.tab.child-tab:hover {
-  background: rgba(128,128,128,0.15);  /* Más intenso */
-}
-```
-
-### Agregar Nuevo Tipo de Child Tab
-
-1. **Definir diffType** en TypeScript:
-```typescript
-// En models/SideTab.ts
-type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'nuevo-tipo';
-```
-
-2. **Agregar icono** en HTML:
-```typescript
-// En BaysHtmlBuilder.renderChildTab()
-case 'nuevo-tipo':
-  iconHtml = '<span class="codicon codicon-mi-icono"></span>';
-  break;
-```
-
-3. **Agregar estilos** (opcional):
-```css
-/* En child-tabs.css */
-.tab.child-tab[data-difftype="nuevo-tipo"] {
-  border-left-color: #custom-color;
-}
-```
-
-### Variables CSS Clave
-
-```css
-/* Colores Git */
---vscode-gitDecoration-modifiedResourceForeground: #e2c08d;
---vscode-gitDecoration-addedResourceForeground: #73c991;
---vscode-gitDecoration-deletedResourceForeground: #c74e39;
-
-/* Backgrounds */
---vscode-list-hoverBackground: rgba(128,128,128,0.12);
---vscode-list-activeSelectionBackground: rgba(90,93,94,0.25);
---vscode-toolbar-hoverBackground: rgba(90,93,94,0.31);
-
-/* Bordes */
---vscode-focusBorder: #007acc;
---vscode-editorGroupHeader-tabsBorder: rgba(128,128,128,0.35);
+/* Heredadas de VS Code */
+--vscode-list-activeSelectionBackground
+--vscode-focusBorder
+--vscode-editorGroupHeader-tabsBorder
 ```
 
 ---
 
-## Reglas de Oro
+## Clases de estado
 
-1. **NUNCA** usar `.tab-icon` solo → Especificar `.tab:not(.child-tab) .tab-icon` o `.tab.child-tab .tab-icon`
-2. **NUNCA** usar `.tab-actions button` solo → Especificar target específico
-3. **SIEMPRE** usar `flex-shrink: 0` en iconos y botones
-4. **SIEMPRE** usar `flex: 0 0 auto` en contenedores de iconos (no flex-basis fijo)
-5. **SIEMPRE** usar transiciones en hover (120-200ms)
-6. **MANTENER** proporciones: normal tabs ≈ 1.4× child tabs (22px vs 14px iconos)
-7. **ORDEN DE IMPORTS**: child-tabs.css debe venir DESPUÉS de tab-content.css para override
-8. **ICONOS CODICON**: Usar selectores `.tab-icon .codicon` con `!important` para sobrescribir el global `font: 10px`
-9. **DOCUMENTAR** en este archivo cualquier cambio arquitectónico
-
-### ⚠️ Problema Conocido: Codicon Font-Size Global
-
-Los iconos codicon tienen un estilo global que establece:
 ```css
-.codicon[class*='codicon-'] {
-    font: normal normal normal 10px/1 codicon;
-}
-```
+.bay.active          /* tab actualmente visible */
+.bay.dirty           /* cambios sin guardar (isDirty) */
+.bay.pinned          /* tab fijada */
+.bay.compact         /* modo compacto (29px altura) */
+.bay.preview         /* tab en modo preview (itálica) */
+.bay.dragging        /* durante drag & drop */
+.bay.drag-over       /* destino de drop */
 
-La propiedad `font` shorthand sobrescribe cualquier `font-size` definido en `.tab-icon`. 
-
-**Solución**: Usar selectores más específicos con `!important`:
-```css
-.tab.child-tab .tab-icon .codicon[class*='codicon-'] {
-  font-size: 13px !important;
-}
+/* Variante con borde de color según diffType */
+.bay.variant.diff-working-tree
+.bay.variant.diff-staged
+.bay.variant.diff-snapshot
+.bay.variant.diff-commit
+.bay.variant.diff-edit
+.bay.variant.diff-conflict
 ```
 
 ---
 
-## Ejemplo Completo: Agregar Badge de "Nuevo"
+## Añadir nuevos estilos: guía rápida
 
-```css
-/* En child-tabs.css */
-.tab.child-tab.new::after {
-  content: 'NEW';
-  position: absolute;
-  top: 2px;
-  right: 6px;
-  font-size: 8px;
-  font-weight: bold;
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-  padding: 1px 4px;
-  border-radius: 2px;
-}
-```
+1. **¿Afecta solo a bays normales?** → `bay-layout.css` o `bay-actions.css`
+2. **¿Afecta solo a variants?** → `variants.css`
+3. **¿Es un estado interactivo?** → `bay-states.css`
+4. **¿Es un estado de archivo?** → `bay-file-states.css`
+5. **¿Es animación/transición?** → `bay-animations.css`
 
-```typescript
-// En BaysHtmlBuilder.renderChildTab()
-const newBadge = tab.metadata.isNew ? ' new' : '';
-return `<div class="tab child-tab${activeClass}${newBadge}" ...>`;
-```
-
----
-
-**Ver también**:
-- [Arquitectura](./02_arquitectura.md) → Componentes de renderizado
-- [Implementación](./04_implementacion.md) → BaysHtmlBuilder
-- [INDEX](./INDEX.md) → Documentación completa
+**Siempre prefixar con `.bay` o `.bay.variant`** — no selectores globales.

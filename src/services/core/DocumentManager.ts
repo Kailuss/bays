@@ -303,7 +303,7 @@ export class DocumentManager {
    */
   public getAllVersions(documentId: string): VersionMetadata[] {
     const document = this.getDocument(documentId);
-    return document ? Array.from(document.versions.values()) : [];
+    return document ? Array.from(document.variants.values()) : [];
   }
   
   // ═══════════════════════════════════════════════════════════════
@@ -617,7 +617,7 @@ export class DocumentManager {
     for (const document of this.documents.values()) {
       const versionsToDelete: string[] = [];
       
-      for (const [versionId, version] of document.versions) {
+      for (const [versionId, version] of document.variants) {
         const age = now - version.createdAt;
         if (age >= maxAge && !version.isActive) {
           versionsToDelete.push(versionId);

@@ -4,7 +4,7 @@ import { Logger } from '../utils/logger';
 import { VSCODE_COMMANDS } from '../constants/commands';
 import type { BayMetadata, BayState, BayCapabilities, BayViewMode as BayViewMode, BayType } from './Bay';
 
-// --- CONSTANTES ---
+//· --- CONSTANTES ---
 const MARKDOWN_PREVIEW_PREFIX = 'Preview ';
 const MARKDOWN_PREVIEW_VIEWTYPE = 'markdown.preview';
 const PREVIEWABLE_EXTENSIONS = [
@@ -15,15 +15,15 @@ const PREVIEWABLE_EXTENSIONS = [
   '.ipynb',                   // Jupyter notebooks
 ];
 
-// --- BAY HELPERS PRINCIPAL ---
+//· --- BAY HELPERS PRINCIPAL ---
 /**
  * Utilidades auxiliares para interactuar con pestañas nativas de VS Code y para enriquecer metadata/state.
  * Métodos agrupados por responsabilidad: nativo, metadata, capacidades, estado.
  */
 export class BayHelpers {
-  // --- CONSTANTES DE COMANDOS ---
+  //· --- CONSTANTES DE COMANDOS ---
   private static readonly WEBVIEW_COMMANDS: Record<string, string> = {
-    'settings': 'workbench.action.openSettings2',
+    'settings': 'workbench.action.openSettings',
     'keyboard shortcuts': 'workbench.action.openGlobalKeybindings',
     'welcome': 'workbench.action.showWelcomePage',
     'release notes': 'update.showCurrentReleaseNotes',
@@ -40,7 +40,7 @@ export class BayHelpers {
     8: 'workbench.action.focusEighthEditorGroup',
   };
 
-  // --- SETS DE EXTENSIONES (O(1) lookup, inicializados una sola vez) ---
+  //· --- SETS DE EXTENSIONES (O(1) lookup, inicializados una sola vez) ---
   private static readonly EXT_CONFIG   = new Set(['.json', '.yaml', '.yml', '.toml', '.ini', '.env']);
   private static readonly EXT_DOC      = new Set(['.md', '.txt', '.rst', '.adoc']);
   private static readonly EXT_STYLE    = new Set(['.css', '.scss', '.sass', '.less', '.styl']);
@@ -50,8 +50,8 @@ export class BayHelpers {
   private static readonly EXT_BINARY   = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.pdf', '.zip', '.exe', '.dll']);
   private static readonly NAME_BUILD   = new Set(['build', 'webpack', 'rollup', 'vite', 'esbuild']);
 
-  // --- UTILIDADES NATIVAS (VS CODE TAB) ---
-  // --- DETECCIÓN Y ACCESO NATIVO ---
+  //- --- UTILIDADES NATIVAS (VS CODE TAB) ---
+  //· --- DETECCIÓN Y ACCESO NATIVO ---
   static isMarkdownPreview(metadata: BayMetadata): boolean {
     if (metadata.viewType === MARKDOWN_PREVIEW_VIEWTYPE) { return true; }
     if (metadata.bayType === 'webview' && metadata.label.startsWith(MARKDOWN_PREVIEW_PREFIX)) { return true; }
@@ -91,6 +91,8 @@ export class BayHelpers {
       }
     }
   }
+
+  /**  */
   static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
     if (t.input instanceof vscode.TabInputWebview) { return t.label === metadata.label; }
     if (!t.input) { return metadata.bayType === 'webview' && !metadata.uri && t.label === metadata.label; }
@@ -111,7 +113,7 @@ export class BayHelpers {
     return vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
   }
 
-  // --- METADATA Y STATE HELPERS ---
+  //· --- METADATA Y STATE HELPERS ---
   static enrichMetadata(metadata: BayMetadata): BayMetadata {
     const enriched = { ...metadata };
     if (metadata.uri) {
@@ -166,7 +168,7 @@ export class BayHelpers {
     return 'file';
   }
 
-  // --- CAPABILITIES Y STATE ---
+  //= --- CAPABILITIES Y STATE ---
   static computeCapabilities(metadata: BayMetadata, state: Partial<BayState>): BayCapabilities {
     const hasUri = !!metadata.uri;
     const isFile = metadata.bayType === 'file';

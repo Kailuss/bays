@@ -112,10 +112,10 @@ export class BayHierarchyService {
   }
 
   /**
-   * Checks if a bay has children.
+   * Checks if a bay has variants.
    *
    * @param bayId Bay ID
-   * @returns true if has children
+   * @returns true if has variants, false otherwise
    */
   hasVariants(bayId: string): boolean {
     return this.stateService.getAllBays()

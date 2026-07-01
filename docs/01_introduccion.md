@@ -1,39 +1,53 @@
 # 1. Introducción
 
-**Enlaces rápidos**
-[📄 Índice general](INDEX.md) | [🛠️ Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [📦 Implementación](04_implementacion.md) | [🤖 Agentes Copilot](05_agentes.md)
+[📄 Índice](INDEX.md) | [🛠 Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [📦 Implementación](04_implementacion.md) | [🤖 Agentes](05_agentes.md) | [🎨 Estilos](06_estilos.md)
 
 ---
 
 ## ¿Qué es Bays?
-Bays es una extensión de Visual Studio Code que ofrece una vista lateral personalizada de las pestañas abiertas, con mejoras en control, acciones y servicios integrados (Git, Copilot, etc.). Está pensada para desarrolladores que abren muchos archivos y necesitan manejar pestañas de manera más eficiente.
 
-### Requisitos
-- VS Code 1.85.0 o posterior (configurado en `package.json`).
-- Node 16+ para compilación de la extensión.
+Extensión de VS Code con **vista lateral de pestañas** mejorada: agrupa, ordena y decora tabs con integración Git y Copilot. La UI es un `WebviewViewProvider` (HTML/CSS puro) para control total de layout y hover.
 
-### Instalación y arranque rápido
+## Requisitos
+
+- VS Code 1.85.0+
+- Node 16+ para compilación
+
+## Arranque rápido
+
 ```bash
 npm install
-npm run compile   # build único
-npm run watch     # recompila en segundo plano durante el desarrollo
-# En VS Code: F5 para lanzar el host de desarrollo
-
-```bash
-# ejemplo: compilar y lanzar en un paso
-npm run watch & code --extensionDevelopmentPath=. --disable-extensions
-```
+npm run compile   # build de verificación
+npm run watch     # watch mode (desarrollo)
+# F5 en VS Code → lanza el Extension Development Host
 ```
 
-Una vez en el host de desarrollo, la vista se activa en la barra lateral bajo el nombre **Bays**.
+La vista aparece en la Activity Bar bajo el nombre **Bays**.
 
-### Estructura de la documentación
-Cada documento explica un aspecto clave:
+## Estructura del código
 
-1. **Introducción** (este archivo): resumen, requisito y guía rápida.
-2. **Arquitectura**: modelos, servicios y decisiones de diseño.
-3. **Acciones**: sistema de FileActions, enfoque `setFocus` y mejoras avanzadas.
-4. **Implementación**: cómo se ha modularizado el código y qué cambios se hicieron.
-5. **Agentes Copilot**: cómo un agente o sub‑agente puede entender el proyecto para automatización o contribución.
+```
+src/
+├── extension.ts        # Punto de entrada: activa servicios y registra el provider
+├── models/             # Bay (modelo), BayActions, helpers, actions puras
+├── providers/          # BaysWebviewProvider: HTML/CSS + mensajería
+├── services/
+│   ├── core/           # BaySyncService (sync), BayStateService (store)
+│   ├── ui/             # BayIconManager, ThemeService, BayDragDropService
+│   └── integration/    # GitSyncService, CopilotService
+├── commands/           # Registro de comandos VS Code
+├── constants/          # FileActions, iconos, estilos, timings
+├── webview/            # JS cliente: dragdrop.js, webview.js, pathTruncation.js
+├── styles/             # CSS modular de la vista
+└── utils/              # Logger, fileFormatters, stateIndicator
+```
 
-> **Nota para Copilot/AI**: esta documentación está organizada para facilitar la navegación mediante enlaces; los encabezados y ejemplos son claros y se pueden indexar para que un agente aprenda la estructura del proyecto.
+## Solución de problemas frecuentes
+
+| Síntoma | Causa | Solución |
+|---------|-------|----------|
+| Lista vacía | Build desactualizado | `npm run compile`, recargar ventana de desarrollo |
+| `[UriError]` en consola | URI falsa en bay webview | Asegurar `uri: undefined` en `BayMetadata` |
+| Iconos faltantes | Tema no cargado | Revisar logs de `BayIconManager.buildIconMap()` |
+| Activación lenta (>5s) | I/O síncrono | Verificar que se usa `fs/promises` |
+| Cambios no reflejados | `dist/` desactualizado | Matar watch, `npm run compile`, relanzar |

@@ -1,52 +1,140 @@
 # 5. Guía para agentes y Copilot
 
-**Enlaces rápidos**
-[📄 Índice general](INDEX.md) | [🏁 Introducción](01_introduccion.md) | [🏗️ Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [📦 Implementación](04_implementacion.md)
+[📄 Índice](INDEX.md) | [🏁 Introducción](01_introduccion.md) | [🏗️ Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [📦 Implementación](04_implementacion.md)
 
 ---
 
-Este documento está diseñado para que un agente (como un modelo Copilot) entienda el proyecto y pueda generar o modificar código con conocimiento del dominio.
+> Guía de referencia rápida para agentes AI que trabajan en este proyecto.
 
-## Puntos clave para el agente
-1. **Estructura del repositorio**: Estar familiarizado con `src/models`, `src/services`, `src/providers`, `src/commands`, `src/constants`, `src/utils`. Cada carpeta tiene responsabilidad clara.
-2. **Flujo de datos**: `TabSyncService` → `TabStateService` → `BaysWebviewProvider` → Webview HTML. Muchas acciones se encuentran en `src/models/actions`.
-3. **Tipado estrictamente en TypeScript**: todos los datos importantes tienen interfaces exportadas (`SideTabMetadata`, `SideTabState`, etc.). Cualquier añadido debe importar y usar estos tipos.
-4. **Comunicaciones con VS Code**: comandos (`bays.*`) definidos en `package.json`; evocar `vscode.commands.executeCommand` con el `tab.id` como argumento.
-5. **Ejemplos como guía**: el subdirectorio `src/examples` contiene patrones de uso (operaciones, permisos, contexto). Revisarlos antes de implementar nuevas funcionalidades.
-6. **Documentación auto‑referenciada**: cada MD comienza con enlaces a los demás para facilitar la navegación interna.
-7. **Nombres claros**: los identificadores de acciones, permisos, etc., son literales en español/inglés, evita abreviaciones.
-8. **No generar URIs falsas**: para pestañas sin archivo (webview), siempre usar `uri: undefined`.
-9. **Iconos**: resueltos en `TabIconManager`; no usar `ThemeIcon` ni `resourceUri` en Webview.
-10. **Eventos silenciosos vs. completos**: `updateTab` vs. `updateTabSilent` en el servicio de estado.
+## Nomenclatura correcta
 
-## Ejemplo de petición al agente
-> "Añade una nueva integración con el servicio 'foo' que marque la pestaña como `fooSynced: boolean` y muestre un icono especial en el webview cuando está sincronizada. Actualiza los servicios, el modelo y añade un ejemplo de uso en `src/examples`."  
-El agente debe identificar los lugares mencionados y editar o crear archivos apropiados.
+| ~~Obsoleto~~ | ✅ Actual |
+|---|---|
+| `SideTab` | `Bay` |
+| `SideTabMetadata` | `BayMetadata` |
+| `SideTabState` | `BayState` |
+| `TabSyncService` | `BaySyncService` |
+| `TabStateService` | `BayStateService` |
+| `TabIconManager` | `BayIconManager` |
+| `TabDragDropService` | `BayDragDropService` |
+| `tabType` | `bayType` |
+| `parentId` | `sourceBayId` |
+| `.tab` / `.child-tab` (CSS) | `.bay` / `.bay.variant` (CSS) |
 
-### Respuesta de ejemplo del agente
-```ts
-// src/models/SideTab.ts
-export type TabIntegrations = {
-  copilot?: {...};
-  git?: {...};
-  foo?: { synced: boolean; lastSync?: number };
+## Patrones de código esenciales
+
+```typescript
+// ✅ Comprobar URI antes de operaciones de archivo (CRÍTICO)
+if (bay.metadata.uri) { /* operaciones de archivo */ }
+if (bay.metadata.bayType === 'webview') { /* sin URI aquí */ }
+
+// ✅ Importaciones correctas
+import type { Bay, BayMetadata, BayState } from './models/Bay';
+import { BayStateService } from './services/core/BayStateService';
+
+// ✅ Estado mutable directamente
+bay.state.isPinned = true;
+stateService.notifyChange(); // dispara rebuilda del HTML
+
+// ✅ CSS selector con escape (IDs tienen :, /, %)
+document.querySelector(`.bay[data-bayid="${CSS.escape(id)}"]`);
+
+// ✅ Logger — SOLO estos dos métodos
+Logger.error('[NombreModulo] Mensaje:', error);
+Logger.warn('[NombreModulo] Advertencia');
+
+// ✅ I/O async siempre
+await vscode.workspace.fs.readFile(uri);
+
+// ✅ Guard para acciones file-only
+if (!bay.metadata.uri) return;
+```
+
+## Qué está dónde
+
+| Tarea | Dónde buscar |
+|-------|-------------|
+| Tipos Bay, BayMetadata, BayState | `src/models/Bay.ts` |
+| Métodos de Bay (close, pin, etc.) | `src/models/BayActions.ts` |
+| Funciones puras de acciones | `src/models/actions/` |
+| Sincronización con VS Code | `src/services/core/BaySyncService.ts` |
+| Store en memoria de Bays | `src/services/core/BayStateService.ts` |
+| Relaciones parent-variant | `src/services/core/BayHierarchyService.ts` |
+| Iconos de archivos | `src/services/ui/BayIconManager.ts` |
+| Drag & drop | `src/services/ui/BayDragDropService.ts` |
+| Integración Git | `src/services/integration/GitSyncService.ts` |
+| Integración Copilot | `src/services/integration/CopilotService.ts` |
+| Generación HTML | `src/providers/BaysHtmlBuilder.ts` + `renderers/` |
+| Mensajería webview | `src/providers/BaysWebviewProvider.ts` |
+| Comandos VS Code | `src/commands/bayCommands.ts` |
+| Acciones por tipo de archivo | `src/constants/fileQuickActions/` |
+| JS cliente (webview) | `src/webview/webview.js` |
+
+## AGENT.md por módulo
+
+Cada módulo tiene un `AGENT.md` con invariantes, patrones y reglas específicas:
+
+| Módulo | Archivo | Leer cuando... |
+|--------|---------|----------------|
+| `models/` | `src/models/AGENT.md` | Añadir/modificar acciones Bay |
+| `services/core/` | `src/services/core/AGENT.md` | Tocar sincronización o estado |
+| `providers/` | `src/providers/AGENT.md` | Modificar HTML o mensajería |
+| `services/ui/` | `src/services/ui/AGENT.md` | Cambiar iconos, drag&drop, temas |
+| `services/integration/` | `src/services/integration/AGENT.md` | Integraciones Git/Copilot |
+| `commands/` | `src/commands/AGENT.md` | Añadir nuevos comandos |
+
+## Flujo de trabajo recomendado
+
+```
+1. semantic_search → encontrar código similar al que quiero hacer
+2. read_file → entender contexto antes de editar
+3. Implementar siguiendo patrones existentes
+4. npm run compile → verificar que no hay errores
+5. Revisar checklist: URI?, Logger?, async?
+```
+
+## Reglas nunca romper
+
+1. **NUNCA** crear URIs falsas para webview tabs — produce `[UriError]`
+2. **NUNCA** usar `console.log()`, `Logger.info()`, `Logger.debug()`
+3. **NUNCA** I/O síncrono (`fs.readFileSync`, etc.)
+4. **NUNCA** modificar `BayMetadata` tras creación
+5. **NUNCA** acceder a `BayStateService` desde `models/actions/`
+
+## Añadir una nueva acción Bay
+
+```typescript
+// 1. Crear src/models/actions/myActions.ts
+export async function myAction(metadata: BayMetadata, state: BayState): Promise<void> {
+  if (!metadata.uri) return;  // guard webview
+  // implementación...
+}
+
+// 2. Exportar desde src/models/actions/index.ts
+export { myAction } from './myActions';
+
+// 3. Añadir método en src/models/BayActions.ts
+async myAction(): Promise<void> {
+  return actions.myAction(this.metadata, this.state);
+}
+
+// 4. Registrar comando en src/commands/bayCommands.ts si es necesario
+```
+
+## Añadir una nueva integración
+
+```typescript
+// 1. Actualizar BayIntegrations en src/models/Bay.ts
+export type BayIntegrations = {
+  // ...existing...
+  myService?: { synced: boolean; lastSync?: number };
 };
 
-// src/services/integration/FooService.ts
-export class FooService {
-  static async sync(tab: SideTab) {
-    // ... hacer sync
-    tab.state.integrations.foo = { synced: true, lastSync: Date.now() };
+// 2. Crear src/services/integration/MyService.ts
+export class MyService {
+  async sync(bay: Bay): Promise<void> {
+    bay.state.integrations.myService = { synced: true, lastSync: Date.now() };
+    // el provider refleja el cambio en el render
   }
 }
 ```
-
-El agente también puede proponer añadir tests y actualizar el webview para mostrar un badge cuando `foo.synced` sea verdadero.
-
-## Buenas prácticas para agentes
-- Usa `grep_search` o `semantic_search` antes de proponer cambios para conocer cómo se hacen tareas similares.
-- Crea pruebas unitarias en `test/` para cada nueva función o módulo; hay un archivo de ejemplo (`extension.test.ts`).
-- Mantén los MD actualizados cuando introduces nuevas APIs.
-- Respeta el estilo de código existente: `async/await`, preferencia por `fs/promises`, logs mínimos.
-
-Al seguir estas indicaciones, un agente podrá trabajar con eficacia en Bays.

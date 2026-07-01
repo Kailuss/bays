@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 export const STYLE_CONSTANTS = {
   // Bay dimensions
-  BAY_HEIGHT              : 40,
+  BAY_HEIGHT              : 58,
   BAY_ICON_SIZE           : 16,
   BAY_PADDING_LEFT        : 8,
   BAY_PADDING_RIGHT       : 4,
@@ -29,6 +29,7 @@ export const STYLE_CONSTANTS = {
     add    : 'add',
     window : 'window',
   },
+  
 
   // VS Code color variables (for reference)
   COLORS: {

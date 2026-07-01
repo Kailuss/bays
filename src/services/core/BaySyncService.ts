@@ -26,7 +26,7 @@ import { Logger } from '../../utils/logger';
  * y se manejan como estado toggle (viewMode) en la bay del archivo fuente.
  * 
  * REFACTORIZACIÓN MARZO 2026: Código modularizado en bay/ folder.
- * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
+ * @see src/services/core/AGENT.md
  * @see src/services/core/AGENT.md#refactoring-march-2026
  */
 export class BaySyncService {
@@ -38,10 +38,6 @@ export class BaySyncService {
   private bayEventService: BayEventService;
   private bayHeadService: BayHeadService;
   private activeStateService: ActiveStateService;
-  
-  // Map para relacionar IDs de tabs con versionIds únicos del DocumentModel
-  // Esto permite rastrear qué version del documento corresponde a cada child bay
-  private readonly tabIdToVersionId: Map<string, string> = new Map();
 
   constructor(private stateService: BayStateService) {
     this.gitSyncService = new GitSyncService(this.stateService);
@@ -247,102 +243,8 @@ export class BaySyncService {
       Logger.log(`[BaySync] Updating diagnostics/git for: ${bay.metadata.label}`);
       bay.state.diagnosticSeverity = newDiagnosticSeverity;
       bay.state.gitStatus = newGitStatus;
-      this.stateService.updateBayStateWithAnimation;
+      this.stateService.updateBayStateWithAnimation(bay);
     }
-  }
-
-  /**
-   * Asegura que existe un DocumentModel para una bay.
-   * Si no existe, lo crea y lo asocia con la bay.
-   * 
-   * @param bay Bay para la cual asegurar que existe un documento
-   */
-  private ensureDocumentExists(bay: Bay): void {
-    if (!bay.metadata.uri) {
-      return;
-    }
-
-    // Check if document already exists
-    const existing = this.documentManager.getDocumentByUri(bay.metadata.uri);
-    if (existing) {
-      // Associate parent bay if not already associated
-      if (!existing.parentBayId) {
-        this.documentManager.associateParentBay(existing.documentId, bay.metadata.id);
-      }
-      return;
-    }
-
-    // Create new document
-    const document = this.documentManager.createDocument({
-      baseUri: bay.metadata.uri,
-      languageId: bay.metadata.languageId || 'plaintext',
-      fileName: bay.metadata.fileName || 'untitled',
-      fileExtension: bay.metadata.fileExtension,
-      parentBayId: bay.metadata.id,
-      fileSize: bay.metadata.fileSize,
-      isReadOnly: bay.metadata.isReadOnly,
-      isBinary: bay.metadata.isBinary,
-    });
-
-    Logger.log(`[TabSync] Created document for bay: ${bay.metadata.label} (docId: ${document.documentId})`);
-  }
-
-  /**
-   * Registra una versión (diff) de un documento en el DocumentManager.
-   * 
-   * @param variant Variant que representa la versión
-   * @param parentBay Parent bay del documento base
-   */
-  private registerTabVersion(variant: Bay, parentBay: Bay): void {
-    if (!parentBay.metadata.uri || !variant.metadata.diffType) {
-      return;
-    }
-
-    // Get or create the document
-    const document = this.documentManager.getOrCreateDocument(
-      parentBay.metadata.uri,
-      parentBay.metadata.languageId || 'plaintext',
-      parentBay.metadata.fileName || 'untitled',
-      parentBay.metadata.fileExtension
-    );
-
-    // Associate parent if not already
-    if (!document.parentBayId) {
-      this.documentManager.associateParentBay(document.documentId, parentBay.metadata.id);
-    }
-
-    // Register the version
-    const versionId = this.documentManager.registerVersion(document.documentId, {
-      diffType: variant.metadata.diffType,
-      originalUri: variant.metadata.originalUri,
-      modifiedUri: variant.metadata.uri,
-      label: variant.metadata.label,
-      description: variant.metadata.detailLabel,
-      stats: variant.state.diffStats,
-      relatedBayId: variant.metadata.id,
-    });
-
-    if (versionId) {
-      // Associate child bay with document
-      this.documentManager.associateVariant(document.documentId, variant.metadata.id);
-      // Map bay ID to unique versionId for future reference
-      this.tabIdToVersionId.set(variant.metadata.id, versionId);
-      Logger.log(`[TabSync] Registered version ${variant.metadata.diffType} for ${parentBay.metadata.label} (bayId: ${variant.metadata.id}, versionId: ${versionId})`);
-    }
-  }
-
-  /**
-   * Limpia el mapeo de una child bay cuando se cierra
-   */
-  private cleanupBayVersionMapping(bayId: string): void {
-    this.tabIdToVersionId.delete(bayId);
-  }
-  
-  /**
-   * Obtiene el versionId único asociado a una bay
-   */
-  getVersionIdForBay(bayId: string): string | undefined {
-    return this.tabIdToVersionId.get(bayId);
   }
 
   /**
@@ -469,6 +371,5 @@ export class BaySyncService {
     this.bayEventService.dispose();
     this.gitSyncService.dispose();
     this.documentManager.dispose();
-    this.tabIdToVersionId.clear();
   }
 }

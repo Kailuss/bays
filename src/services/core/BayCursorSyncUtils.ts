@@ -38,12 +38,12 @@ export async function syncCursorPosition(
   const family: Bay[] = [];
   let parentBay: Bay | undefined;
 
-  if (bay.metadata.parentId) {
+  if (bay.metadata.sourceBayId) {
     // Is a child, find parent and siblings
-    parentBay = stateService.getBayById(bay.metadata.parentId);
+    parentBay = stateService.getBayById(bay.metadata.sourceBayId);
     if (parentBay) {
       family.push(parentBay);
-      family.push(...fetchVariants(bay.metadata.parentId));
+      family.push(...fetchVariants(bay.metadata.sourceBayId));
     }
   } else {
     // Is a parent, find its children

@@ -50,9 +50,10 @@ stateService.notifyChange(); // Trigger UI refresh
 // ✅ CSS selector with escape (Bay IDs have special chars)
 document.querySelector(`.bay[data-bayid="${CSS.escape(id)}"]`);
 
-// ✅ Logger (ONLY these two methods)
+// ✅ Logger (tres métodos permitidos)
 Logger.error('[ModuleName] Failed:', error);
 Logger.warn('[ModuleName] Warning message');
+Logger.log('[ModuleName] Info message');  // informativo / trazas
 
 // ✅ Async file operations (never sync)
 await vscode.workspace.fs.readFile(uri);
@@ -161,7 +162,7 @@ Follow this hierarchy when making decisions:
 ### 🔴 CRITICAL - Never break these
 1. Never create fake URIs for webview tabs
 2. Always check `if (bay.metadata.uri)` before file operations
-3. Never use `console.log` or `Logger.info/debug`
+3. Never use `console.log` (usar `Logger.log/warn/error`)
 4. Never use synchronous file I/O
 
 ### 🟠 IMPORTANT - Strong preference
@@ -192,6 +193,8 @@ For detailed patterns and implementation guides, consult the module-specific AGE
 - **`src/services/core/AGENT.md`** - Bay synchronization, state management, hierarchy, preview tracking
 - **`src/providers/AGENT.md`** - WebView rendering, HTML generation, message protocol, CSP security
 - **`src/services/ui/AGENT.md`** - Icon resolution, theme detection, drag & drop logic
+- **`src/services/integration/AGENT.md`** - Git status, Copilot chat integration
+- **`src/commands/AGENT.md`** - Command registration patterns, resolve() pattern
 
 ### When to Read Module AGENT.md
 - Before implementing features in that module
@@ -207,6 +210,8 @@ For detailed patterns and implementation guides, consult the module-specific AGE
 | Modify HTML rendering | `providers/AGENT.md` |
 | Change icon resolution | `services/ui/AGENT.md` |
 | Debug tab sync issues | `services/core/AGENT.md` |
+| Add new VS Code command | `commands/AGENT.md` |
+| Add Git/Copilot integration | `services/integration/AGENT.md` |
 
 ---
 
@@ -217,7 +222,7 @@ Before completing any task, verify:
 ### For Code Changes
 - [ ] 🚨 Did I handle webview tabs (`uri: undefined`)?
 - [ ] 🚨 Did I handle all 4 BayTypes if needed?
-- [ ] 🚨 Did I use only `Logger.error/warn` (no info/debug)?
+- [ ] 🚨 Did I use only `Logger.log/warn/error` (no `console.log`)?
 - [ ] 🚨 Did I use async/await (no blocking I/O)?
 - [ ] ✅ Does it compile? (`npm run compile`)
 - [ ] ✅ Did I follow existing patterns?
