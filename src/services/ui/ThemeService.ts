@@ -15,8 +15,12 @@ export class ThemeService {
   activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration(e => {
+        // NOTE: workbench.iconTheme is intentionally NOT handled here.
+        // BayIconManager owns icon-theme changes: it rebuilds the icon map and
+        // fires onDidInitialize → provider.refresh() ONCE, with the new icons
+        // ready. Firing here too would cause a second (early, stale) rebuild —
+        // the visible double-flash on icon-theme switch.
         if (
-          e.affectsConfiguration('workbench.iconTheme') ||
           e.affectsConfiguration('workbench.productIconTheme') ||
           e.affectsConfiguration('workbench.colorTheme')
         ) {

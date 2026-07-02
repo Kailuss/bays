@@ -16,6 +16,9 @@ import { Logger } from '../../../utils/logger';
  */
 export class BayEventService {
   private disposables: vscode.Disposable[] = [];
+  // Cached so the high-frequency selection handler doesn't read configuration
+  // (nor scan bays) on every keystroke when cursor sync is off (the default).
+  private syncCursorEnabled = false;
 
   constructor(
     private stateService: BayStateService,
@@ -31,6 +34,19 @@ export class BayEventService {
    */
   activate(): void {
     Logger.log('[BayEvent] Activating event listeners');
+
+    // Cache the cursor-sync flag; refresh it only when the setting changes.
+    const readSyncCursor = () => {
+      this.syncCursorEnabled = vscode.workspace
+        .getConfiguration('bays')
+        .get<boolean>('syncCursorPosition', false);
+    };
+    readSyncCursor();
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('bays.syncCursorPosition')) { readSyncCursor(); }
+      })
+    );
 
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabs(async (event) => {
@@ -63,6 +79,9 @@ export class BayEventService {
 
     this.disposables.push(
       vscode.window.onDidChangeTextEditorSelection((event) => {
+        // Fast path: cursor sync disabled → skip the per-event bay lookup entirely
+        if (!this.syncCursorEnabled) { return; }
+
         const uri = event.textEditor.document.uri;
         const bay = this.stateService.findBayByUri(uri);
         if (!bay || !event.selections[0]) { return; }

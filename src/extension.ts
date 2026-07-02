@@ -25,9 +25,12 @@ export async function activate(context: vscode.ExtensionContext) {
     const themeService       = new ThemeService();
     const copilotService     = new CopilotService();
 
-    // Initialise icon manager (loads icon map)
-    // We await this to ensure icons are ready before first render
-    await iconManager.initialize(context);
+    // Initialise icon manager (loads icon map). Do NOT block activation on the
+    // theme-JSON disk read: the first render shows placeholder icons and patches
+    // real ones in as they resolve, and onDidInitialize triggers a refresh once
+    // the map is ready. The config listener inside initialize() is registered
+    // synchronously, so theme-change handling is wired up immediately.
+    void iconManager.initialize(context);
 
     // WebviewView provider
     const provider = new BaysWebviewProvider(
