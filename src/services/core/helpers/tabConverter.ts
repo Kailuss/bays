@@ -137,8 +137,10 @@ export function convertToBay(
   const { uri, label, description, pathParts, tooltip, fileType, tabType, viewType, originalUri, modifiedUri } = inputData;
   
   // Filtrar tabs de Markdown Preview - NO crear Bay para ellas
-  // Se manejan como estado toggle (viewMode) en la bay source
-  if (viewType === 'markdown.preview') {
+  // Se manejan como estado toggle (viewMode) en la bay source.
+  // El viewType llega prefijado (p.ej. "mainThreadWebview-markdown.preview"),
+  // por eso se compara por inclusión y no por igualdad estricta.
+  if (viewType?.includes('markdown.preview')) {
     Logger.log(`[TabConverter] Filtering markdown preview tab: ${label}`);
     return null;
   }
@@ -209,6 +211,15 @@ export function convertToBay(
   const stateWithDefaults = { ...defaultState, ...baseState };
   const capabilities      = BayHelpers.computeCapabilities(metadata, stateWithDefaults);
   const viewMode          = BayHelpers.mapPreviewModeToViewMode(false);
+
+  // preferPreview drives whether activating a Markdown bay opens the rendered
+  // preview, and drives the preview↔source toggle button. It is deterministic
+  // (only the user's toggle changes it), so it never races with the live
+  // preview-ownership sync. Initialise it from the setting for Markdown files.
+  const isMarkdownFile = ['.md', '.mdx', '.markdown'].includes((fileType || '').toLowerCase());
+  const preferPreview  = isMarkdownFile
+    ? vscode.workspace.getConfiguration('bays').get<boolean>('openPreviewableInPreview', true)
+    : undefined;
   const state: BayState   = {
 
     // VS CODE NATIVE STATE
@@ -224,6 +235,7 @@ export function convertToBay(
 
     // VISUALIZATION MODE
     viewMode,
+    preferPreview,
 
     actionContext  : stateWithDefaults.actionContext!,
     operationState : stateWithDefaults.operationState!,

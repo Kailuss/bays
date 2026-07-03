@@ -41,20 +41,6 @@ export class BayStateService {
   private intentionalCloses = new Map<string, number>();
 
   /**
-   * ID de la última bay que activó el Markdown Preview.
-   * Se usa para saber qué bay debe mostrarse como activa cuando el preview está visible.
-   */
-  private _lastMarkdownPreviewBayId: string | null = null;
-
-  get lastMarkdownPreviewBayId(): string | null {
-    return this._lastMarkdownPreviewBayId;
-  }
-
-  setLastMarkdownPreviewBayId(bayId: string | null): void {
-    this._lastMarkdownPreviewBayId = bayId;
-  }
-
-  /**
    * Marca un bay ID como cierre intencional.
    * Usado cuando cerramos una bay programáticamente para evitar
    * procesar el evento de cierre que VS Code disparará después.

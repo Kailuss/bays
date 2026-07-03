@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { getConfiguration }     from '../constants/styles'; //
 import { TIMINGS }              from '../constants/timings';
 import { Bay }                  from '../models/Bay';
-import type { BayViewMode }     from '../models/Bay';
 import { BayHelpers }           from '../models/BayHelpers';
 import { BayStateService }      from '../services/core/BayStateService';
 import type { DocumentManager } from '../services/core/DocumentManager';
@@ -252,10 +251,6 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    if (bay.state.viewMode === 'preview') {
-      this.stateService.setLastMarkdownPreviewBayId(bay.metadata.id);
-    }
-
     try {
       await bay.activate();
     } catch (err: unknown) {
@@ -458,27 +453,28 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
 
     const isMarkdownToggle = actionId === 'openMarkdownPreview' || actionId === 'editMarkdownSource';
     if (isMarkdownToggle) {
-      const newViewMode: BayViewMode = bay.state.viewMode === 'preview' ? 'source' : 'preview';
-      bay.state.viewMode = newViewMode;
-      Logger.log(`[WebviewProvider] Toggled viewMode for: ${bay.metadata.label} → ${bay.state.viewMode}`);
+      const wantPreview = actionId === 'openMarkdownPreview';
 
-      if (actionId === 'openMarkdownPreview') {
-        this.stateService.setLastMarkdownPreviewBayId(bay.metadata.id);
-      } else if (this.stateService.lastMarkdownPreviewBayId === bay.metadata.id) {
-        this.stateService.setLastMarkdownPreviewBayId(null);
-      }
-    }
+      // Run the command with the context the button was resolved with (derived
+      // from the CURRENT preferPreview), so the registry re-resolves to the same
+      // actionId and actually fires the command. Previously the context was flipped
+      // first, so the re-resolve produced the opposite id and the command no-op'd.
+      const currentContext = { viewMode: bay.state.preferPreview ? ('preview' as const) : ('source' as const) };
+      await this.fileActionRegistry.execute(actionId, bay.metadata.uri, currentContext);
 
-    const context = { viewMode: bay.state.viewMode };
-    const shouldFocus = this.fileActionRegistry.shouldSetFocus(actionId);
-    await this.fileActionRegistry.execute(actionId, bay.metadata.uri, context);
-
-    if (isMarkdownToggle || (shouldFocus && !bay.state.isActive)) {
-      await bay.activate();
-    }
-
-    if (isMarkdownToggle) {
+      // Update only the durable preference. The button re-renders from it, and the
+      // preview-ownership sync handles the highlight — no racy viewMode writes here.
+      bay.state.preferPreview = wantPreview;
+      Logger.log(`[WebviewProvider] Markdown toggle for ${bay.metadata.label} → preferPreview=${wantPreview}`);
       this.stateService.updateBay(bay);
+      return;
+    }
+
+    const shouldFocus = this.fileActionRegistry.shouldSetFocus(actionId);
+    await this.fileActionRegistry.execute(actionId, bay.metadata.uri, { viewMode: bay.state.viewMode });
+
+    if (shouldFocus && !bay.state.isActive) {
+      await bay.activate();
     }
   }
 

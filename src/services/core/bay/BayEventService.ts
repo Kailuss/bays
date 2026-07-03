@@ -5,8 +5,17 @@ import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { BayHeadService } from './BayHeadService';
 import { ActiveStateService } from './ActiveStateService';
+import type { PreviewSyncResult } from '../BaySyncService';
 import type { Bay } from '../../../models/Bay';
 import { Logger } from '../../../utils/logger';
+
+const NO_PREVIEW_CHANGE: PreviewSyncResult = { activeChanged: false };
+
+/** True for a rendered Markdown preview webview tab (not a source .md tab).
+ *  viewType arrives prefixed (e.g. "mainThreadWebview-markdown.preview"), so match by inclusion. */
+function isMarkdownPreviewTab(tab: vscode.Tab): boolean {
+  return tab.input instanceof vscode.TabInputWebview && tab.input.viewType.includes('markdown.preview');
+}
 
 /**
  * BayEventService - Gestión de Eventos de VS Code
@@ -26,8 +35,24 @@ export class BayEventService {
     private hierarchyService: BayHierarchyService,
     private bayHeadService: BayHeadService,
     private activeStateService: ActiveStateService,
-    private syncPreviewOwnership?: () => void
+    private syncPreviewOwnership?: () => PreviewSyncResult
   ) {}
+
+  /** Reconcile preview ownership and return what changed (safe when the callback is absent). */
+  private runPreviewSync(): PreviewSyncResult {
+    return this.syncPreviewOwnership?.() ?? NO_PREVIEW_CHANGE;
+  }
+
+  /**
+   * Active-state and preview-ownership only ever change the highlight, so a
+   * partial update suffices (the toggle button re-renders separately, on the
+   * full rebuild triggered by the toggle action itself).
+   */
+  private notifyForChanges(activeChanges: boolean, preview: PreviewSyncResult): void {
+    if (activeChanges || preview.activeChanged) {
+      this.stateService.notifyActiveChange();
+    }
+  }
 
   /**
    * Registra todos los event listeners necesarios.
@@ -62,18 +87,12 @@ export class BayEventService {
 
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => {
-        // Sync active state first
+        // Sync active state first, then preview ownership (which may also flip
+        // isActive/viewMode), and only THEN decide how to notify — otherwise a
+        // preview-owner change is silently dropped (highlight/button go stale).
         const { hasChanges } = this.activeStateService.syncActiveState();
-
-        // Then sync preview ownership
-        if (this.syncPreviewOwnership) {
-          this.syncPreviewOwnership();
-        }
-
-        // Active-only change → partial update (toggle .active), no full rebuild
-        if (hasChanges) {
-          this.stateService.notifyActiveChange();
-        }
+        const preview = this.runPreviewSync();
+        this.notifyForChanges(hasChanges, preview);
       })
     );
 
@@ -166,11 +185,10 @@ export class BayEventService {
 
       const existingBay = this.stateService.getBayById(id);
       if (existingBay) {
-        // isPreview/isPinned affect layout/order → structural (full rebuild)
+        // isPreview (VS Code italic preview editor) is NOT rendered anywhere, so
+        // a change needs no rebuild — just keep the state in sync silently.
         if (existingBay.state.isPreview !== bay.isPreview) {
           existingBay.state.isPreview = bay.isPreview;
-          hasChanges = true;
-          structuralChange = true;
         }
 
         if (existingBay.state.isPinned !== bay.isPinned) {
@@ -188,24 +206,26 @@ export class BayEventService {
       }
     }
 
-    if (hasChanges) {
-      // Sync active state from native tabs
-      const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
+    // A rendered Markdown preview tab is filtered out of our state, so opening/
+    // closing one produces no bay delta above — but it DOES change preview
+    // ownership (viewMode/highlight), so we must still reconcile in that case.
+    const previewTabToggled =
+      event.opened.some(isMarkdownPreviewTab) || event.closed.some(isMarkdownPreviewTab);
 
-      // Then sync preview ownership (this can override isActive for preview owners)
-      if (this.syncPreviewOwnership) {
-        this.syncPreviewOwnership();
-      }
+    if (hasChanges || previewTabToggled) {
+      // Sync active state, then preview ownership, then decide how to notify.
+      const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
+      const preview = this.runPreviewSync();
 
       if (structuralChange) {
-        // Full rebuild also refreshes active highlight and dirty indicators
+        // Full rebuild also refreshes the active highlight and dirty indicators
         this.stateService.notifyChange();
       } else {
         // Only lightweight changes → partial updates, no full DOM rebuild
         for (const b of dirtyChangedBays) {
           this.stateService.updateBayStateWithAnimation(b);
         }
-        if (activeChanges) {
+        if (activeChanges || preview.activeChanged) {
           this.stateService.notifyActiveChange();
         }
       }
@@ -216,19 +236,12 @@ export class BayEventService {
    * Maneja cambios en grupos de editores.
    */
   private handleGroupChanges(): void {
-    // Sync active state first
-    const { hasChanges } = this.activeStateService.syncActiveState();
-
-    // Then sync preview ownership (overrides active for preview owners)
-    if (this.syncPreviewOwnership) {
-      this.syncPreviewOwnership();
-    }
-
+    // Sync active state, then preview ownership, then notify coherently.
     // Group add/remove arrives as tab open/close (handled structurally in
-    // handleTabChanges); here only the active bay changed → partial update.
-    if (hasChanges) {
-      this.stateService.notifyActiveChange();
-    }
+    // handleTabChanges); here it's an active-bay and/or preview-owner change.
+    const { hasChanges } = this.activeStateService.syncActiveState();
+    const preview = this.runPreviewSync();
+    this.notifyForChanges(hasChanges, preview);
   }
 
   /**

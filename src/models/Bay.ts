@@ -171,7 +171,8 @@ export type BayState = {
   indexInGroup       : number;
 
   //: VISUALIZATION MODE
-  viewMode           : BayViewMode;          // How the bay is visualized: source | preview | split
+  viewMode           : BayViewMode;          // Live view state: is the rendered preview showing right now (source | preview | split). Managed by syncPreviewOwnership; drives the toggle button + preview-owner highlight.
+  preferPreview?     : boolean;              // User preference: open the rendered preview when this bay is activated. Set by the toggle button; undefined = use the openPreviewableInPreview setting. Separate from viewMode so the preference survives closing the preview.
 
   //: DIFF INFORMATION (for child tabs)
   diffStats?         : DiffStats;            // Diff statistics (lines added/removed, etc.)

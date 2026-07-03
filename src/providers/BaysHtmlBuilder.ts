@@ -156,8 +156,9 @@ export class BaysHtmlBuilder {
     // CRITICAL: Filter out markdown preview bays - they should NEVER be rendered
     // Preview tabs are managed as viewMode state on source bays
     const filteredBays = bays.filter(bay => {
-      // Filter by viewType (webview tabs)
-      if (bay.metadata.viewType === 'markdown.preview') {
+      // Filter by viewType (webview tabs) — viewType is prefixed by VS Code
+      // (e.g. "mainThreadWebview-markdown.preview"), so match by inclusion
+      if (bay.metadata.viewType?.includes('markdown.preview')) {
         return false;
       }
       // Filter by label pattern (fallback)
@@ -296,8 +297,10 @@ export class BaysHtmlBuilder {
   private renderFileActionButton(bay: Bay): string {
     if (!this.fileActionRegistry || !bay.metadata.uri) { return ''; }
 
-    // Pass viewMode context for dynamic actions (like MD toggle)
-    const context = { viewMode: bay.state.viewMode };
+    // Drive the MD toggle button off preferPreview (the durable user choice),
+    // NOT the live viewMode — viewMode is reconciled asynchronously by the
+    // preview-ownership sync and would make the button flicker/desync.
+    const context = { viewMode: bay.state.preferPreview ? ('preview' as const) : ('source' as const) };
     const resolved = this.fileActionRegistry.resolve(bay.metadata.label, bay.metadata.uri, context);
     if (!resolved) { return ''; }
 

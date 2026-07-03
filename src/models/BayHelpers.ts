@@ -53,7 +53,8 @@ export class BayHelpers {
   //- --- UTILIDADES NATIVAS (VS CODE TAB) ---
   //· --- DETECCIÓN Y ACCESO NATIVO ---
   static isMarkdownPreview(metadata: BayMetadata): boolean {
-    if (metadata.viewType === MARKDOWN_PREVIEW_VIEWTYPE) { return true; }
+    // viewType llega prefijado (p.ej. "mainThreadWebview-markdown.preview") → inclusión
+    if (metadata.viewType?.includes(MARKDOWN_PREVIEW_VIEWTYPE)) { return true; }
     if (metadata.bayType === 'webview' && metadata.label.startsWith(MARKDOWN_PREVIEW_PREFIX)) { return true; }
     return false;
   }

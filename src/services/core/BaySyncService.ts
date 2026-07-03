@@ -11,6 +11,11 @@ import { createTabGroup } from '../../models/BayGroup';
 import { convertToBay, getDiagnosticSeverity } from './helpers/tabConverter';
 import { Logger } from '../../utils/logger';
 
+/** What syncPreviewOwnership() changed. It only ever adjusts the highlight (isActive). */
+export type PreviewSyncResult = {
+  activeChanged: boolean;  // a bay's isActive flipped → a partial highlight update is enough
+};
+
 /**
  * BaySyncService - Orquestador de Sincronización de Tabs
  * 
@@ -261,105 +266,90 @@ export class BaySyncService {
    * 
    * Invariant: Solo 1 Bay puede tener viewMode: 'preview' globalmente.
    */
-  syncPreviewOwnership(): void {
-    // Find all markdown preview tabs in VS Code
-    const allGroups = vscode.window.tabGroups.all;
+  syncPreviewOwnership(): PreviewSyncResult {
+    // Find the active markdown-preview tab, if any.
+    // NOTE: TabInputWebview.viewType arrives PREFIXED by VS Code (e.g.
+    // "mainThreadWebview-markdown.preview"), so we must match by inclusion,
+    // not strict equality — equality never matches and the sync silently no-ops.
     let activePreviewTab: vscode.Tab | null = null;
-    
-    for (const group of allGroups) {
+    for (const group of vscode.window.tabGroups.all) {
       for (const tab of group.tabs) {
-        if (tab.input instanceof vscode.TabInputWebview) {
-          const viewType = tab.input.viewType;
-          if (viewType === 'markdown.preview' && tab.isActive) {
-            activePreviewTab = tab;
-            break;
-          }
+        if (
+          tab.input instanceof vscode.TabInputWebview &&
+          tab.input.viewType.includes('markdown.preview') &&
+          tab.isActive
+        ) {
+          activePreviewTab = tab;
+          break;
         }
       }
-      if (activePreviewTab) {
-        break;
-      }
+      if (activePreviewTab) { break; }
     }
 
-    // Reset all bays that were in preview mode
+    // No active preview → normal active-state sync governs the highlight; nothing to do.
+    if (!activePreviewTab) { return { activeChanged: false }; }
+
+    const ownerBay = this.findPreviewSourceBay(activePreviewTab);
+    if (!ownerBay) {
+      // Diagnostic: a preview is showing but we couldn't match its source bay.
+      Logger.warn(`[BaySync] Active preview but no source bay matched. label="${activePreviewTab.label}", column=${activePreviewTab.group.viewColumn}, mdBays=[${this.stateService.getAllBays().filter(b => b.metadata.fileExtension.match(/\.mdx?|\.markdown/)).map(b => `${b.metadata.fileName}@${b.state.viewColumn}`).join(', ')}]`);
+      return { activeChanged: false };
+    }
+
+    // The preview webview is the active tab in its group, so the source's text
+    // tab is not active there. Force the OWNER (source bay) to be the sole active
+    // bay in its group so its sidebar row stays highlighted while the preview shows.
+    // This does NOT touch viewMode/preferPreview, so it can't fight the toggle.
+    let activeChanged = false;
     for (const bay of this.stateService.getAllBays()) {
-      if (bay.state.viewMode === 'preview') {
-        bay.state.viewMode = 'source';
-        // Bay is no longer the preview owner, deactivate it
-        // unless its actual source tab is active
-        const nativeTab = this.findNativeTab(bay);
-        if (nativeTab) {
-          bay.state.isActive = nativeTab.isActive;
-        } else {
-          bay.state.isActive = false;
-        }
+      if (bay.state.viewColumn !== ownerBay.state.viewColumn) { continue; }
+      const shouldBeActive = bay === ownerBay;
+      if (bay.state.isActive !== shouldBeActive) {
+        bay.state.isActive = shouldBeActive;
+        activeChanged = true;
       }
     }
 
-    // If there's an active preview, find its source bay and mark it
-    if (activePreviewTab) {
-      // Extract filename from preview label: "Preview filename.md" → "filename.md"
-      const previewLabel = activePreviewTab.label;
-      const filenameMatch = previewLabel.match(/^Preview\s+(.+)$/);
-      
-      if (filenameMatch) {
-        const filename = filenameMatch[1];
-        
-        // Find bay with matching filename in the same group
-        const previewGroup = activePreviewTab.group;
-        const sourceBay = this.stateService.getAllBays().find(bay => 
-          bay.metadata.fileName === filename && 
-          bay.metadata.bayType === 'file' &&
-          bay.metadata.fileExtension.match(/\.mdx?|\.markdown/) &&
-          bay.state.viewColumn === previewGroup.viewColumn
-        );
-        
-        if (sourceBay) {
-          sourceBay.state.viewMode = 'preview';
-          // Source bay is the preview owner, mark it as active
-          // This keeps it visually active in the sidebar even though preview tab is displayed
-          sourceBay.state.isActive = true;
-          Logger.log(`[BaySync] Preview active for: ${sourceBay.metadata.label}`);
-        }
-      }
-    }
+    Logger.log(`[BaySync] Preview active → source stays active: ${ownerBay.metadata.label} (activeChanged=${activeChanged})`);
+    return { activeChanged };
   }
 
   /**
-   * Encuentra la tab nativa de VS Code correspondiente a una bay.
-   * Usado internamente para verificar el estado real de la tab.
+   * Encuentra la bay source (archivo Markdown) cuyo preview renderizado
+   * corresponde a la pestaña de preview activa. Se empareja por nombre de
+   * archivo (extraído del label "Preview x.md") y, preferentemente, viewColumn.
+   *
+   * Garantiza que la bay del fuente siga siendo la activa aunque se muestre el
+   * preview: si el preview está en el mismo grupo que su fuente lo empareja por
+   * columna; si se abrió "al lado" (otra columna) cae a un match por nombre
+   * siempre que sea inequívoco (una sola bay Markdown con ese nombre).
    */
-  private findNativeTab(bay: Bay): vscode.Tab | null {
-    for (const group of vscode.window.tabGroups.all) {
-      if (group.viewColumn !== bay.state.viewColumn) {
-        continue;
-      }
-      
-      for (const tab of group.tabs) {
-        const input = tab.input;
-        
-        // Match by URI for file tabs
-        if (bay.metadata.uri && input) {
-          if (input instanceof vscode.TabInputText && input.uri.toString() === bay.metadata.uri.toString()) {
-            return tab;
-          }
-          if (input instanceof vscode.TabInputTextDiff && input.modified.toString() === bay.metadata.uri.toString()) {
-            return tab;
-          }
-          if (input instanceof vscode.TabInputCustom && input.uri.toString() === bay.metadata.uri.toString()) {
-            return tab;
-          }
-          if (input instanceof vscode.TabInputNotebook && input.uri.toString() === bay.metadata.uri.toString()) {
-            return tab;
-          }
-        }
-        // Match by label for webview tabs
-        else if (!bay.metadata.uri && tab.label === bay.metadata.label) {
-          return tab;
-        }
-      }
-    }
-    return null;
+  private findPreviewSourceBay(previewTab: vscode.Tab): Bay | undefined {
+    // The preview tab label is "<prefix> <filename>", where <prefix> is LOCALISED
+    // ("Preview README.md" in English, "Vista previa README.md" in Spanish, ...).
+    // So we must NOT key off the "Preview" prefix — instead match the source bay
+    // whose file name is the label's suffix (with a space boundary so "a.md" does
+    // not match "xa.md"). This is locale-independent.
+    const label = previewTab.label;
+    const viewColumn = previewTab.group.viewColumn;
+
+    const isMarkdownSource = (bay: Bay): boolean => {
+      const fileName = bay.metadata.fileName;
+      if (!fileName || bay.metadata.bayType !== 'file') { return false; }
+      if (!bay.metadata.fileExtension.match(/\.mdx?|\.markdown/)) { return false; }
+      return label === fileName || label.endsWith(' ' + fileName);
+    };
+
+    const bays = this.stateService.getAllBays();
+
+    // Prefer the source bay in the same editor group as the preview.
+    const sameColumn = bays.find(bay => isMarkdownSource(bay) && bay.state.viewColumn === viewColumn);
+    if (sameColumn) { return sameColumn; }
+
+    // Preview opened to the side (different column): fall back to a name match,
+    // but only when it is unambiguous (exactly one such Markdown bay).
+    const candidates = bays.filter(isMarkdownSource);
+    return candidates.length === 1 ? candidates[0] : undefined;
   }
 
   /**

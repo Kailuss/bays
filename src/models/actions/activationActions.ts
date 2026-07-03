@@ -23,13 +23,16 @@ async function activateWithRetry(
   const maxAttempts = 2;
 
   try {
-    // Determine if we should open in preview mode
+    // Determine if we should open in preview mode.
+    // preferPreview is the durable per-bay preference set via the toggle button;
+    // when it's undefined we fall back to the openPreviewableInPreview setting.
+    // Honouring preferPreview===false is what makes "Edit Source" actually stick
+    // (previously the config term forced preview regardless of the user's choice).
     const config = vscode.workspace.getConfiguration('bays');
     const openPreviewableInPreview = config.get<boolean>('openPreviewableInPreview', true);
-    
-    // Auto-enable preview mode for previewable files if config is active
-    const shouldOpenInPreview = 
-      state.viewMode === 'preview' || 
+
+    const shouldOpenInPreview =
+      state.preferPreview ??
       (openPreviewableInPreview && BayHelpers.isPreviewableFile(metadata));
 
     // MARKDOWN PREVIEW MODE: If should open in preview, open the preview
