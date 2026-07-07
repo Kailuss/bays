@@ -442,7 +442,12 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    await this.dragDropService.moveBetweenGroups(sourceBayId, targetGroupId, targetBayId);
+    // A successful move closes+reopens the bay in the target group, which fires
+    // native tab events and rebuilds. If it's rejected (e.g. webview with no
+    // URI, or a pinned bay), nothing rebuilds — refresh to restore the DOM,
+    // otherwise the client-faded block would just vanish.
+    const moved = await this.dragDropService.moveBetweenGroups(sourceBayId, targetGroupId, targetBayId);
+    if (!moved) { this.refresh(); }
   }
 
   private async handleFileAction(bayId: string, actionId?: string): Promise<void> {

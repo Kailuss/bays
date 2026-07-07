@@ -19,8 +19,13 @@ let siblings           = [];    // .bay-block reordenables (excluye pinned y el 
 let originalOrder      = [];    // rect.top y altura de cada sibling al iniciar
 let currentInsertIndex = -1;    // índice de inserción actual (en siblings)
 let sourceIndex        = -1;    // índice original del bloque arrastrado
-let tabGroupId         = null;
+let tabGroupId         = null;  // grupo de origen (string, del dataset)
 let blockHeight        = 0;     // Alto total del bloque (parent + children automático)
+
+// Cross-group: regiones verticales de cada grupo y grupo bajo el cursor.
+let groupRegions       = [];    // [{ groupId, top, bottom, headerEl }] al iniciar el drag
+let targetGroupId      = null;  // grupo actualmente bajo el cursor (string)
+let highlightedGroupId = null;  // grupo con resaltado de destino activo
 
 // --- Mousedown: preparar un posible drag ---
 document.addEventListener('mousedown', e => {
@@ -56,7 +61,19 @@ document.addEventListener('mousemove', e => {
 
   // Centro del bloque clonado para determinar posición de inserción
   const cloneCenter = startY + (blockHeight / 2) + dy;
-  updateSiblingPositions(cloneCenter);
+  const overGroup   = groupAt(cloneCenter);
+
+  if (overGroup === null || overGroup === tabGroupId) {
+    // Sobre el grupo de origen (o sin grupos): reordenar in situ.
+    clearTargetGroupHighlight();
+    updateSiblingPositions(cloneCenter);
+    targetGroupId = tabGroupId;
+  } else {
+    // Sobre otro grupo: cancelar el desplazamiento local y resaltar el destino.
+    clearSiblingShifts();
+    setTargetGroupHighlight(overGroup);
+    targetGroupId = overGroup;
+  }
 });
 
 // --- Mouseup: terminar el drag ---
@@ -82,6 +99,11 @@ function beginDrag() {
   // blockHeight = alto real del bloque completo (parent + todos sus children)
   // getBoundingClientRect() ya lo calcula porque .bay-block los contiene
   blockHeight = Math.round(rect.height) + 1;
+
+  // Regiones verticales de cada grupo (para detectar arrastre entre grupos).
+  // Sin cabeceras (un solo grupo visible) queda vacío ⇒ sólo reordenación local.
+  groupRegions  = buildGroupRegions();
+  targetGroupId = tabGroupId;
 
   // Todos los bloques arrastrables del mismo grupo (excluir pinned)
   const allBlocks      = Array.from(document.querySelectorAll('.bay-block[data-groupid="' + tabGroupId + '"]'));
@@ -135,6 +157,30 @@ function updateSiblingPositions(cloneCenter) {
 }
 
 function commitDrop() {
+  // --- Movimiento entre grupos ---
+  // El host cierra la bay y la reabre en el grupo destino; eso dispara los
+  // eventos nativos de tabs y provoca un rebuild completo. No hacemos un
+  // movimiento de DOM en cliente: sólo animamos el clon hacia el destino como
+  // puente visual y dejamos que el rebuild ponga el orden autoritativo.
+  if (targetGroupId !== tabGroupId) {
+    vscode.postMessage({
+      type          : 'dropBay',
+      sourceBayId   : sourceEl.dataset.bayId,
+      targetBayId   : null,
+      insertPosition: null,
+      sourceGroupId : parseInt(tabGroupId, 10),
+      targetGroupId : parseInt(targetGroupId, 10),
+    });
+
+    const region  = groupRegions.find(r => r.groupId === targetGroupId);
+    const destTop = region ? region.headerEl.getBoundingClientRect().bottom : startY;
+    cloneEl.style.transition = 'transform 160ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 160ms ease-out';
+    cloneEl.style.transform  = 'translateY(' + (destTop - startY) + 'px) scale(0.85)';
+    cloneEl.style.opacity    = '0';
+    setTimeout(() => teardown(), 170);
+    return;
+  }
+
   if (currentInsertIndex !== sourceIndex) {
     let targetTabId, insertPosition, refEl, insertAfter;
     if (currentInsertIndex < originalOrder.length) {
@@ -192,11 +238,72 @@ function commitDomMove(src, ref, after) {
   }
 }
 
+// ------------ cross-group helpers ------------
+
+// Calcula la banda vertical [top, bottom) que ocupa cada grupo, delimitada por
+// las cabeceras. Con una sola cabecera (o ninguna) no hay destino alternativo.
+function buildGroupRegions() {
+  const headers = Array.from(document.querySelectorAll('.group-header'));
+  if (headers.length === 0) { return []; }
+
+  const regions = headers.map(h => ({
+    groupId : h.dataset.groupid,
+    top     : h.getBoundingClientRect().top,
+    bottom  : Number.POSITIVE_INFINITY,
+    headerEl: h,
+  }));
+  for (let i = 0; i < regions.length - 1; i++) {
+    regions[i].bottom = regions[i + 1].top;
+  }
+  return regions;
+}
+
+// Devuelve el groupId (string) cuya banda contiene la coordenada y, o null.
+function groupAt(y) {
+  for (const r of groupRegions) {
+    if (y >= r.top && y < r.bottom) { return r.groupId; }
+  }
+  return null;
+}
+
+// Deshace el desplazamiento de los siblings del grupo de origen (al salir hacia
+// otro grupo, el hueco de reordenación local debe cerrarse).
+function clearSiblingShifts() {
+  if (currentInsertIndex === sourceIndex) { return; }
+  originalOrder.forEach(s => { s.el.style.transform = ''; });
+  currentInsertIndex = sourceIndex;
+}
+
+function setTargetGroupHighlight(groupId) {
+  if (highlightedGroupId === groupId) { return; }
+  clearTargetGroupHighlight();
+
+  const header = document.querySelector('.group-header[data-groupid="' + groupId + '"]');
+  if (header) { header.classList.add('drag-over'); }
+  document
+    .querySelectorAll('.bay-block[data-groupid="' + groupId + '"]')
+    .forEach(b => b.classList.add('drag-target-group'));
+  highlightedGroupId = groupId;
+}
+
+function clearTargetGroupHighlight() {
+  if (highlightedGroupId === null) { return; }
+  document
+    .querySelectorAll('.group-header.drag-over')
+    .forEach(h => h.classList.remove('drag-over'));
+  document
+    .querySelectorAll('.bay-block.drag-target-group')
+    .forEach(b => b.classList.remove('drag-target-group'));
+  highlightedGroupId = null;
+}
+
 function cancelDrag() { teardown(); }
 
 function teardown() {
   document.querySelectorAll('.drag-clone').forEach(el => el.remove());
   cloneEl = null;
+
+  clearTargetGroupHighlight();
 
   if (sourceEl) {
     sourceEl.classList.remove('drag-placeholder');
@@ -216,4 +323,6 @@ function teardown() {
   currentInsertIndex = -1;
   sourceIndex        = -1;
   blockHeight        = 0;
+  groupRegions       = [];
+  targetGroupId      = null;
 }

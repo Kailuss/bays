@@ -42,3 +42,15 @@ body.drag-active {
 body.drag-active .bay-block[data-pinned="true"] {
   pointer-events: none;
 }
+
+/* Grupo destino resaltado al arrastrar una bay hacia otro grupo */
+.group-header.drag-over {
+  background: var(--vscode-list-dropBackground, rgba(0,122,204,0.20));
+  outline: 1px solid var(--vscode-focusBorder, #007acc);
+  outline-offset: -1px;
+}
+
+.bay-block.drag-target-group {
+  background: var(--vscode-list-dropBackground, rgba(0,122,204,0.12));
+  transition: background 120ms ease-out;
+}
