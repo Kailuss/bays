@@ -41,6 +41,13 @@
   background: var(--vscode-list-activeSelectionBackground, rgba(90,93,94,0.3));
 }
 
+/* Parent keeps an "active" appearance while one of its variants (e.g. the
+   rendered Markdown preview) is the focused tab, so the source file stays
+   visually associated with what the user is looking at. */
+.bay-block:has(> .bay.variant.active) > .bay:not(.variant) {
+  background: var(--vscode-list-inactiveSelectionBackground, #37373d66);
+}
+
 /* ICONS */
 .bay.variant .bay-icon .codicon {
   font-size: 12px;

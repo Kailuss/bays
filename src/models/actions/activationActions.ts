@@ -9,8 +9,6 @@ import { TIMINGS } from '../../constants/timings';
  * Activation actions - Activar y hacer focus en tabs
  */
 
-const MARKDOWN_EXTENSIONS = ['.md', '.mdx', '.markdown'];
-
 export async function activate(metadata: BayMetadata, state: BayState): Promise<void> {
   return activateWithRetry(metadata, state, 0);
 }
@@ -23,28 +21,9 @@ async function activateWithRetry(
   const maxAttempts = 2;
 
   try {
-    // Determine if we should open in preview mode.
-    // preferPreview is the durable per-bay preference set via the toggle button;
-    // when it's undefined we fall back to the openPreviewableInPreview setting.
-    // Honouring preferPreview===false is what makes "Edit Source" actually stick
-    // (previously the config term forced preview regardless of the user's choice).
-    const config = vscode.workspace.getConfiguration('bays');
-    const openPreviewableInPreview = config.get<boolean>('openPreviewableInPreview', true);
-
-    const shouldOpenInPreview =
-      state.preferPreview ??
-      (openPreviewableInPreview && BayHelpers.isPreviewableFile(metadata));
-
-    // MARKDOWN PREVIEW MODE: If should open in preview, open the preview
-    if (
-      shouldOpenInPreview &&
-      metadata.uri &&
-      MARKDOWN_EXTENSIONS.some((ext) => metadata.fileExtension.toLowerCase() === ext)
-    ) {
-      Logger.log('[BayAction] Activating in preview mode: ' + metadata.label);
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, metadata.uri);
-      return;
-    }
+    // NOTE: no markdown-preview special case here. The rendered preview is a
+    // real VARIANT bay with its own row/tab — clicking the .md bay activates
+    // the SOURCE tab, clicking the "Preview" variant activates the preview.
 
     // Re-buscar la bay nativa en cada intento (puede haber cambiado)
     const nativeTab = BayHelpers.findNativeTab(metadata, state);

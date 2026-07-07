@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Bay } from '../../models/Bay';
-import { BayGroup } from '../../models/BayGroup';
+import { BayGroup, createTabGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
 import type { DocumentManager } from './DocumentManager';
@@ -125,7 +125,20 @@ export class BayStateService {
   addBay(bay: Bay): void {
     this.bays.set(bay.metadata.id, bay);
 
-    const group = this.groups.get(bay.state.groupId);
+    let group = this.groups.get(bay.state.groupId);
+
+    // Safety net: the bay belongs to a group we don't know yet (e.g. a split
+    // created at runtime). Without this the bay would sit in the map but in no
+    // group, and the render (which iterates groups) would never show it.
+    if (!group) {
+      const native = vscode.window.tabGroups.all.find(g => g.viewColumn === bay.state.groupId);
+      if (native) {
+        group = createTabGroup(native);
+        this.groups.set(group.id, group);
+        Logger.log(`[BayState] Created missing group ${group.id} for bay: ${bay.metadata.label}`);
+      }
+    }
+
     if (group) {
       const existsInGroup = group.bays.find(t => t.metadata.id === bay.metadata.id);
       if (!existsInGroup) {
@@ -171,10 +184,14 @@ export class BayStateService {
       this.hierarchyService.detachVariantFromParentBay(id, bay.metadata.sourceBayId);
     }
     
-    // Si es parent bay con children, eliminar children primero
+    // Si es parent bay con children, eliminar children primero.
+    // EXCEPCIÓN: las variantes de preview NO se eliminan en cascada — cerrar el
+    // .md no cierra su preview en VS Code, así que la pestaña nativa sigue viva;
+    // se dejan en el estado y el renderer las muestra como huérfanas.
     if (bay.state.hasVariant && this.hierarchyService) {
       const children = this.hierarchyService.fetchVariants(id);
       for (const child of children) {
+        if (child.metadata.diffType === 'preview') { continue; }
         this.removeBayInternal(child.metadata.id);
       }
     }
@@ -308,6 +325,18 @@ export class BayStateService {
   addGroup(group: BayGroup): void {
     this.groups.set(group.id, group);
     this._onDidChangeState.fire();
+  }
+
+  /**
+   * Reemplaza el conjunto de grupos SIN disparar eventos.
+   * Usado por syncAll/resyncAll: poda grupos obsoletos (columnas renumeradas o
+   * cerradas) y añade los nuevos; el replaceBays posterior ya notifica una vez.
+   */
+  setGroups(groups: BayGroup[]): void {
+    this.groups.clear();
+    for (const group of groups) {
+      this.groups.set(group.id, group);
+    }
   }
 
   removeGroup(id: number): void {

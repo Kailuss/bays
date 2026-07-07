@@ -26,8 +26,8 @@ export type GitStatus   = 'modified' | 'added' | 'deleted' | 'untracked' | 'igno
 export type BayViewMode = 'source' | 'preview' | 'split';
 //: Edit mode for bays
 export type EditMode = 'readonly' | 'editable';
-//: Diff type for child bays (diff visualizations)
-export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'unknown';
+//: Diff type for child bays (diff visualizations; 'preview' = rendered Markdown preview variant)
+export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'preview' | 'unknown';
 
 /** Diff statistics for child bays */
 export type DiffStats = {
@@ -171,8 +171,7 @@ export type BayState = {
   indexInGroup       : number;
 
   //: VISUALIZATION MODE
-  viewMode           : BayViewMode;          // Live view state: is the rendered preview showing right now (source | preview | split). Managed by syncPreviewOwnership; drives the toggle button + preview-owner highlight.
-  preferPreview?     : boolean;              // User preference: open the rendered preview when this bay is activated. Set by the toggle button; undefined = use the openPreviewableInPreview setting. Separate from viewMode so the preference survives closing the preview.
+  viewMode           : BayViewMode;          // How the bay is visualized: source | preview | split
 
   //: DIFF INFORMATION (for child tabs)
   diffStats?         : DiffStats;            // Diff statistics (lines added/removed, etc.)

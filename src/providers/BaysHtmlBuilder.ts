@@ -126,18 +126,24 @@ export class BaysHtmlBuilder {
     compactMode: boolean,
     pendingIcons: PendingIcon[],
   ): string {
-    if (groups.length <= 1) {
-      const groupId = groups[0]?.id;
-      if (groupId !== undefined) {
-        return this.renderBayList(getBaysInGroup(groupId), showPath, copilotReady, compactMode, pendingIcons);
-      }
-      return '';
+    // Skip groups with no renderable bays. A group holding only a markdown
+    // preview webview (e.g. "Open Preview to the Side") has zero bays in state
+    // — rendering its header with nothing under it just looks broken.
+    const populated = groups
+      .map(group => ({ group, bays: getBaysInGroup(group.id) }))
+      .filter(({ bays }) => bays.length > 0);
+
+    if (populated.length <= 1) {
+      const only = populated[0];
+      return only
+        ? this.renderBayList(only.bays, showPath, copilotReady, compactMode, pendingIcons)
+        : '';
     }
 
     let html = '';
-    for (const group of groups) {
+    for (const { group, bays } of populated) {
       html += this.renderGroupHeader(group);
-      html += this.renderBayList(getBaysInGroup(group.id), showPath, copilotReady, compactMode, pendingIcons);
+      html += this.renderBayList(bays, showPath, copilotReady, compactMode, pendingIcons);
     }
     return html;
   }
@@ -153,24 +159,13 @@ export class BaysHtmlBuilder {
     compactMode: boolean,
     pendingIcons: PendingIcon[],
   ): string {
-    // CRITICAL: Filter out markdown preview bays - they should NEVER be rendered
-    // Preview tabs are managed as viewMode state on source bays
-    const filteredBays = bays.filter(bay => {
-      // Filter by viewType (webview tabs) — viewType is prefixed by VS Code
-      // (e.g. "mainThreadWebview-markdown.preview"), so match by inclusion
-      if (bay.metadata.viewType?.includes('markdown.preview')) {
-        return false;
-      }
-      // Filter by label pattern (fallback)
-      if (bay.metadata.bayType === 'webview' && bay.metadata.label.startsWith('Preview ')) {
-        return false;
-      }
-      return true;
-    });
+    // Markdown previews are real bays now (variants of their source .md), so
+    // there is no preview filtering here — they render as child rows, or as
+    // standalone rows when orphaned (source not open / in another group).
 
     // Separate parent bays (no parentId) from variant bays (have parentId)
-    const parentBays = filteredBays.filter(bay => !bay.metadata.sourceBayId);
-    const variantBays = filteredBays.filter(bay => bay.metadata.sourceBayId);
+    const parentBays = bays.filter(bay => !bay.metadata.sourceBayId);
+    const variantBays = bays.filter(bay => bay.metadata.sourceBayId);
 
     // Build a map of parentId -> children
     const childrenByParent = new Map<string, Bay[]>();
@@ -195,9 +190,10 @@ export class BaysHtmlBuilder {
     for (const parent of sortedParents) {
       const children = childrenByParent.get(parent.metadata.id) || [];
       const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
+      const hasPreviewVariant = children.some(child => child.metadata.diffType === 'preview');
 
       let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
-      block += this.renderBay(parent, showPath, copilotReady, compactMode, pendingIcons);
+      block += this.renderBay(parent, showPath, copilotReady, compactMode, pendingIcons, hasPreviewVariant);
       for (const child of children) {
         block += this.renderVariantBay(child, parent);
       }
@@ -251,6 +247,7 @@ export class BaysHtmlBuilder {
     copilotReady: boolean,
     compactMode: boolean,
     pendingIcons: PendingIcon[],
+    hasPreviewVariant = false,
   ): string {
     // data-bay-id only — data-pinned and data-groupid live on the parent .bay-block
     const activeClass = bay.state.isActive ? ' active' : '';
@@ -261,7 +258,7 @@ export class BaysHtmlBuilder {
       : '';
 
     const fileActionBtn = bay.state.capabilities.canTogglePreview
-      ? this.renderFileActionButton(bay)
+      ? this.renderFileActionButton(bay, hasPreviewVariant)
       : '';
 
     const chatBtn = copilotReady && bay.metadata.uri
@@ -294,15 +291,16 @@ export class BaysHtmlBuilder {
 
   //= BOTONES DE ACCIÓN
 
-  private renderFileActionButton(bay: Bay): string {
+  private renderFileActionButton(bay: Bay, hasPreviewVariant = false): string {
     if (!this.fileActionRegistry || !bay.metadata.uri) { return ''; }
 
-    // Drive the MD toggle button off preferPreview (the durable user choice),
-    // NOT the live viewMode — viewMode is reconciled asynchronously by the
-    // preview-ownership sync and would make the button flicker/desync.
-    const context = { viewMode: bay.state.preferPreview ? ('preview' as const) : ('source' as const) };
+    const context = { viewMode: bay.state.viewMode };
     const resolved = this.fileActionRegistry.resolve(bay.metadata.label, bay.metadata.uri, context);
     if (!resolved) { return ''; }
+
+    // The markdown button CREATES the preview variant; once the bay already has
+    // one (the child "Preview" row), the button is pointless — hide it.
+    if (resolved.id === 'openMarkdownPreview' && hasPreviewVariant) { return ''; }
 
     return `<button data-action="fileAction" data-bay-id="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
   }

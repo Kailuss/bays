@@ -451,25 +451,9 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    const isMarkdownToggle = actionId === 'openMarkdownPreview' || actionId === 'editMarkdownSource';
-    if (isMarkdownToggle) {
-      const wantPreview = actionId === 'openMarkdownPreview';
-
-      // Run the command with the context the button was resolved with (derived
-      // from the CURRENT preferPreview), so the registry re-resolves to the same
-      // actionId and actually fires the command. Previously the context was flipped
-      // first, so the re-resolve produced the opposite id and the command no-op'd.
-      const currentContext = { viewMode: bay.state.preferPreview ? ('preview' as const) : ('source' as const) };
-      await this.fileActionRegistry.execute(actionId, bay.metadata.uri, currentContext);
-
-      // Update only the durable preference. The button re-renders from it, and the
-      // preview-ownership sync handles the highlight — no racy viewMode writes here.
-      bay.state.preferPreview = wantPreview;
-      Logger.log(`[WebviewProvider] Markdown toggle for ${bay.metadata.label} → preferPreview=${wantPreview}`);
-      this.stateService.updateBay(bay);
-      return;
-    }
-
+    // The markdown "Open Preview" action needs no special-casing here: the
+    // preview opens as its own tab, arrives as a variant bay through the normal
+    // tab events, and the resulting structural rebuild hides the button.
     const shouldFocus = this.fileActionRegistry.shouldSetFocus(actionId);
     await this.fileActionRegistry.execute(actionId, bay.metadata.uri, { viewMode: bay.state.viewMode });
 

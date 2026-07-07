@@ -5,17 +5,8 @@ import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { BayHeadService } from './BayHeadService';
 import { ActiveStateService } from './ActiveStateService';
-import type { PreviewSyncResult } from '../BaySyncService';
 import type { Bay } from '../../../models/Bay';
 import { Logger } from '../../../utils/logger';
-
-const NO_PREVIEW_CHANGE: PreviewSyncResult = { activeChanged: false };
-
-/** True for a rendered Markdown preview webview tab (not a source .md tab).
- *  viewType arrives prefixed (e.g. "mainThreadWebview-markdown.preview"), so match by inclusion. */
-function isMarkdownPreviewTab(tab: vscode.Tab): boolean {
-  return tab.input instanceof vscode.TabInputWebview && tab.input.viewType.includes('markdown.preview');
-}
 
 /**
  * BayEventService - Gestión de Eventos de VS Code
@@ -35,24 +26,8 @@ export class BayEventService {
     private hierarchyService: BayHierarchyService,
     private bayHeadService: BayHeadService,
     private activeStateService: ActiveStateService,
-    private syncPreviewOwnership?: () => PreviewSyncResult
+    private resyncAll?: () => Promise<void>
   ) {}
-
-  /** Reconcile preview ownership and return what changed (safe when the callback is absent). */
-  private runPreviewSync(): PreviewSyncResult {
-    return this.syncPreviewOwnership?.() ?? NO_PREVIEW_CHANGE;
-  }
-
-  /**
-   * Active-state and preview-ownership only ever change the highlight, so a
-   * partial update suffices (the toggle button re-renders separately, on the
-   * full rebuild triggered by the toggle action itself).
-   */
-  private notifyForChanges(activeChanges: boolean, preview: PreviewSyncResult): void {
-    if (activeChanges || preview.activeChanged) {
-      this.stateService.notifyActiveChange();
-    }
-  }
 
   /**
    * Registra todos los event listeners necesarios.
@@ -80,19 +55,18 @@ export class BayEventService {
     );
 
     this.disposables.push(
-      vscode.window.tabGroups.onDidChangeTabGroups(() => {
-        this.handleGroupChanges();
+      vscode.window.tabGroups.onDidChangeTabGroups((event) => {
+        this.handleGroupChanges(event);
       })
     );
 
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => {
-        // Sync active state first, then preview ownership (which may also flip
-        // isActive/viewMode), and only THEN decide how to notify — otherwise a
-        // preview-owner change is silently dropped (highlight/button go stale).
+        // Active-only change → partial update (toggle .active), no full rebuild
         const { hasChanges } = this.activeStateService.syncActiveState();
-        const preview = this.runPreviewSync();
-        this.notifyForChanges(hasChanges, preview);
+        if (hasChanges) {
+          this.stateService.notifyActiveChange();
+        }
       })
     );
 
@@ -131,16 +105,19 @@ export class BayEventService {
       const st = convertToBay(bay, this.gitSyncService);
       if (!st) { continue; }
 
-      // Si es una variant, asegurar que el parent existe PRIMERO
-      if (st.metadata.sourceBayId) {
+      // Si es una variant DIFF, asegurar que el parent existe PRIMERO.
+      // Las variantes de preview NO pasan por BayHeadService (no tienen uri y
+      // serían descartadas); si su parent no está en el estado se añaden como
+      // huérfanas y el renderer las muestra como fila normal.
+      if (st.metadata.sourceBayId && st.metadata.diffType !== 'preview') {
         const parent = await this.bayHeadService.ensureParentExists(st, bay);
-        
+
         if (!parent) {
           Logger.warn(`[BayEvent] Failed to ensure parent exists for variant: ${st.metadata.label}`);
           // No añadir la variant si no pudimos garantizar el parent
           continue;
         }
-        
+
         Logger.log(`[BayEvent] Parent confirmed for variant: ${st.metadata.label} → ${parent.metadata.label}`);
       }
 
@@ -206,16 +183,9 @@ export class BayEventService {
       }
     }
 
-    // A rendered Markdown preview tab is filtered out of our state, so opening/
-    // closing one produces no bay delta above — but it DOES change preview
-    // ownership (viewMode/highlight), so we must still reconcile in that case.
-    const previewTabToggled =
-      event.opened.some(isMarkdownPreviewTab) || event.closed.some(isMarkdownPreviewTab);
-
-    if (hasChanges || previewTabToggled) {
-      // Sync active state, then preview ownership, then decide how to notify.
+    if (hasChanges) {
+      // Sync active state from native tabs, then decide how to notify
       const { hasChanges: activeChanges } = this.activeStateService.syncActiveState();
-      const preview = this.runPreviewSync();
 
       if (structuralChange) {
         // Full rebuild also refreshes the active highlight and dirty indicators
@@ -225,7 +195,7 @@ export class BayEventService {
         for (const b of dirtyChangedBays) {
           this.stateService.updateBayStateWithAnimation(b);
         }
-        if (activeChanges || preview.activeChanged) {
+        if (activeChanges) {
           this.stateService.notifyActiveChange();
         }
       }
@@ -235,13 +205,28 @@ export class BayEventService {
   /**
    * Maneja cambios en grupos de editores.
    */
-  private handleGroupChanges(): void {
-    // Sync active state, then preview ownership, then notify coherently.
-    // Group add/remove arrives as tab open/close (handled structurally in
-    // handleTabChanges); here it's an active-bay and/or preview-owner change.
+  private handleGroupChanges(event: vscode.TabGroupChangeEvent): void {
+    // STRUCTURAL: a split was created or closed. VS Code renumbers viewColumns,
+    // which invalidates our bay IDs (they embed the column), so incremental
+    // patching is hopeless — rebuild the state from the native API. resyncAll
+    // preserves local-only state (manual drag&drop order) and notifies once.
+    if (event.opened.length > 0 || event.closed.length > 0) {
+      void this.resyncAll?.();
+      return;
+    }
+
+    // NON-STRUCTURAL (event.changed): active group moved and/or group flags.
+    // Keep the group-active marker in state (rendered on the next full rebuild;
+    // a partial message for it arrives with Fase 2), and update the highlight.
+    const nativeActive = vscode.window.tabGroups.activeTabGroup?.viewColumn;
+    for (const group of this.stateService.getGroups()) {
+      group.isActive = group.id === nativeActive;
+    }
+
     const { hasChanges } = this.activeStateService.syncActiveState();
-    const preview = this.runPreviewSync();
-    this.notifyForChanges(hasChanges, preview);
+    if (hasChanges) {
+      this.stateService.notifyActiveChange();
+    }
   }
 
   /**

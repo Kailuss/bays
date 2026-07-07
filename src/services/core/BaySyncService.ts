@@ -11,10 +11,6 @@ import { createTabGroup } from '../../models/BayGroup';
 import { convertToBay, getDiagnosticSeverity } from './helpers/tabConverter';
 import { Logger } from '../../utils/logger';
 
-/** What syncPreviewOwnership() changed. It only ever adjusts the highlight (isActive). */
-export type PreviewSyncResult = {
-  activeChanged: boolean;  // a bay's isActive flipped → a partial highlight update is enough
-};
 
 /**
  * BaySyncService - Orquestador de Sincronización de Tabs
@@ -68,7 +64,7 @@ export class BaySyncService {
       this.hierarchyService,
       this.bayHeadService,
       this.activeStateService,
-      () => this.syncPreviewOwnership() // Pass callback to sync preview
+      () => this.resyncAll() // Full resync on structural group changes
     );
     
     // Inject services into state service to avoid circular dependencies
@@ -133,11 +129,11 @@ export class BaySyncService {
    */
   private async syncAll(): Promise<void> {
     Logger.log('[BaySync] Starting full syncAll');
-    
-    // Add all editor groups
-    for (const group of vscode.window.tabGroups.all) {
-      this.stateService.addGroup(createTabGroup(group));
-    }
+
+    // Rebuild the group set from the native API. setGroups replaces the whole
+    // map, which also PRUNES stale groups (closed splits, renumbered columns) —
+    // the old addGroup-only loop left ghost groups behind forever.
+    this.stateService.setGroups(vscode.window.tabGroups.all.map(createTabGroup));
 
     const allBays: Bay[] = [];
     const variants: Array<{ bay: Bay; nativeTab: vscode.Tab }> = [];
@@ -161,28 +157,89 @@ export class BaySyncService {
     // Second pass: process child tabs after parents are loaded
     // Process sequentially to ensure parents are opened before children are added
     for (const { bay, nativeTab } of variants) {
+      // Preview variants don't go through BayHeadService (they have no uri and
+      // would be dropped). If their parent is present, inherit; otherwise they
+      // render as orphans — never skip them.
+      if (bay.metadata.diffType === 'preview') {
+        const parent = allBays.find(t => t.metadata.id === bay.metadata.sourceBayId);
+        if (parent) { this.hierarchyService.inheritState(bay, parent); }
+        allBays.push(bay);
+        continue;
+      }
+
       // Ensure parent exists (delegate to BayHeadService)
       const parent = await this.bayHeadService.ensureParentExistsForSync(bay, nativeTab, allBays);
-      
+
       if (!parent) {
         Logger.warn(`[BaySync] Failed to ensure parent for variant, skipping: ${bay.metadata.label}`);
         continue;
       }
-      
+
       Logger.log(`[BaySync] Parent confirmed for variant: ${bay.metadata.label} → ${parent.metadata.label}`);
       allBays.push(bay);
     }
-    
+
     // Replace entire state with processed bays
     this.stateService.replaceBays(allBays);
-    
+
     // Recalculate hierarchy after sync complete
     this.hierarchyService.recalculateAllCounts();
-    
-    // Sync preview ownership after all bays are loaded
-    this.syncPreviewOwnership();
-    
+
     Logger.log(`[BaySync] syncAll complete - ${allBays.length} tabs loaded`);
+  }
+
+  /**
+   * Re-sincronización completa tras un cambio ESTRUCTURAL de grupos (split
+   * creado/cerrado → VS Code renumera viewColumns, invalidando los IDs de bay,
+   * que incluyen la columna). En vez de renumerar IDs incrementalmente (frágil:
+   * viven en el Map, los grupos, la jerarquía y el DOM), se reconstruye el
+   * estado desde la API nativa preservando el estado local que un resync
+   * destruiría: el orden manual (drag & drop) por grupo.
+   *
+   * Serializado con una promesa-cola: dos eventos de grupo rápidos no solapan
+   * resyncs (el segundo espera al primero).
+   */
+  private resyncInFlight: Promise<void> = Promise.resolve();
+
+  resyncAll(): Promise<void> {
+    this.resyncInFlight = this.resyncInFlight.then(() => this.doResync());
+    return this.resyncInFlight;
+  }
+
+  private async doResync(): Promise<void> {
+    Logger.log('[BaySync] Structural group change → full resync');
+
+    // Snapshot the manual (drag & drop) order. Keyed by URI (not bay id) because
+    // the id embeds the viewColumn, which is exactly what just changed. A global
+    // uri→index map suffices: sorting is stable, so same-file-in-two-groups
+    // instances keep their native relative order between themselves.
+    const orderByUri = new Map<string, number>();
+    let orderIndex = 0;
+    for (const group of this.stateService.getGroups()) {
+      for (const bay of group.bays) {
+        const uri = bay.metadata.uri?.toString();
+        if (!uri) { continue; }
+        orderByUri.set(uri, orderIndex++);
+      }
+    }
+
+    await this.syncAll();
+
+    // Re-apply the manual order within each new group.
+    for (const group of this.stateService.getGroups()) {
+      group.bays.sort((a, b) => {
+        const ia = a.metadata.uri ? orderByUri.get(a.metadata.uri.toString()) : undefined;
+        const ib = b.metadata.uri ? orderByUri.get(b.metadata.uri.toString()) : undefined;
+        if (ia === undefined && ib === undefined) { return 0; }
+        if (ia === undefined) { return 1; }   // new bays go after known ones
+        if (ib === undefined) { return -1; }
+        return ia - ib;
+      });
+      group.bays.forEach((bay, idx) => { bay.state.indexInGroup = idx; });
+    }
+
+    this.stateService.notifyChange();
+    Logger.log('[BaySync] Resync complete');
   }
 
   /**
@@ -250,106 +307,6 @@ export class BaySyncService {
       bay.state.gitStatus = newGitStatus;
       this.stateService.updateBayStateWithAnimation(bay);
     }
-  }
-
-  /**
-   * Sincroniza el estado de preview ownership.
-   * 
-   * Busca tabs de Markdown Preview activas y actualiza el viewMode de sus bays source:
-   * - Si hay un preview activo → bay source: viewMode = 'preview', se marca como activa
-   * - Si el preview cambió de bay → bay anterior: viewMode = 'source'
-   * - Las tabs de preview nunca se renderizan como bay (filtradas en convertToBay)
-   * 
-   * Comportamiento de isActive:
-   * - Cuando se abre preview: source bay mantiene isActive = true
-   * - Cuando cambia a otra bay o preview desaparece: source bay solo será activa si su tab nativa lo es
-   * 
-   * Invariant: Solo 1 Bay puede tener viewMode: 'preview' globalmente.
-   */
-  syncPreviewOwnership(): PreviewSyncResult {
-    // Find the active markdown-preview tab, if any.
-    // NOTE: TabInputWebview.viewType arrives PREFIXED by VS Code (e.g.
-    // "mainThreadWebview-markdown.preview"), so we must match by inclusion,
-    // not strict equality — equality never matches and the sync silently no-ops.
-    let activePreviewTab: vscode.Tab | null = null;
-    for (const group of vscode.window.tabGroups.all) {
-      for (const tab of group.tabs) {
-        if (
-          tab.input instanceof vscode.TabInputWebview &&
-          tab.input.viewType.includes('markdown.preview') &&
-          tab.isActive
-        ) {
-          activePreviewTab = tab;
-          break;
-        }
-      }
-      if (activePreviewTab) { break; }
-    }
-
-    // No active preview → normal active-state sync governs the highlight; nothing to do.
-    if (!activePreviewTab) { return { activeChanged: false }; }
-
-    const ownerBay = this.findPreviewSourceBay(activePreviewTab);
-    if (!ownerBay) {
-      // Diagnostic: a preview is showing but we couldn't match its source bay.
-      Logger.warn(`[BaySync] Active preview but no source bay matched. label="${activePreviewTab.label}", column=${activePreviewTab.group.viewColumn}, mdBays=[${this.stateService.getAllBays().filter(b => b.metadata.fileExtension.match(/\.mdx?|\.markdown/)).map(b => `${b.metadata.fileName}@${b.state.viewColumn}`).join(', ')}]`);
-      return { activeChanged: false };
-    }
-
-    // The preview webview is the active tab in its group, so the source's text
-    // tab is not active there. Force the OWNER (source bay) to be the sole active
-    // bay in its group so its sidebar row stays highlighted while the preview shows.
-    // This does NOT touch viewMode/preferPreview, so it can't fight the toggle.
-    let activeChanged = false;
-    for (const bay of this.stateService.getAllBays()) {
-      if (bay.state.viewColumn !== ownerBay.state.viewColumn) { continue; }
-      const shouldBeActive = bay === ownerBay;
-      if (bay.state.isActive !== shouldBeActive) {
-        bay.state.isActive = shouldBeActive;
-        activeChanged = true;
-      }
-    }
-
-    Logger.log(`[BaySync] Preview active → source stays active: ${ownerBay.metadata.label} (activeChanged=${activeChanged})`);
-    return { activeChanged };
-  }
-
-  /**
-   * Encuentra la bay source (archivo Markdown) cuyo preview renderizado
-   * corresponde a la pestaña de preview activa. Se empareja por nombre de
-   * archivo (extraído del label "Preview x.md") y, preferentemente, viewColumn.
-   *
-   * Garantiza que la bay del fuente siga siendo la activa aunque se muestre el
-   * preview: si el preview está en el mismo grupo que su fuente lo empareja por
-   * columna; si se abrió "al lado" (otra columna) cae a un match por nombre
-   * siempre que sea inequívoco (una sola bay Markdown con ese nombre).
-   */
-  private findPreviewSourceBay(previewTab: vscode.Tab): Bay | undefined {
-    // The preview tab label is "<prefix> <filename>", where <prefix> is LOCALISED
-    // ("Preview README.md" in English, "Vista previa README.md" in Spanish, ...).
-    // So we must NOT key off the "Preview" prefix — instead match the source bay
-    // whose file name is the label's suffix (with a space boundary so "a.md" does
-    // not match "xa.md"). This is locale-independent.
-    const label = previewTab.label;
-    const viewColumn = previewTab.group.viewColumn;
-
-    const isMarkdownSource = (bay: Bay): boolean => {
-      const fileName = bay.metadata.fileName;
-      if (!fileName || bay.metadata.bayType !== 'file') { return false; }
-      if (!bay.metadata.fileExtension.match(/\.mdx?|\.markdown/)) { return false; }
-      return label === fileName || label.endsWith(' ' + fileName);
-    };
-
-    const bays = this.stateService.getAllBays();
-
-    // Prefer the source bay in the same editor group as the preview.
-    const sameColumn = bays.find(bay => isMarkdownSource(bay) && bay.state.viewColumn === viewColumn);
-    if (sameColumn) { return sameColumn; }
-
-    // Preview opened to the side (different column): fall back to a name match,
-    // but only when it is unambiguous (exactly one such Markdown bay).
-    const candidates = bays.filter(isMarkdownSource);
-    return candidates.length === 1 ? candidates[0] : undefined;
   }
 
   /**

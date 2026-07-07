@@ -136,25 +136,21 @@ export function convertToBay(
   const inputData = extractTabInputData(VSTab);
   const { uri, label, description, pathParts, tooltip, fileType, tabType, viewType, originalUri, modifiedUri } = inputData;
   
-  // Filtrar tabs de Markdown Preview - NO crear Bay para ellas
-  // Se manejan como estado toggle (viewMode) en la bay source.
-  // El viewType llega prefijado (p.ej. "mainThreadWebview-markdown.preview"),
-  // por eso se compara por inclusión y no por igualdad estricta.
-  if (viewType?.includes('markdown.preview')) {
-    Logger.log(`[TabConverter] Filtering markdown preview tab: ${label}`);
-    return null;
-  }
-  
-  // También filtrar por label (fallback para casos donde viewType no está disponible)
-  if (tabType === 'webview' && label.startsWith('Preview ')) {
-    Logger.log(`[TabConverter] Filtering preview tab by label: ${label}`);
-    return null;
-  }
   const viewColumn = VSTab.group.viewColumn;
 
   let parentId  : string | undefined;
   let diffType  : import('../../../models/Bay').DiffType | undefined;
   let diffStats : import('../../../models/Bay').DiffStats | undefined;
+
+  // Las tabs de Markdown Preview se modelan como VARIANTES de su bay source
+  // (misma arquitectura que los diffs): fila hija bajo el .md, con estado
+  // activo/grupo/cierre nativos. El viewType llega prefijado por VS Code
+  // (p.ej. "mainThreadWebview-markdown.preview") → comparar por inclusión.
+  if (tabType === 'webview' && viewType?.includes('markdown.preview')) {
+    diffType = 'preview';
+    parentId = findPreviewSourceTabId(VSTab);
+    Logger.log(`[TabConverter] Markdown preview as variant: ${label} → parent: ${parentId ?? 'none (orphan)'}`);
+  }
 
   if (VSTab.input instanceof vscode.TabInputTextDiff && uri) {
     diffType = classifyDiffType(label, originalUri, modifiedUri);
@@ -211,15 +207,6 @@ export function convertToBay(
   const stateWithDefaults = { ...defaultState, ...baseState };
   const capabilities      = BayHelpers.computeCapabilities(metadata, stateWithDefaults);
   const viewMode          = BayHelpers.mapPreviewModeToViewMode(false);
-
-  // preferPreview drives whether activating a Markdown bay opens the rendered
-  // preview, and drives the preview↔source toggle button. It is deterministic
-  // (only the user's toggle changes it), so it never races with the live
-  // preview-ownership sync. Initialise it from the setting for Markdown files.
-  const isMarkdownFile = ['.md', '.mdx', '.markdown'].includes((fileType || '').toLowerCase());
-  const preferPreview  = isMarkdownFile
-    ? vscode.workspace.getConfiguration('bays').get<boolean>('openPreviewableInPreview', true)
-    : undefined;
   const state: BayState   = {
 
     // VS CODE NATIVE STATE
@@ -235,7 +222,6 @@ export function convertToBay(
 
     // VISUALIZATION MODE
     viewMode,
-    preferPreview,
 
     actionContext  : stateWithDefaults.actionContext!,
     operationState : stateWithDefaults.operationState!,
@@ -328,4 +314,46 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
 export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
   const { uri, label, tabType } = extractTabInputData(VSTab);
   return generateId(label, uri, VSTab.group.viewColumn, tabType);
+}
+
+/**
+ * Resuelve el ID de la bay source de una tab de Markdown Preview.
+ *
+ * El label del preview es "<prefijo localizado> <archivo.md>" ("Preview x.md",
+ * "Vista previa x.md", …), así que se empareja por el NOMBRE DE ARCHIVO al
+ * final del label (con frontera de espacio), nunca por el prefijo. Se prefiere
+ * una tab de texto en el mismo grupo; si el preview vive en otro grupo (Open
+ * Preview to the Side) se acepta un match global solo si es inequívoco.
+ * Devuelve undefined si no hay source abierta (la variante quedará huérfana).
+ */
+function findPreviewSourceTabId(previewTab: vscode.Tab): string | undefined {
+  const label = previewTab.label;
+
+  const matches = (tab: vscode.Tab): boolean => {
+    if (!(tab.input instanceof vscode.TabInputText)) { return false; }
+    const fileName = path.basename(tab.input.uri.fsPath);
+    if (!fileName.match(/\.(md|mdx|markdown)$/i)) { return false; }
+    return label === fileName || label.endsWith(' ' + fileName);
+  };
+
+  // Prefer the preview's own group
+  for (const tab of previewTab.group.tabs) {
+    if (matches(tab)) {
+      const input = tab.input as vscode.TabInputText;
+      return `${input.uri.toString()}-${tab.group.viewColumn}`;
+    }
+  }
+
+  // Fall back to a global match only when unambiguous
+  const candidates: vscode.Tab[] = [];
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (matches(tab)) { candidates.push(tab); }
+    }
+  }
+  if (candidates.length === 1) {
+    const input = candidates[0].input as vscode.TabInputText;
+    return `${input.uri.toString()}-${candidates[0].group.viewColumn}`;
+  }
+  return undefined;
 }

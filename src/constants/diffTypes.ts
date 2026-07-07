@@ -108,6 +108,12 @@ export const DIFF_TYPE_DISPLAY: Record<DiffType, DiffTypeDisplayInfo> = {
     tooltip  :'Comparing incoming and current changes',
     cssClass :'diff-merge',
   },
+  'preview':{
+    icon     :'open-preview',
+    label    :'Preview',
+    tooltip  :'Rendered Markdown preview',
+    cssClass :'variant-preview',
+  },
   'unknown':{
     icon     :'diff',
     label    :'Compare',
