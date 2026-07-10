@@ -294,18 +294,22 @@ export class BaySyncService {
    * Actualiza los diagnósticos y git status de una pestaña específica cuando cambian.
    */
   private updateTabDiagnostics(uri: vscode.Uri): void {
-    const bay = this.stateService.findBayByUri(uri);
-    if (!bay) { return; }
+    // The same file can be open in several groups (distinct bays). Diagnostics
+    // are per-URI, so every matching bay must be refreshed, not just the first.
+    const bays = this.stateService.findBaysByUri(uri);
+    if (bays.length === 0) { return; }
 
     const newDiagnosticSeverity = getDiagnosticSeverity(uri);
     const newGitStatus = this.gitSyncService.getGitStatus(uri);
 
-    if (bay.state.diagnosticSeverity !== newDiagnosticSeverity || 
-        bay.state.gitStatus !== newGitStatus) {
-      Logger.log(`[BaySync] Updating diagnostics/git for: ${bay.metadata.label}`);
-      bay.state.diagnosticSeverity = newDiagnosticSeverity;
-      bay.state.gitStatus = newGitStatus;
-      this.stateService.updateBayStateWithAnimation(bay);
+    for (const bay of bays) {
+      if (bay.state.diagnosticSeverity !== newDiagnosticSeverity ||
+          bay.state.gitStatus !== newGitStatus) {
+        Logger.log(`[BaySync] Updating diagnostics/git for: ${bay.metadata.label}`);
+        bay.state.diagnosticSeverity = newDiagnosticSeverity;
+        bay.state.gitStatus = newGitStatus;
+        this.stateService.updateBayStateWithAnimation(bay);
+      }
     }
   }
 

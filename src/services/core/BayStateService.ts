@@ -376,6 +376,18 @@ export class BayStateService {
     return undefined;
   }
 
+  // Todas las bays que comparten una URI (el mismo archivo abierto en varios
+  // grupos son bays distintas). Diagnósticos y git status son por-URI, no
+  // por-grupo, así que cambios de estado deben aplicarse a todas.
+  findBaysByUri(uri: vscode.Uri): Bay[] {
+    const uriString = uri.toString();
+    const matches: Bay[] = [];
+    for (const bay of this.bays.values()) {
+      if (bay.metadata.uri?.toString() === uriString) { matches.push(bay); }
+    }
+    return matches;
+  }
+
   //- Pin / unpin reordering
 
   /**
