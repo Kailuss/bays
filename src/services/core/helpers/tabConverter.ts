@@ -175,11 +175,25 @@ export function convertToBay(
     parentId = `${parentUri.toString()}-${viewColumn}`;
   }
 
+  // Variant (diff/snapshot) bays get a DETERMINISTIC id so the close/active-sync
+  // paths — which recompute the id from the native tab via generateIdFromNativeTab —
+  // can actually match them. modified+original URI + viewColumn uniquely identify a
+  // diff tab and are all recoverable from the native tab.
+  let id: string;
+  if (VSTab.input instanceof vscode.TabInputTextDiff && modifiedUri) {
+    id = generateVariantId(modifiedUri, originalUri, viewColumn);
+  } else if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
+    id = generateVariantId(uri, undefined, viewColumn);
+  } else {
+    id = generateId(label, uri, viewColumn, tabType, !!parentId);
+  }
+
   const baseMetadata: BayMetadata = {
-    id            : generateId(label, uri, viewColumn, tabType, !!parentId),
+    id,
     sourceBayId: parentId,
     diffType,
     uri,
+    originalUri,
     label,
     detailLabel   : description,
     pathParts,
@@ -285,6 +299,23 @@ export function generateId(
 }
 
 /**
+ * Deterministic, reconstructable id for a diff/variant tab. Unlike generateId's
+ * `isDiff` branch (which embeds Date.now()+counter and therefore can never be
+ * reproduced from a native tab), this derives solely from the modified/original
+ * URIs and viewColumn — all available on the native tab — so the open path and
+ * the close/active-sync paths agree on the same id. Including the original URI
+ * also disambiguates two different diffs of the same file in one group.
+ */
+export function generateVariantId(
+  modifiedUri : vscode.Uri,
+  originalUri : vscode.Uri | undefined,
+  viewColumn  : vscode.ViewColumn,
+): string {
+  const original = originalUri ? originalUri.toString() : '';
+  return `diff:${modifiedUri.toString()}::${original}-${viewColumn}`;
+}
+
+/**
  * Obtiene la severidad más alta de diagnóstico para un archivo.
  * Retorna Error o Warning, o null si no hay diagnósticos relevantes.
  */
@@ -312,7 +343,15 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
  * Usado para mejor performance en operaciones de sincronización.
  */
 export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
-  const { uri, label, tabType } = extractTabInputData(VSTab);
+  const { uri, label, tabType, originalUri, modifiedUri } = extractTabInputData(VSTab);
+  // Must mirror convertToBay's id derivation exactly, or close/active-sync lookups
+  // for diff/variant tabs silently miss their stored bay.
+  if (VSTab.input instanceof vscode.TabInputTextDiff && modifiedUri) {
+    return generateVariantId(modifiedUri, originalUri, VSTab.group.viewColumn);
+  }
+  if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
+    return generateVariantId(uri, undefined, VSTab.group.viewColumn);
+  }
   return generateId(label, uri, VSTab.group.viewColumn, tabType);
 }
 

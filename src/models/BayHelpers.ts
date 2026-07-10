@@ -97,7 +97,12 @@ export class BayHelpers {
   static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
     if (t.input instanceof vscode.TabInputWebview) { return t.label === metadata.label; }
     if (!t.input) { return metadata.bayType === 'webview' && !metadata.uri && t.label === metadata.label; }
-    if (t.input instanceof vscode.TabInputTextDiff) { return !!metadata.sourceBayId && metadata.uri?.toString() === t.input.modified.toString(); }
+    if (t.input instanceof vscode.TabInputTextDiff) {
+      // Match on modified URI AND original URI so two different diffs of the same
+      // file (e.g. working-tree vs a Copilot edit) don't resolve to each other.
+      if (!metadata.sourceBayId || metadata.uri?.toString() !== t.input.modified.toString()) { return false; }
+      return metadata.originalUri ? metadata.originalUri.toString() === t.input.original.toString() : true;
+    }
     if (metadata.sourceBayId) { return false; }
     const uri = metadata.uri;
     if (!uri) { return false; }
