@@ -80,8 +80,7 @@ export class BayIconManager {
 
       // Si no hay tema de iconos configurado, limpiar el mapa y salir.
       if (!iconTheme) {
-        this._iconMap     = {};
-        this._iconThemeId = '';
+        this.clearThemeState('');
         return;
       }
 
@@ -104,8 +103,7 @@ export class BayIconManager {
 
         if (!ext) {
           Logger.warn('[Bays] No icon theme found (not even vs-seti)');
-          this._iconMap     = {};
-          this._iconThemeId = iconTheme;
+          this.clearThemeState(iconTheme);
           return;
         }
       }
@@ -116,8 +114,7 @@ export class BayIconManager {
       const themeContribution = ext.packageJSON.contributes.iconThemes.find( (t: any) => t.id === themeId );
       if (!themeContribution) {
         Logger.warn('[Bays] Theme contribution not found in extension');
-        this._iconMap     = {};
-        this._iconThemeId = iconTheme;
+        this.clearThemeState(iconTheme);
         return;
       }
 
@@ -129,8 +126,7 @@ export class BayIconManager {
         await fsp.access(themePath);
       } catch {
         Logger.warn('[Bays] Theme file not accessible: ' + themePath);
-        this._iconMap     = {};
-        this._iconThemeId = iconTheme;
+        this.clearThemeState(iconTheme);
         return;
       }
 
@@ -139,8 +135,7 @@ export class BayIconManager {
         themeJson          = JSON.parse(themeContent);
       } catch (err) {
         Logger.error('[Bays] Error parsing icon theme JSON:', err);
-        this._iconMap     = {};
-        this._iconThemeId = iconTheme;
+        this.clearThemeState(iconTheme);
         return;
       }
 
@@ -432,7 +427,7 @@ export class BayIconManager {
         }
       }
 
-      const iconPromises: Promise<void>[] = [];
+      const iconLoaders: (() => Promise<void>)[] = [];
 
       for (const bay of allBays) {
         if (bay.input instanceof vscode.TabInputText) {
@@ -441,23 +436,15 @@ export class BayIconManager {
 
           const loadIcon = async () => {
             try {
-              let languageId: string | undefined;
+              // Only read languageId from documents already loaded; never force
+              // openTextDocument here — at startup that would load every restored
+              // tab's document into the host and wake unrelated language
+              // extensions, all for a value that is merely the last-resort icon
+              // fallback (filename/extension matching handles the common cases).
               const doc = vscode.workspace.textDocuments.find(
                 d => d.uri.toString() === input.uri.toString()
               );
-              if (doc) {
-                languageId = doc.languageId;
-              }
-
-              if (!languageId && input.uri.scheme === 'file') {
-                try {
-                  await fsp.access(input.uri.fsPath);
-                  const opened = await vscode.workspace.openTextDocument(input.uri);
-                  languageId = opened.languageId;
-                } catch {
-                  // ignore — we'll use the filename only
-                }
-              }
+              const languageId = doc?.languageId;
 
               const cacheKey = fileName.toLowerCase();
               if (!this._iconCache.has(cacheKey) || forceRefresh) {
@@ -473,15 +460,18 @@ export class BayIconManager {
             }
           };
 
-          iconPromises.push(loadIcon());
+          // Push the closure UNINVOKED so the batch loop below actually throttles
+          // concurrency; invoking here would start every load immediately and make
+          // the batching a no-op.
+          iconLoaders.push(loadIcon);
         }
       }
 
       // Batch execution (5 at a time)
       const batchSize = 5;
-      for (let i = 0; i < iconPromises.length; i += batchSize) {
-        const batch = iconPromises.slice(i, i + batchSize);
-        await Promise.all(batch);
+      for (let i = 0; i < iconLoaders.length; i += batchSize) {
+        const batch = iconLoaders.slice(i, i + batchSize);
+        await Promise.all(batch.map(fn => fn()));
       }
     } finally {
       this._isPreloadingIcons = false;
@@ -497,6 +487,20 @@ export class BayIconManager {
   public clearCache(): void {
     this._iconCache.clear();
     this._iconPathCache.clear();
+  }
+
+  /**
+   * Resets every theme-derived field so no stale theme lingers after an empty or
+   * failed rebuild. Without clearing `_iconThemeJson`/`_iconThemePath`, switching
+   * the icon theme to "None" (or to a broken theme) leaves the previous theme's
+   * JSON in place, and the default-icon fallback keeps resolving the OLD theme's
+   * icons against its stale path instead of rendering the neutral fallback.
+   */
+  private clearThemeState(themeId: string): void {
+    this._iconMap       = {};
+    this._iconThemeId   = themeId;
+    this._iconThemeJson = undefined;
+    this._iconThemePath = undefined;
   }
 
   /** Read an icon file from disk and return a base64 data URI. */
