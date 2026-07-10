@@ -58,6 +58,19 @@ export async function activate(context: vscode.ExtensionContext) {
       }),
     );
 
+    //· Copilot availability context key (gates the "Add Files to Copilot Chat…"
+    //  toolbar button). Re-evaluated when extensions change so installing or
+    //  disabling Copilot Chat mid-session updates the UI without a reload.
+    const syncCopilotContext = () =>
+      void vscode.commands.executeCommand('setContext', 'bays.copilotAvailable', copilotService.isAvailable());
+    syncCopilotContext();
+    context.subscriptions.push(
+      vscode.extensions.onDidChange(() => {
+        syncCopilotContext();
+        provider.refresh();
+      }),
+    );
+
     //· Activate services
     syncService.activate(context);
     themeService.activate(context);

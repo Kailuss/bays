@@ -21,15 +21,14 @@ interface ChatOpenOptions {
  * Explicación práctica: permite añadir archivos al contexto de chat desde la UI.
  */
 export class CopilotService {
-  private copilotExtension?: vscode.Extension<unknown>;
-
-  constructor() {
-    this.copilotExtension = vscode.extensions.getExtension('github.copilot-chat');
-  }
-
-  /** Indica si la extensión GitHub Copilot Chat está disponible. */
+  /**
+   * Indica si la extensión GitHub Copilot Chat está disponible.
+   * Se consulta en vivo (no se cachea en el constructor) para que instalar o
+   * deshabilitar Copilot Chat a mitad de sesión se refleje sin recargar la
+   * ventana. `getExtension` es una búsqueda barata en un mapa.
+   */
   isAvailable(): boolean {
-    return this.copilotExtension !== undefined;
+    return vscode.extensions.getExtension('github.copilot-chat') !== undefined;
   }
 
   /**
