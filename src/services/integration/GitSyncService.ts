@@ -9,7 +9,7 @@ import type { GitStatus }  from '../../models/Bay';
 export class GitSyncService {
   private disposables                  : vscode.Disposable[] = [];
   private _gitApi                      : any | null = null;
-  private _gitRepoListeners            = new Set<string>();
+  private _gitRepoListeners            = new Map<string, vscode.Disposable>();
   private _gitOpenRepoListenerAttached = false;
 
   constructor(private stateService: BayStateService) {}
@@ -40,14 +40,7 @@ export class GitSyncService {
         const gitApi = this.resolveGitApi();
         if (gitApi && !this._gitOpenRepoListenerAttached) {
           this._gitApi = gitApi;
-          this._gitOpenRepoListenerAttached = true;
-
-          this.disposables.push(
-            gitApi.onDidOpenRepository((repo: any) => {
-              this.attachGitRepoListener(repo);
-              this.updateGitStatusForRepo(repo);
-            }),
-          );
+          this.attachRepoLifecycleListeners(gitApi);
 
           // If repositories already exist, setup listeners now
           if (gitApi.repositories.length > 0) {
@@ -72,6 +65,28 @@ export class GitSyncService {
           setupOnRepoOpen();
         }
       }, 2000);
+
+      // The timed retries above only help if vscode.git is already active.
+      // extensions.onDidChange does NOT fire on activation (only install/enable),
+      // so on a slow workspace where git activates after 2s the retries would all
+      // resolve to null and live git badge updates would be lost for the session.
+      // Proactively activate the git extension and wire listeners once its API is up.
+      const gitExt = vscode.extensions.getExtension<any>('vscode.git');
+      if (gitExt) {
+        const wireWhenReady = () => {
+          const api = this.resolveGitApi();
+          if (api) {
+            this._gitApi = api;
+            this.setupGitListeners();       // idempotent: guarded per-repo + single lifecycle listener
+            this.refreshAllGitStatuses();
+          }
+        };
+        if (gitExt.isActive) {
+          wireWhenReady();
+        } else {
+          gitExt.activate().then(wireWhenReady, () => { /* ignore activation failure */ });
+        }
+      }
     }
 
     context.subscriptions.push(...this.disposables);
@@ -86,20 +101,33 @@ export class GitSyncService {
       if (!this._gitApi || this._gitApi.repositories.length === 0) { return null; }
 
 
+      // Pick the MOST SPECIFIC repository: a file inside a submodule/nested repo
+      // is prefix-"inside" both the parent and the inner root, so returning from
+      // the first prefix match (parent, whose change lists never contain inner
+      // files) would report null forever. The longest matching root is the repo
+      // that actually tracks the file.
+      let bestRepo: any = null;
+      let bestRootLen = -1;
       for (const repo of this._gitApi.repositories) {
         const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
         if (!repoRoot || !this.isPathInsideRepo(targetPath, repoRoot)) { continue; }
+        if (repoRoot.length > bestRootLen) {
+          bestRootLen = repoRoot.length;
+          bestRepo = repo;
+        }
+      }
 
-        const mergeChanges = repo.state.mergeChanges || [];
+      if (bestRepo) {
+        const mergeChanges = bestRepo.state.mergeChanges || [];
         const hasMergeConflict = mergeChanges.some((c: any) => this.changeMatchesPath(c, targetPath));
         if (hasMergeConflict) {
           return 'conflict';
         }
 
-        const indexChanges = repo.state.indexChanges || [];
+        const indexChanges = bestRepo.state.indexChanges || [];
         const indexChange = indexChanges.find((c: any) => this.changeMatchesPath(c, targetPath));
 
-        const workingTreeChanges = repo.state.workingTreeChanges || [];
+        const workingTreeChanges = bestRepo.state.workingTreeChanges || [];
         const workingChange = workingTreeChanges.find((c: any) => this.changeMatchesPath(c, targetPath));
 
         const indexStatus = this.mapGitApiStatus(indexChange?.status);
@@ -122,6 +150,7 @@ export class GitSyncService {
   dispose(): void {
     this.disposables.forEach(d => d.dispose());
     this.disposables = [];
+    this._gitRepoListeners.forEach(sub => sub.dispose());
     this._gitRepoListeners.clear();
     this._gitOpenRepoListenerAttached = false;
   }
@@ -148,15 +177,7 @@ export class GitSyncService {
         this.attachGitRepoListener(repo);
       }
 
-      if (!this._gitOpenRepoListenerAttached) {
-        this._gitOpenRepoListenerAttached = true;
-        this.disposables.push(
-          gitApi.onDidOpenRepository((repo: any) => {
-            this.attachGitRepoListener(repo);
-            this.updateGitStatusForRepo(repo);
-          }),
-        );
-      }
+      this.attachRepoLifecycleListeners(gitApi);
     } catch {
       // Silently fail if git setup fails
     }
@@ -171,10 +192,47 @@ export class GitSyncService {
       return;
     }
 
-    this._gitRepoListeners.add(repoRoot);
+    const sub = repo.state.onDidChange(() => {
+      this.updateGitStatusForRepo(repo);
+    });
+    this._gitRepoListeners.set(repoRoot, sub);
+    this.disposables.push(sub);
+  }
+
+  /**
+   * Detaches the state listener for a closed repository so that reopening it
+   * (which delivers a brand-new repo object) re-attaches a fresh subscription.
+   * Without this, the root stays in the map forever and the reopened repo's
+   * stage/unstage/commit events never refresh git badges until a full restart.
+   */
+  private detachGitRepoListener(repo: any): void {
+    const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
+    if (!repoRoot) { return; }
+    const sub = this._gitRepoListeners.get(repoRoot);
+    if (sub) {
+      sub.dispose();
+      this._gitRepoListeners.delete(repoRoot);
+    }
+  }
+
+  /**
+   * Subscribes to repository open/close lifecycle events exactly once. Kept in a
+   * helper so both bootstrap paths (immediate setup and the delayed retry) wire
+   * the same listeners under a single guard.
+   */
+  private attachRepoLifecycleListeners(gitApi: any): void {
+    if (this._gitOpenRepoListenerAttached) { return; }
+    this._gitOpenRepoListenerAttached = true;
+
     this.disposables.push(
-      repo.state.onDidChange(() => {
+      gitApi.onDidOpenRepository((repo: any) => {
+        this.attachGitRepoListener(repo);
         this.updateGitStatusForRepo(repo);
+      }),
+    );
+    this.disposables.push(
+      gitApi.onDidCloseRepository((repo: any) => {
+        this.detachGitRepoListener(repo);
       }),
     );
   }
