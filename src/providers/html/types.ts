@@ -21,6 +21,7 @@ export type BuildHtmlOptions = {
   showPath: boolean;
   copilotReady: boolean;
   enableDragDrop?: boolean;
+  enableHoverActions?: boolean;
   initialLoad?: boolean;
 };
 

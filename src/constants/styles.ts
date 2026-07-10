@@ -54,9 +54,7 @@ export const STYLE_CONSTANTS = {
 export type BaysConfiguration = {
   showFilePath       : boolean;
   compactMode        : boolean;
-  iconSize           : number;
   enableHoverActions : boolean;
-  showStateIcons     : boolean;
   enableDragDrop     : boolean;
 };
 
@@ -68,11 +66,9 @@ export function getConfiguration(): BaysConfiguration {
   const config = vscode.workspace.getConfiguration('bays');
 
   return {
-    showFilePath       : config.get('showFilePath'      ,true)                         ,
-    compactMode        : config.get('compactMode'       ,false)                        ,
-    iconSize           : config.get('iconSize'          ,STYLE_CONSTANTS.BAY_ICON_SIZE),
-    enableHoverActions : config.get('enableHoverActions',true)                         ,
-    showStateIcons     : config.get('showStateIcons'    ,true)                         ,
-    enableDragDrop     : config.get('enableDragDrop'    ,true)                         ,
+    showFilePath       : config.get('showFilePath'      ,true) ,
+    compactMode        : config.get('compactMode'       ,false),
+    enableHoverActions : config.get('enableHoverActions',true) ,
+    enableDragDrop     : config.get('enableDragDrop'    ,true) ,
   };
 }

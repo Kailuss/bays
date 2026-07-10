@@ -109,11 +109,12 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
         groups,
         getBaysInGroup : (groupId) => this.stateService.getBaysByGroupId(groupId),
         workspaceName  : this.getWorkspaceName(),
-        compactMode    : config.compactMode,
-        showPath       : config.showFilePath,
+        compactMode        : config.compactMode,
+        showPath           : config.showFilePath,
         copilotReady,
-        enableDragDrop : config.enableDragDrop,
-        initialLoad    : !this._initialLoadComplete,
+        enableDragDrop     : config.enableDragDrop,
+        enableHoverActions : config.enableHoverActions,
+        initialLoad        : !this._initialLoadComplete,
       });
 
       this._view.webview.html = html;

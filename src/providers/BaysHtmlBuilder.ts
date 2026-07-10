@@ -21,6 +21,9 @@ import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './rende
 export class BaysHtmlBuilder {
   private readonly iconRenderer: IconRenderer;
   private readonly stylesBuilder: StylesBuilder;
+  // Set per-build from options; renderBay reads it to gate the hover buttons.
+  // buildHtml runs single-flight (debounced refresh), so a transient field is safe.
+  private _enableHoverActions = true;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -50,8 +53,11 @@ export class BaysHtmlBuilder {
       showPath,
       copilotReady,
       enableDragDrop = false,
+      enableHoverActions = true,
       compactMode,
     } = options;
+
+    this._enableHoverActions = enableHoverActions;
 
     const uris = this.resolveResourceUris(webview, enableDragDrop);
     const nonce = this.generateNonce();
@@ -205,7 +211,7 @@ export class BaysHtmlBuilder {
     for (const child of variantBays) {
       if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
         const orphanHtml = this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode, pendingIcons);
-        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
+        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-variant="true" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
     return rendered.join('');
@@ -257,15 +263,17 @@ export class BaysHtmlBuilder {
       ? '<span class="pin-badge codicon codicon-pinned" title="Pinned"></span>'
       : '';
 
-    const fileActionBtn = bay.state.capabilities.canTogglePreview
+    const hover = this._enableHoverActions;
+
+    const fileActionBtn = hover && bay.state.capabilities.canTogglePreview
       ? this.renderFileActionButton(bay, hasPreviewVariant)
       : '';
 
-    const chatBtn = copilotReady && bay.metadata.uri
+    const chatBtn = hover && copilotReady && bay.metadata.uri
       ? `<button data-action="addToChat" data-bay-id="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
       : '';
 
-    const closeBtn = bay.state.capabilities.canClose
+    const closeBtn = hover && bay.state.capabilities.canClose
       ? `<button data-action="closeBay" data-bay-id="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
       : '';
 

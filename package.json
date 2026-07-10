@@ -204,6 +204,29 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        { "command": "bays.openBay", "when": "false" },
+        { "command": "bays.closeBay", "when": "false" },
+        { "command": "bays.closeOthers", "when": "false" },
+        { "command": "bays.closeToRight", "when": "false" },
+        { "command": "bays.pinBay", "when": "false" },
+        { "command": "bays.unpinBay", "when": "false" },
+        { "command": "bays.revealInExplorer", "when": "false" },
+        { "command": "bays.copyRelativePath", "when": "false" },
+        { "command": "bays.copyFileContents", "when": "false" },
+        { "command": "bays.compareWithActive", "when": "false" },
+        { "command": "bays.moveToGroup", "when": "false" },
+        { "command": "bays.addToCopilotChat", "when": "false" },
+        { "command": "bays.closeGroup", "when": "false" },
+        { "command": "bays.copyPath", "when": "false" },
+        { "command": "bays.openTimeline", "when": "false" },
+        { "command": "bays.splitRight", "when": "false" },
+        { "command": "bays.openChanges", "when": "false" },
+        { "command": "bays.revealInFileExplorer", "when": "false" },
+        { "command": "bays.revealInExplorerView", "when": "false" },
+        { "command": "bays.moveToNewWindow", "when": "false" },
+        { "command": "bays.duplicateFile", "when": "false" }
+      ],
       "view/title": [
         {
           "command": "bays.refresh",
@@ -245,20 +268,10 @@
           "default": false,
           "description": "Enable compact mode: bays show file name and path in a single line with reduced height (28px)."
         },
-        "bays.iconSize": {
-          "type": "number",
-          "default": 16,
-          "description": "Size of the file icon in pixels."
-        },
         "bays.enableHoverActions": {
           "type": "boolean",
           "default": true,
-          "description": "Show action buttons when hovering over a bay."
-        },
-        "bays.showStateIcons": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show state icons (pinned, modified, Copilot-edited) on bays."
+          "description": "Show action buttons (file actions, Copilot, close) when hovering over a bay."
         },
         "bays.enableDragDrop": {
           "type": "boolean",
@@ -269,11 +282,6 @@
           "type": "boolean",
           "default": false,
           "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
-        },
-        "bays.openPreviewableInPreview": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically open previewable files (Markdown, HTML, etc.) in preview mode when first opened."
         }
       }
     }

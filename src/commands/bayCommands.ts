@@ -57,12 +57,12 @@ export function registerBayCommands(
 
     vscode.commands.registerCommand('bays.pinBay', async (arg: unknown) => {
       const bay = resolve(arg);
-      if (bay) { await bay.pin(); }
+      if (bay) { await bay.pin(); stateService.reorderOnPin(bay.metadata.id); }
     }),
 
     vscode.commands.registerCommand('bays.unpinBay', async (arg: unknown) => {
       const bay = resolve(arg);
-      if (bay) { await bay.unpin(); }
+      if (bay) { await bay.unpin(); stateService.reorderOnUnpin(bay.metadata.id); }
     }),
 
     vscode.commands.registerCommand('bays.revealInExplorer', async (arg: unknown) => {
@@ -104,6 +104,55 @@ export function registerBayCommands(
       });
 
       if (selected) { await bay.moveToGroup(selected.viewColumn); }
+    }),
+
+    // Contributed in package.json and reachable via keybindings / programmatic
+    // invocation. Each delegates to the matching Bay method (the same ones the
+    // context menu calls). Without these registrations, invoking the contributed
+    // command ids raised "command not found".
+    vscode.commands.registerCommand('bays.closeGroup', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.closeGroup(); }
+    }),
+
+    vscode.commands.registerCommand('bays.copyPath', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.copyPath(); }
+    }),
+
+    vscode.commands.registerCommand('bays.openTimeline', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.openTimeline(); }
+    }),
+
+    vscode.commands.registerCommand('bays.splitRight', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.splitRight(); }
+    }),
+
+    vscode.commands.registerCommand('bays.openChanges', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.openChanges(); }
+    }),
+
+    vscode.commands.registerCommand('bays.revealInFileExplorer', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.revealInFileExplorer(); }
+    }),
+
+    vscode.commands.registerCommand('bays.revealInExplorerView', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.revealInExplorerView(); }
+    }),
+
+    vscode.commands.registerCommand('bays.moveToNewWindow', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.moveToNewWindow(); }
+    }),
+
+    vscode.commands.registerCommand('bays.duplicateFile', async (arg: unknown) => {
+      const bay = resolve(arg);
+      if (bay) { await bay.duplicateFile(); }
     }),
   );
 }
