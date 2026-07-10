@@ -32,11 +32,11 @@ function bundleCss(mainCssPath, outputPath) {
 	const importRegex = /@import\s+['"](.+?)['"]\s*;/g;
 	let match;
 	let bundledCss = '';
-	
+
 	while ((match = importRegex.exec(mainContent)) !== null) {
 		const importPath = match[1];
 		const fullPath = path.join(cssDir, importPath);
-		
+
 		if (fs.existsSync(fullPath)) {
 			const importedContent = fs.readFileSync(fullPath, 'utf8');
 			bundledCss += `/* === ${importPath} === */\n${importedContent}\n\n`;
@@ -44,8 +44,14 @@ function bundleCss(mainCssPath, outputPath) {
 			console.warn(`[build] Warning: CSS import not found: ${fullPath}`);
 		}
 	}
-	
-	// Si no hay imports, usar el contenido original
+
+	// Preservar las reglas propias del archivo principal (todo lo que no sea un
+	// @import). Antes se descartaban salvo cuando no había ningún @import, así que
+	// reglas de nivel superior como .seti-icon nunca llegaban al bundle.
+	const mainOwnCss = mainContent.replace(importRegex, '').trim();
+	if (mainOwnCss) {
+		bundledCss += `/* === webview.css (own rules) === */\n${mainOwnCss}\n`;
+	}
 	if (!bundledCss) {
 		bundledCss = mainContent;
 	}
