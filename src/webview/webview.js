@@ -17,6 +17,44 @@ console.log('[webview.js] Script loaded');
   }
 })();
 
+// Collapse a group header and hide its rows (or expand). Shared by the click
+// handler and the post-rebuild restore so both stay in sync.
+function setGroupCollapsed(header, collapsed) {
+  header.classList.toggle('collapsed', collapsed);
+
+  const icon = header.querySelector('[data-action="toggleGroup"] .codicon') || header.querySelector('.codicon');
+  if (icon) {
+    icon.classList.toggle('codicon-fold-down', !collapsed);
+    icon.classList.toggle('codicon-fold-up',   collapsed);
+  }
+
+  let sibling = header.nextElementSibling;
+  while (sibling && !sibling.classList.contains('group-header')) {
+    sibling.style.display = collapsed ? 'none' : '';
+    sibling = sibling.nextElementSibling;
+  }
+}
+
+// Collapsed state lives only in the DOM, which a full webview.html rebuild wipes.
+// Persist collapsed group ids via getState()/setState() (like scrollY) and
+// re-apply them after every rebuild so a collapsed group doesn't snap back open
+// the moment any structural change happens.
+(function restoreCollapsedGroups() {
+  const st = vscode.getState();
+  if (!st || !Array.isArray(st.collapsedGroups) || st.collapsedGroups.length === 0) { return; }
+  const collapsed = new Set(st.collapsedGroups.map(String));
+  const apply = () => {
+    document.querySelectorAll('.group-header').forEach(header => {
+      if (collapsed.has(String(header.dataset.groupid))) { setGroupCollapsed(header, true); }
+    });
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
+
 let scrollSaveTimer = null;
 window.addEventListener('scroll', () => {
   if (scrollSaveTimer) { return; }
@@ -87,24 +125,21 @@ document.addEventListener('click', e => {
       return;
     }
 
-    // Group: collapse / expand (purely client-side, no postMessage)
+    // Group: collapse / expand (client-side toggle, persisted so it survives rebuilds)
     if (action === 'toggleGroup') {
       const header = btn.closest('.group-header');
       if (!header) { return; }
-      const isCollapsed = header.classList.toggle('collapsed');
+      const isCollapsed = !header.classList.contains('collapsed');
+      setGroupCollapsed(header, isCollapsed);
 
-      // Toggle icon fold-down ↔ fold-up
-      const icon = btn.querySelector('.codicon');
-      if (icon) {
-        icon.classList.toggle('codicon-fold-down', !isCollapsed);
-        icon.classList.toggle('codicon-fold-up',   isCollapsed);
-      }
-
-      // Hide / show sibling tabs until next group-header
-      let sibling = header.nextElementSibling;
-      while (sibling && !sibling.classList.contains('group-header')) {
-        sibling.style.display = isCollapsed ? 'none' : '';
-        sibling = sibling.nextElementSibling;
+      // Persist so the next full rebuild can re-apply it
+      const groupId = header.dataset.groupid;
+      if (groupId !== undefined) {
+        const st = vscode.getState() || {};
+        const collapsed = new Set((st.collapsedGroups || []).map(String));
+        if (isCollapsed) { collapsed.add(String(groupId)); } else { collapsed.delete(String(groupId)); }
+        st.collapsedGroups = Array.from(collapsed);
+        vscode.setState(st);
       }
       return;
     }

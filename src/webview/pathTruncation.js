@@ -110,14 +110,30 @@ function truncatePathDynamic(element) {
   }
   
   document.body.removeChild(measurer);
-  element.textContent = result;
+  // Only write when the value actually changed. Reassigning textContent replaces
+  // the child text node (a childList mutation the observer would see), so a
+  // no-op write both wastes a reflow and feeds the feedback loop.
+  if (element.textContent !== result) {
+    element.textContent = result;
+  }
 }
+
+// Module-scoped so truncateAllPaths can pause it while mutating the DOM.
+let pathObserver = null;
 
 /**
  * Aplica truncado dinámico a todos los paths en la página.
  */
 function truncateAllPaths() {
+  // truncateAllPaths mutates the observed subtree (appends a measurer to body,
+  // rewrites path textContent). Disconnect while doing so, otherwise each pass
+  // re-triggers the observer, which reschedules another pass, forever — a
+  // perpetual ~16ms CPU/reflow spin. Reconnect once we're done.
+  if (pathObserver) { pathObserver.disconnect(); }
   document.querySelectorAll('.bay-path, .bay-path-inline').forEach(truncatePathDynamic);
+  if (pathObserver && document.body) {
+    pathObserver.observe(document.body, { childList: true, subtree: true });
+  }
 }
 
 /**
@@ -145,7 +161,7 @@ function initializePathTruncation() {
   });
 
   // Observar cambios en el DOM para truncar paths nuevos
-  const pathObserver = new MutationObserver((mutations) => {
+  pathObserver = new MutationObserver((mutations) => {
     let shouldTruncate = false;
     for (const mutation of mutations) {
       if (mutation.addedNodes.length > 0) {

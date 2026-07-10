@@ -31,6 +31,9 @@ let highlightedGroupId = null;  // grupo con resaltado de destino activo
 document.addEventListener('mousedown', e => {
   console.log('[dragdrop] Mousedown:', e.target);
   if (e.button !== 0) { return; }
+  // Ignore a new mousedown while a previous drop is still animating/tearing down:
+  // its ~160ms deferred teardown would otherwise clobber the fresh drag's state.
+  if (isDragging) { return; }
   const block = e.target.closest('.bay-block');
   if (!block) { console.log('[dragdrop] No bay-block found'); return; }
   if (e.target.closest('button')) { console.log('[dragdrop] Button clicked, ignoring'); return; }
@@ -38,6 +41,11 @@ document.addEventListener('mousedown', e => {
   // Los child bays no actúan como handle — sólo la fila padre inicia el drag
   const clickedTab = e.target.closest('.bay');
   if (clickedTab && clickedTab.classList.contains('variant')) { return; }
+
+  // Orphan variant blocks (a diff/preview whose parent file isn't open) render as
+  // a normal .bay-block but the host rejects reordering them, so dragging would
+  // just animate and snap back. Mark them data-variant and refuse to start a drag.
+  if (block.dataset.variant === 'true') { return; }
 
   if (block.dataset.pinned === 'true') { return; }
 
