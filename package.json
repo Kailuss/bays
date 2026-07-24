@@ -201,6 +201,24 @@
         "title"    :"Toggle Compact Mode",
         "icon"     :"$(list-flat)",
         "category" :"Bays"
+      },
+      {
+        "command"  :"bays.renameGroup",
+        "title"    :"Rename Group…",
+        "icon"     :"$(edit)",
+        "category" :"Bays"
+      },
+      {
+        "command"  :"bays.setGroupColor",
+        "title"    :"Set Group Color…",
+        "icon"     :"$(symbol-color)",
+        "category" :"Bays"
+      },
+      {
+        "command"  :"bays.toggleGroupLock",
+        "title"    :"Toggle Group Lock",
+        "icon"     :"$(lock)",
+        "category" :"Bays"
       }
     ],
     "menus": {

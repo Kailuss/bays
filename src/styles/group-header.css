@@ -1,10 +1,24 @@
 /* ===== Group header ===== */
+
+/* Paleta de grupo. Se declara una sola vez para los dos atributos que la usan:
+   `data-color` en la cabecera y `data-group-color` en cada .bay-block. Los
+   valores son colores registrados por VS Code, así que el tinte sigue al tema
+   activo en lugar de fijar un hex (el fallback sólo cubre temas sin charts.*). */
+[data-color="blue"],   [data-group-color="blue"]   { --group-color: var(--vscode-charts-blue,   #3794ff); }
+[data-color="green"],  [data-group-color="green"]  { --group-color: var(--vscode-charts-green,  #89d185); }
+[data-color="yellow"], [data-group-color="yellow"] { --group-color: var(--vscode-charts-yellow, #cca700); }
+[data-color="orange"], [data-group-color="orange"] { --group-color: var(--vscode-charts-orange, #d18616); }
+[data-color="red"],    [data-group-color="red"]    { --group-color: var(--vscode-charts-red,    #f14c4c); }
+[data-color="purple"], [data-group-color="purple"] { --group-color: var(--vscode-charts-purple, #b180d7); }
+
 .group-header {
   display: flex;
   align-items: center;
   gap: 4px;
   height: 22px;
-  padding: 0 2px 0 8px;
+  /* Sin padding izquierdo: lo aporta el propio .group-toggle, que hace de
+     twisty y arranca pegado al borde como en cualquier árbol. */
+  padding: 0 2px 0 0;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.4px;
@@ -12,11 +26,34 @@
   background: var(--vscode-sideBarSectionHeader-background, transparent);
   opacity: 0.8;
   border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(0,0,0,0.1));
+  /* Franja de color a la izquierda. Es un borde real, no una sombra `inset`:
+     empuja el contenido hacia la derecha en vez de pintarse por debajo. */
+  border-left: 2px solid var(--group-color, transparent);
 }
 
-.group-icon {
-  font-size: 12px;
+/* Twisty de plegado. Siempre visible y sin fondo — ni en reposo ni en hover:
+   es un indicador de estado antes que un botón, así que sólo cambia de opacidad.
+   Ancho generoso para que el chevron respire y sea un objetivo de clic cómodo. */
+.group-toggle {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.group-toggle:hover { opacity: 1; }
+
+.group-toggle .codicon {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .group-label {
@@ -25,22 +62,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Toda la cabecera colapsa al hacer clic, el nombre incluido. */
+  cursor: pointer;
+  /* El nombre lleva puesto el color del grupo: lo identifica de un vistazo sin
+     depender de la franja. */
+  color: var(--group-color, inherit);
 }
 
 .group-actions {
   display: flex;
   align-items: center;
   gap: 1px;
-  opacity: 0;
   flex-shrink: 0;
-  transition: opacity 150ms ease;
 }
 
-.group-header:hover .group-actions {
-  opacity: 1;
-}
-
-/* Group action buttons — same style as view-header-btn */
+/* Group action buttons — same style as view-header-btn.
+   La opacidad va en cada botón, no en el contenedor: así el candado puede
+   quedarse visible sin hover cuando el grupo está bloqueado. */
 .group-btn {
   display: flex;
   align-items: center;
@@ -59,10 +97,19 @@
   letter-spacing: 0;
   font-weight: normal;
   line-height: 1;
-  opacity: 0.8;
+  opacity: 0;
+  transition: opacity 150ms ease;
 }
 
-.group-btn:hover {
+.group-header:hover .group-btn { opacity: 0.8; }
+
+/* Bloqueado, el candado no espera al hover: es el único aviso de que a las bays
+   de este grupo les falta la X de cerrar. */
+.group-header[data-locked="true"] .group-lock-btn { opacity: 0.9; }
+
+/* Calificado con .group-header para ganarle en especificidad a la regla del
+   candado bloqueado, que si no dejaría el botón a 0.9 incluso bajo el cursor. */
+.group-header .group-btn:hover {
   background : var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.31));
   opacity    : 1;
 }
@@ -80,4 +127,10 @@
 
 .group-header.collapsed {
   opacity: 0.5;
+}
+
+/* Las bays heredan la franja del grupo al que pertenecen. Mismo borde real que
+   la cabecera, para que el contenido de ambos arranque en la misma vertical. */
+.bay-block[data-group-color] {
+  border-left: 2px solid var(--group-color);
 }

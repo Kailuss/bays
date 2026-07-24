@@ -12,11 +12,27 @@ import * as vscode from 'vscode';
 import { BayIconManager } from '../services/ui/BayIconManager';
 import type { DocumentManager } from '../services/core/DocumentManager';
 import { Bay } from '../models/Bay';
-import { BayGroup } from '../models/BayGroup';
+import { BayGroup, BayGroupColor } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
 import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris, PendingIcon, BuildHtmlResult } from './html';
 import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './renderers';
+
+/**
+ * Contexto de render de una lista de bays. Agrupa lo que antes viajaba como
+ * parámetros posicionales, ahora que las propiedades del grupo (bloqueo y color)
+ * también tienen que bajar hasta cada fila.
+ */
+type BayListContext = {
+  showPath     : boolean;
+  copilotReady : boolean;
+  compactMode  : boolean;
+  pendingIcons : PendingIcon[];
+  /** Grupo bloqueado: ninguna fila dibuja su botón de cierre. */
+  locked       : boolean;
+  /** `null` con un solo grupo: el color existe, pero pintarlo no distingue nada. */
+  color        : BayGroupColor | null;
+};
 
 export class BaysHtmlBuilder {
   private readonly iconRenderer: IconRenderer;
@@ -90,6 +106,7 @@ export class BaysHtmlBuilder {
       codiconCss: asUri(['dist', 'codicons', 'codicon.css']),
       webviewCss: asUri(['dist', 'styles', 'webview.css']),
       webviewScript: asUri(['dist', 'webview', 'webview.js']),
+      contextMenuScript: asUri(['dist', 'webview', 'contextmenu.js']),
       pathTruncationScript: asUri(['dist', 'webview', 'pathTruncation.js']),
       dragDropScript: enableDragDrop ? asUri(['dist', 'webview', 'dragdrop.js']) : null,
     };
@@ -122,6 +139,8 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
 </head>
 <body class="${bodyClass}">
   ${baysHtml || '<div class="empty">No open bays</div>'}
+  <!-- contextmenu.js va primero: webview.js usa BaysContextMenu -->
+  <script nonce="${nonce}" src="${uris.contextMenuScript}"></script>
   <script nonce="${nonce}" src="${uris.webviewScript}"></script>
   <script nonce="${nonce}" src="${uris.pathTruncationScript}"></script>
   ${uris.dragDropScript ? `<script nonce="${nonce}" src="${uris.dragDropScript}"></script>` : ''}
@@ -146,17 +165,26 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       .map(group => ({ group, bays: getBaysInGroup(group.id) }))
       .filter(({ bays }) => bays.length > 0);
 
+    const context = (group: BayGroup, color: BayGroupColor | null): BayListContext => ({
+      showPath,
+      copilotReady,
+      compactMode,
+      pendingIcons,
+      locked: group.isLocked,
+      color,
+    });
+
+    // Con un solo grupo no hay cabecera ni acento de color: no hay nada de lo
+    // que distinguirlo. El bloqueo, en cambio, sí sigue en pie.
     if (populated.length <= 1) {
       const only = populated[0];
-      return only
-        ? this.renderBayList(only.bays, showPath, copilotReady, compactMode, pendingIcons)
-        : '';
+      return only ? this.renderBayList(only.bays, context(only.group, null)) : '';
     }
 
     let html = '';
     for (const { group, bays } of populated) {
       html += this.renderGroupHeader(group);
-      html += this.renderBayList(bays, showPath, copilotReady, compactMode, pendingIcons);
+      html += this.renderBayList(bays, context(group, group.color));
     }
     return html;
   }
@@ -165,13 +193,7 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
     return GroupHeaderRenderer.render(group, this.esc);
   }
 
-  private renderBayList(
-    bays: Bay[],
-    showPath: boolean,
-    copilotReady: boolean,
-    compactMode: boolean,
-    pendingIcons: PendingIcon[],
-  ): string {
+  private renderBayList(bays: Bay[], context: BayListContext): string {
     // Markdown previews are real bays now (variants of their source .md), so
     // there is no preview filtering here — they render as child rows, or as
     // standalone rows when orphaned (source not open / in another group).
@@ -197,6 +219,10 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       return 0;
     });
 
+    // El acento de color viaja en el bloque, no en la cabecera, para que las
+    // filas se lean como pertenecientes al grupo también al hacer scroll.
+    const colorAttr = context.color ? ` data-group-color="${context.color}"` : '';
+
     // Render parents with their children inside a shared .bay-block wrapper.
     // The wrapper is the D&D unit: height, cloning and positioning operate on it.
     const rendered: string[] = [];
@@ -205,10 +231,10 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
       const hasPreviewVariant = children.some(child => child.metadata.diffType === 'preview');
 
-      let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}">`;
-      block += this.renderBay(parent, showPath, copilotReady, compactMode, pendingIcons, hasPreviewVariant);
+      let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}"${colorAttr}>`;
+      block += this.renderBay(parent, context, hasPreviewVariant);
       for (const child of children) {
-        block += this.renderVariantBay(child, parent);
+        block += this.renderVariantBay(child, parent, context.locked);
       }
       block += `</div>`;
       rendered.push(block);
@@ -217,8 +243,8 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
     // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
     for (const child of variantBays) {
       if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
-        const orphanHtml = this.renderOrphanVariantBay(child);
-        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-variant="true" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
+        const orphanHtml = this.renderOrphanVariantBay(child, context.locked);
+        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-variant="true" data-groupid="${child.state.groupId}"${colorAttr}>${orphanHtml}</div>`);
       }
     }
     return rendered.join('');
@@ -231,11 +257,13 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
   private renderVariantBay(
     bay: Bay,
     parent: Bay,
+    locked: boolean,
   ): string {
     return VariantRowRenderer.render({
       bay,
       parentId: this.esc(parent.metadata.id),
       esc: this.esc,
+      allowClose: !locked,
     });
   }
 
@@ -249,23 +277,23 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
    * que se muestra el label nativo (incluye el archivo) y no se indenta, porque
    * no hay parent encima del que colgar.
    */
-  private renderOrphanVariantBay(bay: Bay): string {
+  private renderOrphanVariantBay(bay: Bay, locked: boolean): string {
     return VariantRowRenderer.render({
       bay,
       parentId: this.esc(bay.metadata.sourceBayId ?? ''),
       esc: this.esc,
       orphan: true,
+      allowClose: !locked,
     });
   }
 
   private renderBay(
     bay: Bay,
-    showPath: boolean,
-    copilotReady: boolean,
-    compactMode: boolean,
-    pendingIcons: PendingIcon[],
+    context: BayListContext,
     hasPreviewVariant = false,
   ): string {
+    const { showPath, copilotReady, compactMode, pendingIcons, locked } = context;
+
     // data-bay-id only — data-pinned and data-groupid live on the parent .bay-block
     const activeClass = bay.state.isActive ? ' active' : '';
     const stateIndicator = getStateIndicator(bay);
@@ -284,7 +312,7 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       ? `<button data-action="addToChat" data-bay-id="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
       : '';
 
-    const closeBtn = hover && bay.state.capabilities.canClose
+    const closeBtn = hover && !locked && bay.state.capabilities.canClose
       ? `<button data-action="closeBay" data-bay-id="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
       : '';
 

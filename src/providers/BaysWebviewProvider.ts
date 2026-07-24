@@ -3,6 +3,7 @@ import { getConfiguration }     from '../constants/styles'; //
 import { TIMINGS }              from '../constants/timings';
 import { Bay }                  from '../models/Bay';
 import { BayHelpers }           from '../models/BayHelpers';
+import { BayGroup }              from '../models/BayGroup';
 import { BayStateService }      from '../services/core/BayStateService';
 import type { DocumentManager } from '../services/core/DocumentManager';
 import { BayIconManager }       from '../services/ui/BayIconManager';
@@ -13,6 +14,7 @@ import { Logger }               from '../utils/logger';
 import { BaysHtmlBuilder }      from './BaysHtmlBuilder';
 import type { PendingIcon }     from './html';
 import { BayContextMenu }       from './BayContextMenu';
+import { GroupActions }         from './GroupActions';
 
 type BaySyncLike = {
   syncActiveState?: () => void;
@@ -33,6 +35,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private _initialLoadComplete = false;
   private readonly htmlBuilder: BaysHtmlBuilder;
   private readonly contextMenu: BayContextMenu;
+  private readonly groupActions: GroupActions;
 
   constructor(
     private readonly _extensionUri  : vscode.Uri,
@@ -43,11 +46,13 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     private readonly context        : vscode.ExtensionContext,
     private readonly dragDropService: BayDragDropService,
     private readonly fileActionRegistry: FileActionRegistry,
+    groupActions: GroupActions,
   ) {
     // Get DocumentManager from syncService if available
     const documentManager = this.syncService?.getDocumentManager?.();
-    this.htmlBuilder = new BaysHtmlBuilder(_extensionUri, iconManager, context, fileActionRegistry, documentManager);
-    this.contextMenu = new BayContextMenu(stateService, copilotService);
+    this.htmlBuilder  = new BaysHtmlBuilder(_extensionUri, iconManager, context, fileActionRegistry, documentManager);
+    this.contextMenu  = new BayContextMenu(stateService, copilotService);
+    this.groupActions = groupActions;
     // Full rebuild on structural changes
     stateService.onDidChangeState(() => this.refresh());
     // Partial update for lightweight changes (active bay only)
@@ -213,15 +218,15 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     ['pinBay', async (msg)          => await this.handlePinBay     (msg.bayId)              ],
     ['unpinBay', async (msg)        => await this.handleUnpinBay   (msg.bayId)              ],
     ['addToChat', async (msg)       => await this.handleAddToChat  (msg.bayId)              ],
-    ['contextMenu', async (msg)     => await this.handleContextMenu(msg.bayId)              ],
+    ['contextMenu', async (msg)     => this.handleContextMenu(msg)                          ],
+    ['menuAction', async (msg)      => await this.handleMenuAction(msg.bayId, msg.actionId) ],
     ['dropBay', async (msg)         => await this.handleDropBay    (msg)                    ],
     ['fileAction', async (msg)      => await this.handleFileAction (msg.bayId, msg.actionId)],
     ['saveAll', async (_)           => { await vscode.workspace.saveAll(false); }           ],
     ['reorder', async (_)           => void vscode.window.showInformationMessage('Reorder: Coming soon')],
-    ['closeGroup', async (msg)      => {
-      const group = vscode.window.tabGroups.all.find(g => g.viewColumn === msg.groupId);
-      if (group) { await vscode.window.tabGroups.close(group); }
-    }],
+    ['renameGroup', async (msg)     => await this.handleGroupAction(msg.groupId, g => this.groupActions.rename   (g))],
+    ['setGroupColor', async (msg)   => await this.handleGroupAction(msg.groupId, g => this.groupActions.pickColor(g))],
+    ['toggleGroupLock', async (msg) => await this.handleGroupAction(msg.groupId, g => this.groupActions.toggleLock(g))],
     ['toggleCompactMode', async (_) => {
       const cfg = vscode.workspace.getConfiguration('bays');
       const current = cfg.get<boolean>('compactMode', false);
@@ -426,11 +431,52 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleContextMenu(bayId: string): Promise<void> {
+  /**
+   * Responde al clic derecho con el modelo del menú. Dibujarlo es cosa del
+   * webview (`BaysContextMenu`): sólo él sabe dónde está el cursor y sólo ahí
+   * puede aparecer un menú bajo el puntero.
+   */
+  private handleContextMenu(msg: { bayId: string; x: number; y: number }): void {
+    if (!this._view) { return; }
+
+    const bay = this.findBay(msg.bayId);
+    if (!bay) { return; }
+
+    const items = this.contextMenu.build(bay);
+    if (items.length === 0) { return; }
+
+    this._view.webview.postMessage({
+      type : 'showContextMenu',
+      bayId: bay.metadata.id,
+      x    : msg.x,
+      y    : msg.y,
+      items,
+    });
+  }
+
+  private async handleMenuAction(bayId: string, actionId?: string): Promise<void> {
     const bay = this.findBay(bayId);
-    if (bay) {
-      await this.contextMenu.show(bay);
+    if (!bay || !actionId) { return; }
+    await this.contextMenu.execute(actionId, bay);
+  }
+
+  //= GRUPOS
+
+  /**
+   * Resuelve el grupo, ejecuta la acción y repinta sólo si cambió algo.
+   * Compartido por los tres botones de la cabecera y por el doble clic.
+   */
+  private async handleGroupAction(
+    groupId: number,
+    action: (group: BayGroup) => Promise<boolean>,
+  ): Promise<void> {
+    const group = this.stateService.getGroup(groupId);
+    if (!group) {
+      Logger.warn(`[Bays] Group not found: ${groupId}`);
+      return;
     }
+
+    if (await action(group)) { this.stateService.refreshGroupCustomizations(); }
   }
 
   private async handleDropBay(msg: any): Promise<void> {

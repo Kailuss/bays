@@ -7,11 +7,13 @@ type VariantRowRenderOptions = {
   esc: (value: string) => string;
   /** El parent no está en la lista (no abierto, o vive en otro grupo). */
   orphan?: boolean;
+  /** false en grupos bloqueados: la variante tampoco muestra su X. */
+  allowClose?: boolean;
 };
 
 export class VariantRowRenderer {
   static render(options: VariantRowRenderOptions): string {
-    const { bay, parentId, esc, orphan = false } = options;
+    const { bay, parentId, esc, orphan = false, allowClose = true } = options;
     const activeClass = bay.state.isActive ? ' active' : '';
 
     const diffInfo = getDiffTypeDisplay(bay.metadata.diffType, bay.metadata.label);
@@ -32,7 +34,7 @@ export class VariantRowRenderer {
 
     // Sin parent no hay jerarquía que preservar → cierre normal.
     const closeAction = orphan ? 'closeBay' : 'closeVariant';
-    const closeBtn = bay.state.capabilities.canClose
+    const closeBtn = allowClose && bay.state.capabilities.canClose
       ? `<button data-action="${closeAction}" data-bay-id="${esc(bay.metadata.id)}" data-parent-id="${esc(parentId)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
       : '';
 

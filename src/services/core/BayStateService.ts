@@ -4,6 +4,7 @@ import { BayGroup, createTabGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
 import type { DocumentManager } from './DocumentManager';
+import type { GroupCustomizationService } from '../ui/GroupCustomizationService';
 
 /**
  * In-memory store for Bays and groups — the "source of truth" for the UI.
@@ -28,6 +29,10 @@ export class BayStateService {
 
   // Document manager (injected to avoid circular dependency)
   private documentManager?: DocumentManager;
+
+  // Group customizations (name/color/lock) — injected from extension.ts, which
+  // owns the ExtensionContext the service persists to.
+  private groupCustomization?: GroupCustomizationService;
 
   /**
    * Tracking de cierres intencionales con contador de referencias.
@@ -119,6 +124,40 @@ export class BayStateService {
     this.documentManager = manager;
   }
 
+  /**
+   * Inyecta el servicio de personalización de grupos y lo aplica a los grupos
+   * ya presentes (la inyección ocurre antes del primer sync, pero también puede
+   * llegar después si el orden de arranque cambia).
+   */
+  setGroupCustomizationService(service: GroupCustomizationService): void {
+    this.groupCustomization = service;
+    this.applyGroupCustomizations();
+  }
+
+  getGroupCustomizationService(): GroupCustomizationService | undefined {
+    return this.groupCustomization;
+  }
+
+  /**
+   * Reaplica nombre, color y bloqueo sobre TODOS los grupos del mapa.
+   * Necesario tras cada sync (los grupos se reconstruyen desde la API nativa,
+   * que no sabe nada de la personalización) y tras cada cambio del usuario.
+   */
+  applyGroupCustomizations(): void {
+    if (!this.groupCustomization) { return; }
+    for (const group of this.groups.values()) { this.groupCustomization.apply(group); }
+  }
+
+  /**
+   * Reaplica la personalización y repinta. Nombre, color y bloqueo cambian el
+   * markup de la cabecera y de los botones de cierre, así que es un cambio
+   * estructural: rebuild completo, no parche por postMessage.
+   */
+  refreshGroupCustomizations(): void {
+    this.applyGroupCustomizations();
+    this.notifyChange();
+  }
+
   //- Bay management
 
   // Add a bay (or update if it already exists in the group).
@@ -134,6 +173,7 @@ export class BayStateService {
       const native = vscode.window.tabGroups.all.find(g => g.viewColumn === bay.state.groupId);
       if (native) {
         group = createTabGroup(native);
+        this.groupCustomization?.apply(group);
         this.groups.set(group.id, group);
         Logger.log(`[BayState] Created missing group ${group.id} for bay: ${bay.metadata.label}`);
       }
@@ -323,6 +363,7 @@ export class BayStateService {
   //- Group management
 
   addGroup(group: BayGroup): void {
+    this.groupCustomization?.apply(group);
     this.groups.set(group.id, group);
     this._onDidChangeState.fire();
   }
@@ -335,6 +376,7 @@ export class BayStateService {
   setGroups(groups: BayGroup[]): void {
     this.groups.clear();
     for (const group of groups) {
+      this.groupCustomization?.apply(group);
       this.groups.set(group.id, group);
     }
   }

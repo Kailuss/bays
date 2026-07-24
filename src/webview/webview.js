@@ -22,16 +22,34 @@ console.log('[webview.js] Script loaded');
 function setGroupCollapsed(header, collapsed) {
   header.classList.toggle('collapsed', collapsed);
 
-  const icon = header.querySelector('[data-action="toggleGroup"] .codicon') || header.querySelector('.codicon');
+  const icon = header.querySelector('[data-action="toggleGroup"] .codicon');
   if (icon) {
-    icon.classList.toggle('codicon-fold-down', !collapsed);
-    icon.classList.toggle('codicon-fold-up',   collapsed);
+    icon.classList.toggle('codicon-chevron-down',  !collapsed);
+    icon.classList.toggle('codicon-chevron-right', collapsed);
   }
 
   let sibling = header.nextElementSibling;
   while (sibling && !sibling.classList.contains('group-header')) {
     sibling.style.display = collapsed ? 'none' : '';
     sibling = sibling.nextElementSibling;
+  }
+}
+
+// Flip a header's collapsed state and persist it so the next full rebuild can
+// re-apply it (collapsed state lives only in the DOM otherwise). Shared by the
+// twisty button and a plain click anywhere on the header.
+function toggleGroupCollapsed(header) {
+  if (!header) { return; }
+  const isCollapsed = !header.classList.contains('collapsed');
+  setGroupCollapsed(header, isCollapsed);
+
+  const groupId = header.dataset.groupid;
+  if (groupId !== undefined) {
+    const st = vscode.getState() || {};
+    const collapsed = new Set((st.collapsedGroups || []).map(String));
+    if (isCollapsed) { collapsed.add(String(groupId)); } else { collapsed.delete(String(groupId)); }
+    st.collapsedGroups = Array.from(collapsed);
+    vscode.setState(st);
   }
 }
 
@@ -127,26 +145,14 @@ document.addEventListener('click', e => {
 
     // Group: collapse / expand (client-side toggle, persisted so it survives rebuilds)
     if (action === 'toggleGroup') {
-      const header = btn.closest('.group-header');
-      if (!header) { return; }
-      const isCollapsed = !header.classList.contains('collapsed');
-      setGroupCollapsed(header, isCollapsed);
-
-      // Persist so the next full rebuild can re-apply it
-      const groupId = header.dataset.groupid;
-      if (groupId !== undefined) {
-        const st = vscode.getState() || {};
-        const collapsed = new Set((st.collapsedGroups || []).map(String));
-        if (isCollapsed) { collapsed.add(String(groupId)); } else { collapsed.delete(String(groupId)); }
-        st.collapsedGroups = Array.from(collapsed);
-        vscode.setState(st);
-      }
+      toggleGroupCollapsed(btn.closest('.group-header'));
       return;
     }
 
-    // Group: close all tabs in the group
-    if (action === 'closeGroup') {
-      vscode.postMessage({ type: 'closeGroup', groupId: parseInt(btn.dataset.groupid, 10) });
+    // Group actions carry a groupId, not a bayId — the generic postMessage at
+    // the end of this handler would send `bayId: undefined` instead.
+    if (action === 'renameGroup' || action === 'setGroupColor' || action === 'toggleGroupLock') {
+      vscode.postMessage({ type: action, groupId: parseInt(btn.dataset.groupid, 10) });
       return;
     }
 
@@ -160,22 +166,41 @@ document.addEventListener('click', e => {
     return;
   }
 
+  // Un clic en cualquier parte de la cabecera (salvo sus botones de acción)
+  // colapsa o expande el grupo — el twisty es sólo el ancla visual.
+  const header = e.target.closest('.group-header');
+  if (header) { toggleGroupCollapsed(header); return; }
+
   const bay = e.target.closest('.bay');
   console.log('[webview] Bay found:', bay, 'bayId:', bay?.dataset?.bayId);
   if (bay) { vscode.postMessage({ type: 'openBay', bayId: bay.dataset.bayId }); }
 });
 
 document.addEventListener('contextmenu', e => {
+  // Los grupos no tienen menú contextual: sus tres acciones ya son botones.
+  if (e.target.closest('.group-header')) { e.preventDefault(); return; }
+
   const bay = e.target.closest('.bay');
   if (bay) {
     e.preventDefault();
-    vscode.postMessage({ type: 'contextMenu', bayId: bay.dataset.bayId });
+    // Las coordenadas viajan al host y vuelven con los items: sólo él sabe qué
+    // acciones tiene esta bay (grupo bloqueado, si hay URI, si Copilot está).
+    vscode.postMessage({ type: 'contextMenu', bayId: bay.dataset.bayId, x: e.clientX, y: e.clientY });
   }
 });
 
 // Actualización parcial desde el host (evita rebuild completo al cambiar bay activa)
 window.addEventListener('message', e => {
   const msg = e.data;
+
+  if (msg.type === 'showContextMenu') {
+    BaysContextMenu.show({
+      x: msg.x,
+      y: msg.y,
+      items: msg.items,
+      onSelect: actionId => vscode.postMessage({ type: 'menuAction', bayId: msg.bayId, actionId }),
+    });
+  }
 
   if (msg.type === 'updateActiveBay') {
     const activeSet = new Set(msg.activeBayIds);

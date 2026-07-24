@@ -26,6 +26,7 @@ let blockHeight        = 0;     // Alto total del bloque (parent + children auto
 let groupRegions       = [];    // [{ groupId, top, bottom, headerEl }] al iniciar el drag
 let targetGroupId      = null;  // grupo actualmente bajo el cursor (string)
 let highlightedGroupId = null;  // grupo con resaltado de destino activo
+let lockedSource       = false; // el grupo de origen está bloqueado (no sale nada de él)
 
 // --- Mousedown: preparar un posible drag ---
 document.addEventListener('mousedown', e => {
@@ -71,8 +72,10 @@ document.addEventListener('mousemove', e => {
   const cloneCenter = startY + (blockHeight / 2) + dy;
   const overGroup   = groupAt(cloneCenter);
 
-  if (overGroup === null || overGroup === tabGroupId) {
-    // Sobre el grupo de origen (o sin grupos): reordenar in situ.
+  if (lockedSource || overGroup === null || overGroup === tabGroupId) {
+    // Sobre el grupo de origen (o sin grupos, o grupo bloqueado): reordenar in
+    // situ. El host rechaza sacar bays de un grupo bloqueado, así que ni
+    // resaltamos el destino: el arrastre sólo animaría para volver a su sitio.
     clearTargetGroupHighlight();
     updateSiblingPositions(cloneCenter);
     targetGroupId = tabGroupId;
@@ -112,6 +115,9 @@ function beginDrag() {
   // Sin cabeceras (un solo grupo visible) queda vacío ⇒ sólo reordenación local.
   groupRegions  = buildGroupRegions();
   targetGroupId = tabGroupId;
+
+  const srcHeader = document.querySelector('.group-header[data-groupid="' + tabGroupId + '"]');
+  lockedSource    = !!srcHeader && srcHeader.dataset.locked === 'true';
 
   // Todos los bloques arrastrables del mismo grupo (excluir pinned)
   const allBlocks      = Array.from(document.querySelectorAll('.bay-block[data-groupid="' + tabGroupId + '"]'));
@@ -333,4 +339,5 @@ function teardown() {
   blockHeight        = 0;
   groupRegions       = [];
   targetGroupId      = null;
+  lockedSource       = false;
 }

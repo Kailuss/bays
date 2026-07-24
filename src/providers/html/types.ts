@@ -90,6 +90,7 @@ export type WebviewResourceUris = {
   codiconCss: vscode.Uri;
   webviewCss: vscode.Uri;
   webviewScript: vscode.Uri;
+  contextMenuScript: vscode.Uri;
   pathTruncationScript: vscode.Uri;
   dragDropScript: vscode.Uri | null;
 };

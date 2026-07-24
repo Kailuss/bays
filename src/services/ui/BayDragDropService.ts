@@ -114,6 +114,16 @@ export class BayDragDropService {
     // Restriction: pinned bays cannot be moved
     if (sourceBay.state.isPinned) { return false; }
 
+    // Restriction: a locked group doesn't let its bays leave. Moving between
+    // groups closes the bay in the source and reopens it in the target, so
+    // allowing it would be a back door to the close button the lock removed.
+    // Reordering INSIDE the group stays allowed — nothing closes there.
+    const sourceGroup = this.stateService.getGroup(sourceBay.state.groupId);
+    if (sourceGroup?.isLocked) {
+      Logger.log('[DragDrop] Blocked: source group is locked');
+      return false;
+    }
+
     const targetGroup = this.stateService.getGroup(targetGroupId);
     if (!targetGroup) { return false; }
 

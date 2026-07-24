@@ -12,6 +12,7 @@
    - bay-animations.css  → Transiciones y animaciones
    - bay-file-states.css → Estados de archivos (git, dirty, etc.)
    - bay-actions.css     → Botones de acción de bays normales
+   - context-menu.css    → Menú contextual (réplica del nativo de VS Code)
    
    Diferencias clave Normal Bays vs Variant Bays:
    - Altura: 39px vs 22px
@@ -49,4 +50,5 @@
 @import './bay-animations.css';
 @import './bay-file-states.css';
 @import './bay-actions.css';       /* Normal bays actions */
+@import './context-menu.css';      /* Menú contextual (réplica del nativo) */
 @import './utilities.css';

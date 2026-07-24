@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import { BaysWebviewProvider     } from './providers/BaysWebviewProvider';
+import { GroupActions            } from './providers/GroupActions';
 import { BayStateService         } from './services/core/BayStateService';
 import { BaySyncService          } from './services/core/BaySyncService';
 import { BayDragDropService      } from './services/ui/BayDragDropService';
 import { FileActionRegistry      } from './services/registry/FileActionRegistry';
 import { BayIconManager          } from './services/ui/BayIconManager';
+import { GroupCustomizationService } from './services/ui/GroupCustomizationService';
 import { ThemeService            } from './services/ui/ThemeService';
 import { CopilotService          } from './services/integration/CopilotService';
 import { registerBayCommands     } from './commands/bayCommands';
+import { registerGroupCommands   } from './commands/groupCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
 import { activateLanguageRegistry } from './utils/languageRegistry';
 import { Logger                  } from './utils/logger';
@@ -25,12 +28,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Core services
     const stateService       = new BayStateService();
+
+    // Group name/colour/lock, persisted per workspace. Debe inyectarse ANTES de
+    // que syncService haga su primer sync: `setGroups` reconstruye los grupos
+    // desde la API nativa y es donde se reaplica la personalización guardada.
+    const groupCustomization = new GroupCustomizationService(context);
+    stateService.setGroupCustomizationService(groupCustomization);
+
     const syncService        = new BaySyncService(stateService);
     const dragDropService    = new BayDragDropService(stateService);
     const fileActionRegistry = new FileActionRegistry();
     const iconManager        = new BayIconManager();
     const themeService       = new ThemeService();
     const copilotService     = new CopilotService();
+    const groupActions       = new GroupActions(groupCustomization);
 
     // Initialise icon manager (loads icon map). Do NOT block activation on the
     // theme-JSON disk read: the first render shows placeholder icons and patches
@@ -49,6 +60,7 @@ export async function activate(context: vscode.ExtensionContext) {
       context,
       dragDropService,
       fileActionRegistry,
+      groupActions,
     );
 
     context.subscriptions.push(
@@ -87,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     //· Register commands
     registerBayCommands(context, stateService);
+    registerGroupCommands(context, stateService, groupActions);
     registerCopilotCommands(context, copilotService, stateService);
 
     context.subscriptions.push(

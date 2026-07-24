@@ -5,6 +5,17 @@
   color: var(--vscode-bay-activeForeground, var(--vscode-foreground));
 }
 
+/* El nombre de la bay activa va a color pleno y el resto queda atenuado, igual
+   que los tabs nativos. Los estados de git (bay-file-states.css) llegan después
+   y con más especificidad, así que siguen ganando sobre estos dos. */
+.bay .bay-name {
+  color: var(--vscode-tab-inactiveForeground, var(--vscode-descriptionForeground));
+}
+
+.bay.active .bay-name {
+  color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
+}
+
 /* Drag & Drop States */
 
 /* Bloque siendo arrastrado */
