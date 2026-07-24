@@ -182,12 +182,16 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     if (!this._view || pending.length === 0) { return; }
 
     const view = this._view;
-    const icons = await Promise.all(
+    const resolved = await Promise.all(
       pending.map(async (p) => ({
         bayId: p.bayId,
-        html : await this.htmlBuilder.resolveIconHtml(p.fileName, p.languageId),
+        html : await this.htmlBuilder.resolveIconHtml(p),
       })),
     );
+    // Null = sin mejora sobre el placeholder ya pintado (p.ej. el icono de la
+    // extensión dueña de un webview no se pudo leer): esa bay no se parchea.
+    const icons = resolved.filter((p): p is { bayId: string; html: string } => p.html !== null);
+    if (icons.length === 0) { return; }
 
     // Bail out if a full rebuild replaced the view/DOM while we were resolving
     if (this._view !== view || this._fullRefreshPending) { return; }

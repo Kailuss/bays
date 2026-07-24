@@ -7,10 +7,10 @@ import * as vscode from 'vscode';
 import { BayIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
-import { resolveWebviewExtensionIcon } from '../../utils/webviewExtensionIcons';
+import { lookupWebviewExtensionIcon, resolveWebviewExtensionIconAsync } from '../../utils/webviewExtensionIcons';
 import { DEFAULT_FILE_ICON, parseFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
 import { Logger } from '../../utils/logger';
-import { IconData } from './types';
+import { IconData, PendingIconRequest } from './types';
 
 export class IconRenderer {
   constructor(
@@ -24,15 +24,23 @@ export class IconRenderer {
    * placeholder y marca la bay como pendiente para resolverla en paralelo
    * después (ver BaysHtmlBuilder.pendingIcons / provider.patchIcons).
    */
-  renderImmediate(bay: Bay): { html: string; pending: { fileName: string; languageId?: string } | null } {
-    const { bayType: tabType, viewType, label } = bay.metadata;
+  renderImmediate(bay: Bay): { html: string; pending: PendingIconRequest | null } {
+    const { bayType: tabType, viewType, label, uri, originalUri } = bay.metadata;
 
-    if (tabType === 'webview') {
-      // Prefer the owning extension's real logo (Claude Code, …) when available;
-      // fall back to a built-in codicon for everything else.
-      const extIcon = resolveWebviewExtensionIcon(viewType);
-      if (extIcon) { return { html: extIcon, pending: null }; }
-      return { html: this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6'), pending: null };
+    // Webviews de otras extensiones y tabs built-in sin URI (Settings,
+    // "Extension: …"; originalUri descarta el diff defensivo sin URI): logo
+    // real de la extensión dueña si ya está en caché; si hay dueña candidata
+    // pero su icono aún no se leyó del disco, codicon ahora y carga diferida
+    // (patchIcons); sin match, codicon y listo.
+    if (tabType === 'webview' || (!uri && !originalUri)) {
+      const lookup = lookupWebviewExtensionIcon(viewType, label);
+      if (lookup.state === 'loaded') {
+        return { html: this.renderIconData({ type: 'base64', data: lookup.dataUri }), pending: null };
+      }
+      return {
+        html    : this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6'),
+        pending : lookup.state === 'deferrable' ? { kind: 'webview', viewType, label } : null,
+      };
     }
 
     const fileName = this.resolveFileName(bay);
@@ -48,15 +56,27 @@ export class IconRenderer {
     // Cache miss → placeholder ahora, resolución diferida en paralelo
     return {
       html: this.renderFallback(),
-      pending: { fileName, languageId: bay.metadata.languageId },
+      pending: { kind: 'file', fileName, languageId: bay.metadata.languageId },
     };
   }
 
   /**
-   * Resolución asíncrona de un icono por nombre de archivo, para el parche
-   * diferido tras el primer pintado. Devuelve el HTML del icono ya resuelto.
+   * Resolución asíncrona para el parche diferido tras el primer pintado.
+   * Devuelve el HTML del icono, o null si no hay mejora sobre el placeholder
+   * ya pintado (el caller entonces no parchea esa bay).
    */
-  async renderByFileName(fileName: string, languageId?: string): Promise<string> {
+  async renderDeferred(request: PendingIconRequest): Promise<string | null> {
+    if (request.kind === 'webview') {
+      const dataUri = await resolveWebviewExtensionIconAsync(request.viewType, request.label);
+      return dataUri ? this.renderIconData({ type: 'base64', data: dataUri }) : null;
+    }
+    return this.renderByFileName(request.fileName, request.languageId);
+  }
+
+  /**
+   * Resolución asíncrona de un icono por nombre de archivo contra el icon theme.
+   */
+  private async renderByFileName(fileName: string, languageId?: string): Promise<string> {
     try {
       const cached = this.iconManager.getCachedIcon(fileName);
       if (cached) {

@@ -48,12 +48,17 @@ export type Base64Icon = {
 /** Unión de todos los tipos de icono */
 export type IconData = FontIconMarker | Base64Icon | FallbackIcon;
 
+/**
+ * Petición de icono que falló la caché en el pintado síncrono, sin la bay a la
+ * que pertenece: `file` se resuelve contra el icon theme por nombre de archivo;
+ * `webview` lee del disco el icono de la extensión dueña de la tab.
+ */
+export type PendingIconRequest =
+  | { kind: 'file'; fileName: string; languageId?: string }
+  | { kind: 'webview'; viewType?: string; label: string };
+
 /** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
-export type PendingIcon = {
-  bayId: string;
-  fileName: string;
-  languageId?: string;
-};
+export type PendingIcon = PendingIconRequest & { bayId: string };
 
 /** Resultado de construir el HTML: markup + iconos a resolver en paralelo después */
 export type BuildHtmlResult = {

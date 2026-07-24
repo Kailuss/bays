@@ -15,7 +15,7 @@ import { Bay } from '../models/Bay';
 import { BayGroup, BayGroupColor } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
 import { getStateIndicator } from '../utils/stateIndicator';
-import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris, PendingIcon, BuildHtmlResult } from './html';
+import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris, PendingIcon, PendingIconRequest, BuildHtmlResult } from './html';
 import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './renderers';
 
 /**
@@ -89,10 +89,11 @@ export class BaysHtmlBuilder {
   }
 
   /**
-   * Resuelve el HTML de un icono por nombre de archivo (parche diferido).
+   * Resuelve el HTML de un icono pendiente (parche diferido). Null significa
+   * que no hay nada mejor que el placeholder ya pintado.
    */
-  resolveIconHtml(fileName: string, languageId?: string): Promise<string> {
-    return this.iconRenderer.renderByFileName(fileName, languageId);
+  resolveIconHtml(request: PendingIconRequest): Promise<string | null> {
+    return this.iconRenderer.renderDeferred(request);
   }
 
   //= RESOLUCIÓN DE RECURSOS
@@ -310,7 +311,7 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
 
     const { html: iconHtml, pending } = this.iconRenderer.renderImmediate(bay);
     if (pending) {
-      pendingIcons.push({ bayId: bay.metadata.id, fileName: pending.fileName, languageId: pending.languageId });
+      pendingIcons.push({ bayId: bay.metadata.id, ...pending });
     }
 
     return BayRowRenderer.render({
