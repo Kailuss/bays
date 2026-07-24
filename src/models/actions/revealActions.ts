@@ -18,18 +18,9 @@ export async function revealInExplorer(
   }
 }
 
-export async function revealInExplorerView(
-  metadata: BayMetadata,
-  state: BayState
-): Promise<void> {
-  if (metadata.uri) {
-    await vscode.commands.executeCommand('revealInExplorer', metadata.uri);
-  }
-}
-
 export async function revealInFileExplorer(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (metadata.uri) {
     await vscode.commands.executeCommand('revealFileInOS', metadata.uri);
@@ -38,7 +29,7 @@ export async function revealInFileExplorer(
 
 export async function openTimeline(
   metadata: BayMetadata,
-  state: BayState,
+  _state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
   if (!metadata.uri) {

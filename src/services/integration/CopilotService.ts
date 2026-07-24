@@ -21,39 +21,22 @@ interface ChatOpenOptions {
  * Explicación práctica: permite añadir archivos al contexto de chat desde la UI.
  */
 export class CopilotService {
-  private copilotExtension?: vscode.Extension<unknown>;
-
-  constructor() {
-    this.copilotExtension = vscode.extensions.getExtension('github.copilot-chat');
-  }
-
-  /** Indica si la extensión GitHub Copilot Chat está disponible. */
+  /**
+   * Indica si la extensión GitHub Copilot Chat está disponible.
+   * Se consulta en vivo (no se cachea en el constructor) para que instalar o
+   * deshabilitar Copilot Chat a mitad de sesión se refleje sin recargar la
+   * ventana. `getExtension` es una búsqueda barata en un mapa.
+   */
   isAvailable(): boolean {
-    return this.copilotExtension !== undefined;
+    return vscode.extensions.getExtension('github.copilot-chat') !== undefined;
   }
 
   /**
-   * Añade un archivo al contexto de Copilot Chat.
-   * Si la integración directa no está disponible usa el portapapeles como alternativa.
-   * @param bay - The bay to add (updates integration state)
+   * Añade un archivo al contexto de Copilot Chat y marca el estado de
+   * integración de la bay (`state.integrations.copilot.inContext`).
    */
-  async addFileToChat(bay: Bay): Promise<boolean>;
-  /**
-   * Añade un archivo al contexto de Copilot Chat (legacy signature).
-   * @param uri - The URI to add (no state update)
-   */
-  async addFileToChat(uri: vscode.Uri | undefined): Promise<boolean>;
-  async addFileToChat(tabOrUri: Bay | vscode.Uri | undefined): Promise<boolean> {
-    // Handle both signatures
-    let uri: vscode.Uri | undefined;
-    let bay: Bay | undefined;
-    
-    if (tabOrUri instanceof Bay) {
-      bay = tabOrUri;
-      uri = bay.metadata.uri;
-    } else {
-      uri = tabOrUri;
-    }
+  async addFileToChat(bay: Bay): Promise<boolean> {
+    const uri = bay.metadata.uri;
 
     if (!uri) {
       return false;
@@ -68,12 +51,9 @@ export class CopilotService {
         isPartialQuery: true,
         attachFiles: [uri],
       } satisfies ChatOpenOptions);
-      
-      // Update integration state if bay was provided
-      if (bay) {
-        bay.addToCopilotContext();
-      }
-      
+
+      bay.addToCopilotContext();
+
       return true;
     } catch (error) {
       vscode.window.showWarningMessage(
@@ -85,28 +65,18 @@ export class CopilotService {
 
   /**
    * Añade varios archivos al contexto de Copilot Chat en una sola acción.
-   * All files are attached simultaneously to a single chat session.
-   * Updates integration state for all tabs.
+   * Todos se adjuntan a la misma sesión de chat y se marca el estado de
+   * integración de cada bay.
    */
-  async addFilesToChat(tabs: Bay[], query?: string): Promise<boolean>;
-  /**
-   * Legacy signature: adds URIs without state update.
-   */
-  async addFilesToChat(uris: vscode.Uri[], query?: string): Promise<boolean>;
-  async addFilesToChat(tabsOrUris: Bay[] | vscode.Uri[], query?: string): Promise<boolean> {
-    if (tabsOrUris.length === 0) {
+  async addFilesToChat(tabs: Bay[], query?: string): Promise<boolean> {
+    if (tabs.length === 0) {
       return false;
     }
     if (!this.isAvailable()) {
       return false;
     }
 
-    // Determine if we have tabs or URIs
-    const areTabs = tabsOrUris.length > 0 && tabsOrUris[0] instanceof Bay;
-    const tabs = areTabs ? (tabsOrUris as Bay[]) : undefined;
-    const uris = areTabs 
-      ? (tabsOrUris as Bay[]).map(t => t.metadata.uri).filter((u): u is vscode.Uri => !!u)
-      : (tabsOrUris as vscode.Uri[]);
+    const uris = tabs.map(t => t.metadata.uri).filter((u): u is vscode.Uri => !!u);
 
     try {
       await vscode.commands.executeCommand('workbench.action.chat.open', {
@@ -114,16 +84,13 @@ export class CopilotService {
         isPartialQuery: !query,
         attachFiles: uris,
       } satisfies ChatOpenOptions);
-      
-      // Update integration state for all tabs
-      if (tabs) {
-        for (const bay of tabs) {
-          if (bay.metadata.uri) {
-            bay.addToCopilotContext();
-          }
+
+      for (const bay of tabs) {
+        if (bay.metadata.uri) {
+          bay.addToCopilotContext();
         }
       }
-      
+
       return true;
     } catch (error) {
       vscode.window.showWarningMessage(

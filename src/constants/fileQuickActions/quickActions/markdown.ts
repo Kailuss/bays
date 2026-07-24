@@ -3,34 +3,24 @@ import { VSCODE_COMMANDS } from '../../commands';
 import type { DynamicFileQuickAction } from '../types';
 import { byExtension } from '../matchers';
 
-/** Markdown toggle: preview ↔ source. */
+/**
+ * Markdown: abre el preview renderizado.
+ *
+ * El preview es una VARIANTE real de la bay (fila hija con su propia pestaña),
+ * así que aquí no hay toggle: este botón solo CREA el preview, y el builder lo
+ * oculta cuando la bay ya tiene una variante de preview. El foco lo toma la
+ * propia pestaña del preview (setFocus: false — no reactivar el fuente).
+ */
 export const MARKDOWN_TOGGLE_ACTION: DynamicFileQuickAction = {
   id: 'toggleMarkdownPreview',
-  setFocus: true,
+  setFocus: false,
   match: byExtension('.md', '.mdx', '.markdown'),
-  resolve: (context) => {
-    const isPreview = context?.viewMode === 'preview';
-
-    if (isPreview) {
-      return {
-        icon: 'edit-code',
-        tooltip: 'Edit Source',
-        actionId: 'editMarkdownSource',
-      };
-    }
-    return {
-      icon: 'preview',
-      tooltip: 'Open Preview',
-      actionId: 'openMarkdownPreview',
-    };
-  },
-  execute: async (uri, context) => {
-    const isPreview = context?.viewMode === 'preview';
-
-    if (isPreview) {
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.VSCODE_OPEN, uri);
-    } else {
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, uri);
-    }
+  resolve: () => ({
+    icon: 'preview',
+    tooltip: 'Open Preview',
+    actionId: 'openMarkdownPreview',
+  }),
+  execute: async (uri) => {
+    await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, uri);
   },
 };

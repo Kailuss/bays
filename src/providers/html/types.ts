@@ -8,37 +8,35 @@ import { BayGroup } from '../../models/BayGroup';
 
 //= OPCIONES DE RENDERIZADO
 
-/** Icono de archivo genérico de fallback (Seti \E023 en gris) */
-export const FALLBACK_FILE_ICON = 'font-icon:\\E023:#d4d7d6';
-
 /** Opciones para construir el HTML del webview */
 export type BuildHtmlOptions = {
   webview: vscode.Webview;
   groups: BayGroup[];
   getBaysInGroup: (groupId: number) => Bay[];
-  workspaceName: string;
   compactMode: boolean;
   showPath: boolean;
   copilotReady: boolean;
   enableDragDrop?: boolean;
+  enableHoverActions?: boolean;
   initialLoad?: boolean;
-};
-
-/** Opciones para renderizar una bay individual */
-export type RenderBayOptions = {
-  bay: Bay;
-  showPath: boolean;
-  copilotReady: boolean;
-  enableDragDrop?: boolean;
 };
 
 //= ICONOS
 
-/** Marcador para iconos basados en fuente (vs-seti) */
+/** Marcador para iconos basados en fuente (vs-seti y similares) */
 export type FontIconMarker = {
   type: 'font';
   hexCode: string;
   color: string;
+  /** font-family declarada por @font-face para la fuente del tema activo */
+  fontFamily?: string;
+  /** `fontSize` de la definición del tema, si la declara (p.ej. "125%") */
+  fontSize?: string;
+};
+
+/** El tema no ofrece icono utilizable: se dibuja el SVG genérico del renderer */
+export type FallbackIcon = {
+  type: 'fallback';
 };
 
 /** Icono en formato base64 */
@@ -47,21 +45,21 @@ export type Base64Icon = {
   data: string;
 };
 
-/** Icono codicon de VS Code */
-export type CodiconIcon = {
-  type: 'codicon';
-  name: string;
-  color?: string;
-};
-
-/** Icono SVG inline */
-export type SvgIcon = {
-  type: 'svg';
-  content: string;
-};
-
 /** Unión de todos los tipos de icono */
-export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon;
+export type IconData = FontIconMarker | Base64Icon | FallbackIcon;
+
+/** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
+export type PendingIcon = {
+  bayId: string;
+  fileName: string;
+  languageId?: string;
+};
+
+/** Resultado de construir el HTML: markup + iconos a resolver en paralelo después */
+export type BuildHtmlResult = {
+  html: string;
+  pendingIcons: PendingIcon[];
+};
 
 //= URIS DE RECURSOS
 
@@ -69,9 +67,8 @@ export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon;
 export type WebviewResourceUris = {
   codiconCss: vscode.Uri;
   webviewCss: vscode.Uri;
+  /** Bundle único del cliente (dist/webview/main.js, generado por esbuild). */
   webviewScript: vscode.Uri;
-  pathTruncationScript: vscode.Uri;
-  dragDropScript: vscode.Uri | null;
 };
 
 //= ESTADO DE BAY

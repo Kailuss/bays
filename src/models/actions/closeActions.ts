@@ -18,15 +18,15 @@ export async function close(metadata: BayMetadata, state: BayState): Promise<voi
 }
 
 export async function closeOthers(
-  metadata: BayMetadata,
-  state: BayState,
+  _metadata: BayMetadata,
+  _state: BayState,
   activateFn: () => Promise<void>
 ): Promise<void> {
   await activateFn();
   await vscode.commands.executeCommand('workbench.action.closeOtherEditors');
 }
 
-export async function closeGroup(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function closeGroup(_metadata: BayMetadata, state: BayState): Promise<void> {
   const group = BayHelpers.nativeGroup(state.viewColumn);
   if (!group) {
     return;
@@ -34,6 +34,10 @@ export async function closeGroup(metadata: BayMetadata, state: BayState): Promis
   await vscode.window.tabGroups.close(group);
 }
 
+/**
+ * Cierra las bays que siguen a esta en el orden de la lista (el equivalente
+ * vertical de "Close to the Right" de la tab bar nativa).
+ */
 export async function closeToRight(
   metadata: BayMetadata,
   state: BayState

@@ -1,0 +1,26 @@
+{
+	// Cliente del webview: código de NAVEGADOR (lib DOM), separado del tsconfig
+	// raíz que compila el extension host (Node, sin DOM). esbuild bundlea
+	// main.ts → dist/webview/main.js; este proyecto solo type-checkea.
+	// Vive AQUÍ (no en la raíz) para que el projectService de typescript-eslint
+	// lo encuentre al subir directorios desde cada fichero.
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"target": "ES2022",
+		"lib": [
+			"ES2022",
+			"DOM",
+			"DOM.Iterable"
+		],
+		"strict": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUnusedParameters": true,
+		"noEmit": true
+	},
+	"include": [
+		"./**/*.ts",
+		"../shared/**/*.ts"
+	]
+}

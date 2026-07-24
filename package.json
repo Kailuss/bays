@@ -2,7 +2,7 @@
   "name": "bays",
   "displayName": "Bays",
   "description": "Vertical bays panel with advanced features",
-  "version": "0.3.3",
+  "version": "0.3.7",
   "publisher": "Kailuss",
   "repository": {
     "type": "git",
@@ -35,200 +35,302 @@
     "views": {
       "baysContainer": [
         {
-          "type" : "webview",
-          "id"   : "bays",
-          "name" : "Bays",
-          "icon" : "./icon.png"
+          "type": "webview",
+          "id": "bays",
+          "name": "Bays",
+          "icon": "./icon.png"
         }
       ]
     },
     "commands": [
       {
-        "command"  :"bays.refresh",
-        "title"    :"Refresh",
-        "icon"     :"$(refresh)",
-        "category" :"Bays"
+        "command": "bays.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.openBay",
-        "title"    :"Open Bay",
-        "category" :"Bays"
+        "command": "bays.openBay",
+        "title": "Open Bay",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.closeBay",
-        "title"    :"Close Bay",
-        "icon"     :"$(close)",
-        "category" :"Bays"
+        "command": "bays.closeBay",
+        "title": "Close Bay",
+        "icon": "$(close)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.closeOthers",
-        "title"    :"Close Others",
-        "category" :"Bays"
+        "command": "bays.closeOthers",
+        "title": "Close Others",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.closeToRight",
-        "title"    :"Close to the Right",
-        "category" :"Bays"
+        "command": "bays.closeToRight",
+        "title": "Close to the Right",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.closeAll",
-        "title"    :"Close All",
-        "icon"     :"$(close-all)",
-        "category" :"Bays"
+        "command": "bays.closeAll",
+        "title": "Close All",
+        "icon": "$(close-all)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.pinBay",
-        "title"    :"Pin Bay",
-        "icon"     :"$(pinned)",
-        "category" :"Bays"
+        "command": "bays.pinBay",
+        "title": "Pin Bay",
+        "icon": "$(pinned)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.unpinBay",
-        "title"    :"Unpin Bay",
-        "icon"     :"$(pin)",
-        "category" :"Bays"
+        "command": "bays.unpinBay",
+        "title": "Unpin Bay",
+        "icon": "$(pin)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.revealInExplorer",
-        "title"    :"Reveal in Explorer",
-        "icon"     :"$(go-to-file)",
-        "category" :"Bays"
+        "command": "bays.revealInExplorer",
+        "title": "Reveal in Explorer",
+        "icon": "$(go-to-file)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.copyRelativePath",
-        "title"    :"Copy Relative Path",
-        "icon"     :"$(clippy)",
-        "category" :"Bays"
+        "command": "bays.copyRelativePath",
+        "title": "Copy Relative Path",
+        "icon": "$(clippy)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.copyFileContents",
-        "title"    :"Copy File Contents",
-        "icon"     :"$(copy)",
-        "category" :"Bays"
+        "command": "bays.copyFileContents",
+        "title": "Copy File Contents",
+        "icon": "$(copy)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.compareWithActive",
-        "title"    :"Compare with Active Editor",
-        "icon"     :"$(diff)",
-        "category" :"Bays"
+        "command": "bays.compareWithActive",
+        "title": "Compare with Active Editor",
+        "icon": "$(diff)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.moveToGroup",
-        "title"    :"Move to Group…",
-        "icon"     :"$(split-horizontal)",
-        "category" :"Bays"
+        "command": "bays.moveToGroup",
+        "title": "Move to Group…",
+        "icon": "$(split-horizontal)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.addToCopilotChat",
-        "title"    :"Add to Copilot Chat",
-        "icon"     :"$(add)",
-        "category" :"Bays"
+        "command": "bays.addToCopilotChat",
+        "title": "Add to Copilot Chat",
+        "icon": "$(add)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.addMultipleToCopilotChat",
-        "title"    :"Add Files to Copilot Chat…",
-        "icon"     :"$(sparkle)",
-        "category" :"Bays"
+        "command": "bays.addMultipleToCopilotChat",
+        "title": "Add Files to Copilot Chat…",
+        "icon": "$(sparkle)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.closeGroup",
-        "title"    :"Close Group",
-        "icon"     :"$(close-all)",
-        "category" :"Bays"
+        "command": "bays.closeGroup",
+        "title": "Close Group",
+        "icon": "$(close-all)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.copyPath",
-        "title"    :"Copy Path",
-        "icon"     :"$(copy)",
-        "category" :"Bays"
+        "command": "bays.copyPath",
+        "title": "Copy Path",
+        "icon": "$(copy)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.openTimeline",
-        "title"    :"Open Timeline",
-        "icon"     :"$(history)",
-        "category" :"Bays"
+        "command": "bays.openTimeline",
+        "title": "Open Timeline",
+        "icon": "$(history)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.splitRight",
-        "title"    :"Split Right",
-        "icon"     :"$(split-horizontal)",
-        "category" :"Bays"
+        "command": "bays.splitRight",
+        "title": "Split Right",
+        "icon": "$(split-horizontal)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.openChanges",
-        "title"    :"Open Changes",
-        "icon"     :"$(git-compare)",
-        "category" :"Bays"
+        "command": "bays.openChanges",
+        "title": "Open Changes",
+        "icon": "$(git-compare)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.revealInFileExplorer",
-        "title"    :"Reveal in File Explorer",
-        "icon"     :"$(folder-opened)",
-        "category" :"Bays"
+        "command": "bays.revealInFileExplorer",
+        "title": "Reveal in File Explorer",
+        "icon": "$(folder-opened)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.revealInExplorerView",
-        "title"    :"Reveal in Explorer View",
-        "icon"     :"$(files)",
-        "category" :"Bays"
+        "command": "bays.moveToNewWindow",
+        "title": "Move to New Window",
+        "icon": "$(multiple-windows)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.moveToNewWindow",
-        "title"    :"Move to New Window",
-        "icon"     :"$(multiple-windows)",
-        "category" :"Bays"
+        "command": "bays.duplicateFile",
+        "title": "Duplicate File",
+        "icon": "$(files)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.duplicateFile",
-        "title"    :"Duplicate File",
-        "icon"     :"$(files)",
-        "category" :"Bays"
+        "command": "bays.saveAll",
+        "title": "Save All",
+        "icon": "$(save-all)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.saveAll",
-        "title"    :"Save All",
-        "icon"     :"$(save-all)",
-        "category" :"Bays"
+        "command": "bays.reorder",
+        "title": "Reorder Bays",
+        "icon": "$(list-ordered)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.reorder",
-        "title"    :"Reorder Bays",
-        "icon"     :"$(list-ordered)",
-        "category" :"Bays"
+        "command": "bays.toggleCompactMode",
+        "title": "Toggle Compact Mode",
+        "icon": "$(collapse-all)",
+        "category": "Bays"
       },
       {
-        "command"  :"bays.toggleCompactMode",
-        "title"    :"Toggle Compact Mode",
-        "icon"     :"$(list-flat)",
-        "category" :"Bays"
+        "command": "bays.toggleShowPath",
+        "title": "Toggle View Path",
+        "icon": "$(list-selection)",
+        "category": "Bays"
+      },
+      {
+        "command": "bays.renameGroup",
+        "title": "Rename Group…",
+        "icon": "$(edit)",
+        "category": "Bays"
+      },
+      {
+        "command": "bays.setGroupColor",
+        "title": "Set Group Color…",
+        "icon": "$(symbol-color)",
+        "category": "Bays"
+      },
+      {
+        "command": "bays.toggleGroupLock",
+        "title": "Toggle Group Lock",
+        "icon": "$(lock)",
+        "category": "Bays"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "bays.viewOptions",
+        "label": "View Options",
+        "icon": "$(settings)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "bays.openBay",
+          "when": "false"
+        },
+        {
+          "command": "bays.closeBay",
+          "when": "false"
+        },
+        {
+          "command": "bays.closeOthers",
+          "when": "false"
+        },
+        {
+          "command": "bays.closeToRight",
+          "when": "false"
+        },
+        {
+          "command": "bays.pinBay",
+          "when": "false"
+        },
+        {
+          "command": "bays.unpinBay",
+          "when": "false"
+        },
+        {
+          "command": "bays.revealInExplorer",
+          "when": "false"
+        },
+        {
+          "command": "bays.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "bays.copyFileContents",
+          "when": "false"
+        },
+        {
+          "command": "bays.compareWithActive",
+          "when": "false"
+        },
+        {
+          "command": "bays.moveToGroup",
+          "when": "false"
+        },
+        {
+          "command": "bays.addToCopilotChat",
+          "when": "false"
+        },
+        {
+          "command": "bays.closeGroup",
+          "when": "false"
+        },
+        {
+          "command": "bays.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "bays.openTimeline",
+          "when": "false"
+        },
+        {
+          "command": "bays.splitRight",
+          "when": "false"
+        },
+        {
+          "command": "bays.openChanges",
+          "when": "false"
+        },
+        {
+          "command": "bays.revealInFileExplorer",
+          "when": "false"
+        },
+        {
+          "command": "bays.moveToNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "bays.duplicateFile",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
-          "command": "bays.refresh",
-          "when": "view == bays",
+          "command": "bays.saveAll",
+          "when": "view == bays && bays.hasUnsavedBays",
           "group": "navigation@1"
         },
         {
-          "command": "bays.reorder",
+          "submenu": "bays.viewOptions",
           "when": "view == bays",
           "group": "navigation@2"
-        },
+        }
+      ],
+      "bays.viewOptions": [
         {
           "command": "bays.toggleCompactMode",
-          "when": "view == bays",
-          "group": "navigation@3"
+          "group": "1_toggles@1"
         },
         {
-          "command": "bays.saveAll",
-          "when": "view == bays",
-          "group": "navigation@4"
-        },
-        {
-          "command": "bays.addMultipleToCopilotChat",
-          "when": "view == bays && bays.copilotAvailable",
-          "group": "navigation@5"
+          "command": "bays.toggleShowPath",
+          "group": "1_toggles@2"
         }
       ]
     },
@@ -245,20 +347,10 @@
           "default": false,
           "description": "Enable compact mode: bays show file name and path in a single line with reduced height (28px)."
         },
-        "bays.iconSize": {
-          "type": "number",
-          "default": 16,
-          "description": "Size of the file icon in pixels."
-        },
         "bays.enableHoverActions": {
           "type": "boolean",
           "default": true,
-          "description": "Show action buttons when hovering over a bay."
-        },
-        "bays.showStateIcons": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show state icons (pinned, modified, Copilot-edited) on bays."
+          "description": "Show action buttons (file actions, Copilot, close) when hovering over a bay."
         },
         "bays.enableDragDrop": {
           "type": "boolean",
@@ -269,11 +361,6 @@
           "type": "boolean",
           "default": false,
           "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
-        },
-        "bays.openPreviewableInPreview": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically open previewable files (Markdown, HTML, etc.) in preview mode when first opened."
         }
       }
     }
@@ -284,23 +371,21 @@
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "watch:tsc-webview": "tsc --noEmit --watch --project src/webview/tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc --noEmit -p src/webview/tsconfig.json",
     "lint": "eslint src",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
-    "chai": "^6.2.2",
     "esbuild": "^0.27.2",
     "eslint": "^9.39.2",
     "mocha": "^11.7.5",
@@ -309,7 +394,6 @@
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.44",
-    "uuid": "^13.0.0"
+    "@vscode/codicons": "^0.0.44"
   }
 }

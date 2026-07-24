@@ -128,11 +128,6 @@ export class FileActionRegistry {
     }
   }
 
-  /** Devuelve todas las acciones registradas (para depuración). */
-  getAll(): ReadonlyArray<FileQuickAction> {
-    return [...this.custom, ...this.builtin];
-  }
-
   /**
    * Devuelve si una acción debe hacer focus o no.
    * @param actionId - ID de la acción

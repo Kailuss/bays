@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { BayMetadata, BayState } from '../Bay';
+import { BayHelpers } from '../BayHelpers';
 
 /**
  * File manipulation actions - Duplicar, comparar, split, mover
@@ -59,7 +60,7 @@ export async function duplicateFile(
 
 export async function compareWithActive(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -76,14 +77,14 @@ export async function compareWithActive(
   );
 }
 
-export async function openChanges(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function openChanges(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
   await vscode.commands.executeCommand('git.openChange', metadata.uri);
 }
 
-export async function splitRight(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function splitRight(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
     return;
   }
@@ -95,7 +96,7 @@ export async function splitRight(metadata: BayMetadata, state: BayState): Promis
 
 export async function moveToNewWindow(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;
@@ -109,7 +110,13 @@ export async function moveToGroup(
   target: vscode.ViewColumn,
   closeFn: () => Promise<void>
 ): Promise<void> {
+  // Webview bays (Claude Code, Simple Browser, Settings…) have no URI to reopen,
+  // so close+reopen is impossible. Move the live tab instead: focus it, then run
+  // the native "move editor to group N" command. Preserves the webview's state
+  // (no teardown) and relocates it to the target group.
   if (!metadata.uri) {
+    await BayHelpers.activateByNativeTab(metadata, state);
+    await BayHelpers.moveActiveEditorToGroup(target);
     return;
   }
   await closeFn();

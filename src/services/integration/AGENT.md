@@ -2,19 +2,22 @@
 
 ## MODULE PURPOSE
 
-This module manages optional integrations with external VS Code APIs that are NOT part of the Bays core.
-It provides decoupled connections with GitHub Copilot Chat and Git Extension without affecting base functionality.
+This module manages optional integrations with external VS Code APIs and other extensions that are NOT
+part of the Bays core. It provides decoupled connections with the Git Extension, GitHub Copilot Chat, and
+Claude Code, without affecting base functionality.
 
 **Exact responsibilities:**
 - Detect Git status of files (modified, added, conflict, etc.)
 - Listen to Git repository changes and update badges
 - Attach files to GitHub Copilot Chat context
+- Read Claude Code's on-disk conversation transcripts and enrich the truncated tab label of its chat/plan
+  webview bays with the full conversation title
 - Handle availability of optional extensions (may not be installed)
 - Update Bay integration state after interactions
 
 **It is NOT responsible for:**
 - Synchronization with VS Code Tab API (see services/core/BaySyncService)
-- Rendering Git/Copilot badges (see providers/)
+- Rendering Git/Copilot/Claude badges or icons (see providers/, src/utils/webviewExtensionIcons.ts, src/utils/builtinIcons.ts)
 - Managing Bays state (see services/core/BayStateService)
 - Executing Git commands (read-only status only)
 - UI or presentation logic (see services/ui/)
@@ -33,6 +36,9 @@ It provides decoupled connections with GitHub Copilot Chat and Git Extension wit
 8. **Status mapping is exhaustive** - 19 Git API codes → 6 GitStatus values
 9. **Silent failures in Git** - Try/catch without logging, return null
 10. **Copilot updates integration state** - Call tab.addToCopilotContext() after attach
+11. **Claude title enrichment is best-effort** - No transcript match, no dir, or a format change all degrade to the native (truncated) label, never an error
+12. **Custom title beats AI title** - A non-empty user-set `custom-title` always wins over the auto-generated `ai-title` in the same transcript
+13. **Ambiguous match = no match** - `enrichLabels()` only accepts an unambiguous single transcript match per bay; ties are discarded
 
 ---
 
@@ -52,11 +58,18 @@ CopilotService (GitHub Copilot Chat integration)
   ├─ addFileToChat() → attach single file
   ├─ addFilesToChat() → attach multiple files
   └─ addMultipleFiles() → QuickPick UI
+
+ClaudeConversationService (Claude Code conversation-title enrichment)
+  ├─ isClaudeConversationBay() → detects Claude chat/plan webview bays
+  ├─ enrichLabels() → resolves + writes the full conversation title
+  ├─ watch() → re-enriches on transcript writes (debounced)
+  └─ dispose() → closes fs watchers
 ```
 
 **Separation of responsibilities:**
 - **GitSyncService** - Read-only Git status, NO Git commands
 - **CopilotService** - Only attach files to chat, NO code generation
+- **ClaudeConversationService** - Only reads Claude's transcripts and writes `metadata.label`/`tooltipText`, NO chat interaction
 
 ### GitSyncService: Git Status Tracking
 
@@ -257,7 +270,7 @@ private updateGitStatusForRepo(repo: any): void {
   if (!repoRoot) return;
   
   // Update only bays in this repo
-  for (const tab of this.stateService.fetchAllBays()) {
+  for (const tab of this.stateService.getAllBays()) {
     const uri = tab.metadata.uri;
     if (!uri) continue;
     
@@ -268,7 +281,7 @@ private updateGitStatusForRepo(repo: any): void {
     
     if (tab.state.gitStatus !== newGitStatus) {
       tab.state.gitStatus = newGitStatus;
-      this.stateService.updateTabStateWithAnimation(tab);
+      this.stateService.updateBayStateWithAnimation(tab);
     }
   }
 }
@@ -441,6 +454,98 @@ interface ChatOpenOptions {
   mode?: string;
 }
 ```
+
+### ClaudeConversationService: Conversation-Title Enrichment
+
+**Purpose:** VS Code only exposes the tab title Claude Code itself sets on its chat/plan webview panels, and
+Claude deliberately truncates it to `aiTitle.substring(0, 24) + "…"`. There is no VS Code API to read another
+extension's webview state, so the FULL conversation title is instead read straight from Claude Code's own
+on-disk session transcripts and patched onto `bay.metadata.label`. File: `ClaudeConversationService.ts`.
+Icons live in `src/utils/webviewExtensionIcons.ts` + `src/utils/builtinIcons.ts` (see below).
+
+**Detection — `isClaudeConversationBay()`:**
+```typescript
+static isClaudeConversationBay(bay: Bay): boolean {
+  return bay.metadata.bayType === 'webview'
+    && (bay.metadata.viewType ?? '').toLowerCase().includes('claudevscodepanel');
+}
+```
+Matches both the chat panel viewType `mainThreadWebview-claudeVSCodePanel` and the plan-preview viewType
+`mainThreadWebview-claudePlanPreview` — both lowercase to a string containing `claudevscodepanel`.
+
+**Transcript location & matching:**
+- Transcripts live at `~/.claude/projects/<workspace-slug>/<sessionId>.jsonl`, one file per session. The
+  slug is the workspace's fsPath with `:`, `\`, `/` all replaced by `-` (`slugFor()`), matched
+  case-insensitively against the existing `projects/` subdirectories.
+- Per transcript, only the tail (`TAIL_BYTES` = 256 KB) is scanned first for speed; a full read is the
+  fallback only if the tail contains no title line at all.
+- Two JSONL line types carry a title: `{type:"custom-title", customTitle:"…"}` (set by the user) and
+  `{type:"ai-title", aiTitle:"…"}` (auto-generated). A non-empty `custom-title` always wins over `ai-title`;
+  the newest of each type in the scanned range is used (`readTitle()` scans backwards from the end).
+- Up to `MAX_TRANSCRIPTS` = 24 newest transcripts per project dir are scanned to resolve one bay's title.
+- Matching a bay's truncated label to a transcript title: strip the trailing `…` from the label to get the
+  prefix, then require `title.startsWith(prefix)`. If more than one transcript's title matches the same
+  prefix, the match is ambiguous and is discarded — only an unambiguous single match is used.
+- Resolved titles are cached per transcript file keyed by `mtimeMs`; a changed mtime invalidates the entry.
+
+**`enrichLabels(bays)` flow:**
+```typescript
+async enrichLabels(bays: Bay[]): Promise<string[]> {
+  const changed: string[] = [];
+  for (const bay of bays) {
+    const full   = await this.resolveFullTitle(bay.metadata.label);
+    const native = BayHelpers.findNativeTab(bay.metadata, bay.state)?.label;
+    const desired = full ?? native ?? bay.metadata.label;
+
+    if (desired && desired !== bay.metadata.label) {
+      bay.metadata.label = desired;
+      bay.metadata.tooltipText = full ?? desired;
+      changed.push(bay.metadata.id);
+    }
+  }
+  return changed;
+}
+```
+Mutates `metadata.label`/`tooltipText` **in place** (safe: a webview bay's id derives from the stable
+`viewType`, never the label — see `tabConverter.generateId`) and returns only the ids that actually
+changed. `extension.ts` then calls `stateService.notifyBayLabelChange(id)` for each changed id, which fires
+`onDidChangeBayLabel` → `provider.notifyBayLabelChanged()` posts `{type:'updateBayLabel', …}` — a partial
+webview patch of just that row's label, no full HTML rebuild.
+
+**Live updates — `watch()`:** `fs.watch()`s the resolved transcript directories (non-recursive, one watcher
+per dir) and invokes the caller's `onChange` callback debounced 800ms after the last write, so a fast-typing
+conversation doesn't spam re-enrichment. `extension.ts` wires this into a single-flight
+`enrichClaudeTitles()` that also runs on `stateService.onDidChangeState` (a new chat tab opened) and once at
+startup; re-entrant calls while a run is in flight are coalesced into one extra pass rather than queued.
+
+**Iconography:** Claude's webview tabs get the real brand logo, not a generic codicon, via two layers:
+- `webviewExtensionIcons.ts`: `preloadWebviewExtensionIcons()` (called at startup and on extensions-changed)
+  maps the viewType substring `claude` → extension id `anthropic.claude-code`, reads
+  `resources/claude-logo.svg` from that extension's install dir, and caches it as an inline base64
+  `<img src="data:image/svg+xml;base64,…">` (the webview CSP already allows `img-src data:`).
+  `resolveWebviewExtensionIcon(viewType)` returns that cached `<img>` html, or `undefined` if the extension
+  isn't installed/loaded — callers then fall back to a codicon.
+- `builtinIcons.ts` supplies that codicon fallback: `mainThreadWebview-claudeVSCodePanel` → `sparkle`,
+  `mainThreadWebview-claudePlanPreview` → `checklist` (plus a viewType-substring regex fallback for either,
+  since the label itself is unreliable for icon lookup the same way it is for identity).
+
+**Special cases:**
+1. **No transcript dir for the workspace** — `projectDirs()` logs and skips that workspace folder;
+   `enrichLabels()` then has nothing to match against and the bay keeps whatever `findNativeTab()` reports
+   (the truncated native label), never blocking or erroring.
+2. **Brand-new session ("Claude Code" generic title)** — `resolveFullTitle()` short-circuits and returns
+   `undefined` for the literal label `"Claude Code"` (no `…` to strip, nothing meaningful to match), so a
+   fresh chat isn't mis-matched against an unrelated older transcript.
+3. **Ambiguous prefix match** — if the truncated prefix matches more than one transcript's latest title
+   (`matches.size !== 1`), the service intentionally returns no result rather than guessing; the bay falls
+   back to the native label.
+4. **`BayEventService` exclusion** — the generic webview-label refresh in `BayEventService` (which normally
+   re-syncs `metadata.label` from the native tab on any webview title change) explicitly skips bays where
+   `ClaudeConversationService.isClaudeConversationBay()` is true, so the two mechanisms never fight over the
+   same label (see `BayEventService.ts`, around the native-tab diffing loop).
+5. **Coupling to Claude Code's on-disk format** — this only works because it reverse-engineers Claude Code's
+   `~/.claude` JSONL layout (verified against a specific Claude Code version); it degrades cleanly if the
+   format changes or the file is missing — the bay simply keeps its native (truncated) label.
 
 ---
 
@@ -925,6 +1030,20 @@ const path2 = gitService.normalizeFsPath('c:\\users\\file.ts');
 console.log('Paths match:', path1 === path2);  // true on Windows
 ```
 
+**Check Claude conversation-title enrichment:**
+```typescript
+const bay = stateService.getAllBays().find(b => ClaudeConversationService.isClaudeConversationBay(b));
+console.log('Is Claude bay:', !!bay, bay?.metadata.viewType, bay?.metadata.label);
+
+// Force one enrichment pass and see what changed:
+const changed = await claudeConversation.enrichLabels(stateService.getAllBays()
+  .filter(ClaudeConversationService.isClaudeConversationBay));
+console.log('Labels enriched:', changed);
+```
+If a title never resolves, check `~/.claude/projects/` for a directory whose name is the workspace fsPath
+with `:`/`\`/`/` replaced by `-`, and confirm the session's `.jsonl` actually contains an `ai-title` or
+`custom-title` line matching the tab's truncated prefix.
+
 ---
 
 ## RESPONSIBILITY LIMITS
@@ -935,14 +1054,18 @@ console.log('Paths match:', path1 === path2);  // true on Windows
 - Manage Bays state (services/core/BayStateService)
 - Synchronize with VS Code Tab API (services/core/BaySyncService)
 - Generate code with Copilot (only attach files)
+- Interact with the Claude Code chat UI or read its webview state directly (only read its transcripts on disk)
+- Rewrite the label of a non-Claude webview bay (that stays with `BayEventService`'s native-tab sync)
 
 **This module MUST:**
 - Detect availability of optional extensions
 - Read Git status of files
 - Listen to Git repository changes
 - Attach files to Copilot Chat
+- Resolve and patch the full Claude conversation title onto `metadata.label`/`tooltipText`, and only for
+  ids it actually changed
 - Update Bay integration state after interactions
-- Handle errors with silent failures (Git) or warnings (Copilot)
+- Handle errors with silent failures (Git, Claude transcript I/O) or warnings (Copilot)
 
 ---
 
@@ -959,7 +1082,16 @@ console.log('Paths match:', path1 === path2);  // true on Windows
 - **Batch attach when possible** - Multiple files in a single command
 - **No state persistence** - Integration state in-memory only
 
+**Claude conversation-title enrichment:**
+- **Tail read first** - only the last 256 KB of a transcript is scanned; a full read is the rare fallback
+- **Per-file cache keyed by mtime** - unchanged transcripts are never re-scanned
+- **Bounded scan** - at most 24 newest transcripts per project dir considered per bay
+- **Debounced re-enrichment** - `fs.watch` writes are coalesced to one pass per 800ms, not one per write
+- **Single-flight** - `extension.ts` coalesces overlapping `enrichClaudeTitles()` calls into one extra pass
+- **Partial patch only** - only bays whose label actually changed are pushed to the webview (`updateBayLabel`), never a full rebuild
+
 **Listeners:**
 - **One listener per repo** - Set prevents duplication
-- **Proper disposes** - All listeners in disposables array
-- **Silent failures** - Try/catch without logging to avoid spam
+- **One `fs.watch` per Claude transcript dir** - non-recursive, closed in `dispose()`
+- **Proper disposes** - All listeners/watchers in disposables array / `dispose()`
+- **Silent failures** - Try/catch without logging to avoid spam (Claude transcript reads log at most a `Logger.log`/`Logger.warn`, never throw)

@@ -5,6 +5,17 @@
   color: var(--vscode-bay-activeForeground, var(--vscode-foreground));
 }
 
+/* El nombre de la bay activa va a color pleno y el resto queda atenuado, igual
+   que los tabs nativos. Los estados de git (bay-file-states.css) llegan después
+   y con más especificidad, así que siguen ganando sobre estos dos. */
+.bay .bay-name {
+  color: var(--vscode-tab-inactiveForeground, var(--vscode-descriptionForeground));
+}
+
+.bay.active .bay-name {
+  color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
+}
+
 /* Drag & Drop States */
 
 /* Bloque siendo arrastrado */
@@ -41,4 +52,16 @@ body.drag-active {
 /* Bloques pinned no interactivos durante drag */
 body.drag-active .bay-block[data-pinned="true"] {
   pointer-events: none;
+}
+
+/* Grupo destino resaltado al arrastrar una bay hacia otro grupo */
+.group-header.drag-over {
+  background: var(--vscode-list-dropBackground, rgba(0,122,204,0.20));
+  outline: 1px solid var(--vscode-focusBorder, #007acc);
+  outline-offset: -1px;
+}
+
+.bay-block.drag-target-group {
+  background: var(--vscode-list-dropBackground, rgba(0,122,204,0.12));
+  transition: background 120ms ease-out;
 }

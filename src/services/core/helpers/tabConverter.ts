@@ -5,8 +5,9 @@ import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers                          } from '../../../models/BayHelpers';
 import type { GitSyncService                 } from '../../integration/GitSyncService';
 import { formatFilePathWithParts             } from '../../../utils/pathFormatters';
+import { resolveLanguageId                   } from '../../../utils/languageRegistry';
 import { Logger                              } from '../../../utils/logger';
-import { classifyDiffType, determineParentId } from './tabClassifier';
+import { classifyDiffType, determineParentId, determineParentUri, resolveSourceUri } from './tabClassifier';
 
 type TabInputData = {
   uri?         : vscode.Uri;
@@ -136,23 +137,24 @@ export function convertToBay(
   const inputData = extractTabInputData(VSTab);
   const { uri, label, description, pathParts, tooltip, fileType, tabType, viewType, originalUri, modifiedUri } = inputData;
   
-  // Filtrar tabs de Markdown Preview - NO crear Bay para ellas
-  // Se manejan como estado toggle (viewMode) en la bay source
-  if (viewType === 'markdown.preview') {
-    Logger.log(`[TabConverter] Filtering markdown preview tab: ${label}`);
-    return null;
-  }
-  
-  // También filtrar por label (fallback para casos donde viewType no está disponible)
-  if (tabType === 'webview' && label.startsWith('Preview ')) {
-    Logger.log(`[TabConverter] Filtering preview tab by label: ${label}`);
-    return null;
-  }
   const viewColumn = VSTab.group.viewColumn;
 
   let parentId  : string | undefined;
+  let parentUri : vscode.Uri | undefined;
   let diffType  : import('../../../models/Bay').DiffType | undefined;
   let diffStats : import('../../../models/Bay').DiffStats | undefined;
+
+  // Las tabs de Markdown Preview se modelan como VARIANTES de su bay source
+  // (misma arquitectura que los diffs): fila hija bajo el .md, con estado
+  // activo/grupo/cierre nativos. El viewType llega prefijado por VS Code
+  // (p.ej. "mainThreadWebview-markdown.preview") → comparar por inclusión.
+  if (tabType === 'webview' && viewType?.includes('markdown.preview')) {
+    diffType = 'preview';
+    const previewSource = findPreviewSource(VSTab);
+    parentId = previewSource?.id;
+    parentUri = previewSource?.uri;
+    Logger.log(`[TabConverter] Markdown preview as variant: ${label} → parent: ${parentId ?? 'none (orphan)'}`);
+  }
 
   if (VSTab.input instanceof vscode.TabInputTextDiff && uri) {
     diffType = classifyDiffType(label, originalUri, modifiedUri);
@@ -168,20 +170,36 @@ export function convertToBay(
       }
     }
 
-    parentId = determineParentId(diffType, uri, viewColumn, originalUri, modifiedUri);
+    parentId  = determineParentId(diffType, uri, viewColumn, originalUri, modifiedUri);
+    parentUri = determineParentUri(diffType, uri, originalUri, modifiedUri);
   }
   else if (tabType === 'file' && uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     diffType = 'snapshot';
     // El parent es el archivo real (convertir path del snapshot a file:// URI)
-    const parentUri = vscode.Uri.file(uri.path);
-    parentId = `${parentUri.toString()}-${viewColumn}`;
+    parentUri = resolveSourceUri(uri);
+    parentId  = `${parentUri.toString()}-${viewColumn}`;
+  }
+
+  // Variant (diff/snapshot) bays get a DETERMINISTIC id so the close/active-sync
+  // paths — which recompute the id from the native tab via generateIdFromNativeTab —
+  // can actually match them. modified+original URI + viewColumn uniquely identify a
+  // diff tab and are all recoverable from the native tab.
+  let id: string;
+  if (VSTab.input instanceof vscode.TabInputTextDiff && modifiedUri) {
+    id = generateVariantId(modifiedUri, originalUri, viewColumn);
+  } else if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
+    id = generateVariantId(uri, undefined, viewColumn);
+  } else {
+    id = generateId(label, uri, viewColumn, tabType, viewType);
   }
 
   const baseMetadata: BayMetadata = {
-    id            : generateId(label, uri, viewColumn, tabType, !!parentId),
-    parentId,
+    id,
+    sourceBayId: parentId,
+    sourceUri  : parentUri,
     diffType,
     uri,
+    originalUri,
     label,
     detailLabel   : description,
     pathParts,
@@ -189,6 +207,10 @@ export function convertToBay(
     fileExtension : fileType,
     bayType       : tabType,
     viewType,
+    // Se deriva del nombre de archivo (registro de lenguajes contribuidos) en vez
+    // de leer `document.languageId`: las tabs restauradas no tienen documento
+    // cargado al arrancar y abrirlo despertaría todas las extensiones de lenguaje.
+    languageId    : uri ? resolveLanguageId(path.basename(uri.fsPath)) : undefined,
   };
 
   const metadata = BayHelpers.enrichMetadata(baseMetadata);
@@ -225,15 +247,10 @@ export function convertToBay(
     // VISUALIZATION MODE
     viewMode,
 
-    actionContext  : stateWithDefaults.actionContext!,
-    operationState : stateWithDefaults.operationState!,
-
     capabilities,
-    permissions    : stateWithDefaults.permissions!,
 
-    hasChildren    : false,
-    isChild        : !!parentId, // Variants have parentId set
-    childrenCount  : 0,
+    hasVariant    : false,
+    variantCount  : 0,
 
     isLoading      : false,
     hasError       : false,
@@ -252,9 +269,58 @@ export function convertToBay(
     integrations   : stateWithDefaults.integrations!,
 
     diffStats,
+  };
 
-    customActions  : stateWithDefaults.customActions,
-    shortcuts      : stateWithDefaults.shortcuts,
+  return new Bay(metadata, state);
+}
+
+/**
+ * Rebuilds a plain file/custom/notebook bay for a NEW uri after a rename/move.
+ *
+ * Deterministic on purpose: it derives everything from `newUri` (mirroring the file
+ * branch of convertToBay) and carries the native flags — isActive/isDirty/isPinned/
+ * isPreview, which a pure move does not change — from the old bay's state. It never
+ * reads the native tab, so re-keying does NOT depend on whether VS Code has already
+ * propagated the tab-model update to the extension host when onDidRenameFiles fires.
+ *
+ * Caller contract: `oldBay` is a plain bay (no sourceBayId, no variants). Diff/variant
+ * remaps are handled by a full resync, which can rewire ids and links together.
+ */
+export function remapFileBayUri(
+  oldBay     : Bay,
+  newUri     : vscode.Uri,
+  gitService : GitSyncService,
+): Bay {
+  const viewColumn = oldBay.state.viewColumn;
+  const pathData   = formatFilePathWithParts(newUri, { useWorkspaceRelative: true });
+  const label      = path.basename(newUri.fsPath);
+  const fileType   = path.extname(newUri.fsPath);
+
+  // Mirror convertToBay's file-branch baseMetadata, but for the new uri. bayType/
+  // viewType/customData are the only non-uri fields worth carrying over.
+  const baseMetadata: BayMetadata = {
+    id            : `${newUri.toString()}-${viewColumn}`,
+    uri           : newUri,
+    label,
+    detailLabel   : pathData.formatted,
+    pathParts     : pathData.parts,
+    tooltipText   : newUri.fsPath,
+    fileExtension : fileType,
+    bayType       : oldBay.metadata.bayType,
+    viewType      : oldBay.metadata.viewType,
+    languageId    : resolveLanguageId(label),
+    customData    : oldBay.metadata.customData,
+  };
+
+  const metadata = BayHelpers.enrichMetadata(baseMetadata);
+
+  // Clone the current mutable state; only the uri-derived facets change on a move.
+  const state: BayState = {
+    ...oldBay.state,
+    capabilities       : BayHelpers.computeCapabilities(metadata, oldBay.state),
+    gitStatus          : gitService.getGitStatus(newUri),
+    diagnosticSeverity : getDiagnosticSeverity(newUri),
+    lastAccessTime     : Date.now(),
   };
 
   return new Bay(metadata, state);
@@ -262,28 +328,42 @@ export function convertToBay(
 
 /**
  * Genera un ID único y estable para una bay.
- * Archivos: URI + viewColumn. Webviews: label sanitizado. Diffs: prefijo "diff:".
+ * Archivos: URI + viewColumn. Webviews: viewType sanitizado.
+ * (Los diffs no pasan por aquí: usan generateVariantId.)
  */
-let diffIdCounter = 0;
-
 export function generateId(
   label      : string,
   uri        : vscode.Uri | undefined,
   viewColumn : vscode.ViewColumn,
   tabType    : BayType,
-  isDiff?    : boolean,
+  viewType?  : string,
 ): string {
   if (uri) {
-    if (isDiff) {
-      const timestamp        = Date.now();
-      const counter          = diffIdCounter++;
-      const safeLabelSegment = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-      return `diff:${uri.toString()}-${safeLabelSegment}-${timestamp}-${counter}-${viewColumn}`;
-    }
     return `${uri.toString()}-${viewColumn}`;
   }
-  const safe = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-  return `${tabType}:${safe}-${viewColumn}`;
+  // Uriless tabs (webviews): key off the STABLE viewType, not the mutable label.
+  // Some webview panels rewrite their title at runtime — e.g. Claude Code's chat
+  // tab (`mainThreadWebview-claudeVSCodePanel`) shows the current session name — so
+  // a label-derived id drifts on every title change, orphaning the bay and breaking
+  // active-highlight/close sync. The viewType is fixed for the panel's lifetime.
+  const key = (viewType || label).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+  return `${tabType}:${key}-${viewColumn}`;
+}
+
+/**
+ * Deterministic, reconstructable id for a diff/variant tab. Derives solely from
+ * the modified/original URIs and viewColumn — all available on the native tab —
+ * so the open path and the close/active-sync paths agree on the same id.
+ * Including the original URI also disambiguates two different diffs of the same
+ * file in one group.
+ */
+export function generateVariantId(
+  modifiedUri : vscode.Uri,
+  originalUri : vscode.Uri | undefined,
+  viewColumn  : vscode.ViewColumn,
+): string {
+  const original = originalUri ? originalUri.toString() : '';
+  return `diff:${modifiedUri.toString()}::${original}-${viewColumn}`;
 }
 
 /**
@@ -314,6 +394,59 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
  * Usado para mejor performance en operaciones de sincronización.
  */
 export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
-  const { uri, label, tabType } = extractTabInputData(VSTab);
-  return generateId(label, uri, VSTab.group.viewColumn, tabType);
+  const { uri, label, tabType, viewType, originalUri, modifiedUri } = extractTabInputData(VSTab);
+  // Must mirror convertToBay's id derivation exactly, or close/active-sync lookups
+  // for diff/variant tabs silently miss their stored bay.
+  if (VSTab.input instanceof vscode.TabInputTextDiff && modifiedUri) {
+    return generateVariantId(modifiedUri, originalUri, VSTab.group.viewColumn);
+  }
+  if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
+    return generateVariantId(uri, undefined, VSTab.group.viewColumn);
+  }
+  // Pass viewType so webview ids stay stable across the panel's runtime title
+  // changes — mirrors convertToBay exactly (see generateId).
+  return generateId(label, uri, VSTab.group.viewColumn, tabType, viewType);
+}
+
+/**
+ * Resuelve el ID de la bay source de una tab de Markdown Preview.
+ *
+ * El label del preview es "<prefijo localizado> <archivo.md>" ("Preview x.md",
+ * "Vista previa x.md", …), así que se empareja por el NOMBRE DE ARCHIVO al
+ * final del label (con frontera de espacio), nunca por el prefijo. Se prefiere
+ * una tab de texto en el mismo grupo; si el preview vive en otro grupo (Open
+ * Preview to the Side) se acepta un match global solo si es inequívoco.
+ * Devuelve undefined si no hay source abierta (la variante quedará huérfana).
+ */
+function findPreviewSource(previewTab: vscode.Tab): { id: string; uri: vscode.Uri } | undefined {
+  const label = previewTab.label;
+
+  const matches = (tab: vscode.Tab): boolean => {
+    if (!(tab.input instanceof vscode.TabInputText)) { return false; }
+    const fileName = path.basename(tab.input.uri.fsPath);
+    if (!fileName.match(/\.(md|mdx|markdown)$/i)) { return false; }
+    return label === fileName || label.endsWith(' ' + fileName);
+  };
+
+  const describe = (tab: vscode.Tab) => {
+    const input = tab.input as vscode.TabInputText;
+    return { id: `${input.uri.toString()}-${tab.group.viewColumn}`, uri: input.uri };
+  };
+
+  // Prefer the preview's own group
+  for (const tab of previewTab.group.tabs) {
+    if (matches(tab)) { return describe(tab); }
+  }
+
+  // Fall back to a global match only when unambiguous
+  const candidates: vscode.Tab[] = [];
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (matches(tab)) { candidates.push(tab); }
+    }
+  }
+  if (candidates.length === 1) {
+    return describe(candidates[0]);
+  }
+  return undefined;
 }

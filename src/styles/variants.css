@@ -31,14 +31,36 @@
   cursor: pointer;
 }
 
+/* La barra activa se COME parte de la sangría, no la sustituye: 4px de borde +
+   32px de padding = los mismos 36px de la fila en reposo, así el icono no se
+   desplaza al seleccionar la variante. */
 .bay.variant.active {
   background: var(--vscode-list-activeSelectionBackground, #5a5d5e40);
   border-left: 4px solid var(--vscode-focusBorder, #007acc);
-  padding-left: 0;
+  padding-left: 32px;
 }
 
 .bay.variant.active:hover {
   background: var(--vscode-list-activeSelectionBackground, rgba(90,93,94,0.3));
+}
+
+/* ORPHAN VARIANTS */
+/* Variante sin parent visible (archivo cerrado, o preview abierto en otro grupo).
+   Sigue siendo una variante — misma fila, icono y color — pero sin sangría:
+   no hay parent encima del que colgar. */
+.bay.variant.orphan {
+  padding-left: 8px;
+}
+
+.bay.variant.orphan.active {
+  padding-left: 4px;
+}
+
+/* Parent keeps an "active" appearance while one of its variants (e.g. the
+   rendered Markdown preview) is the focused tab, so the source file stays
+   visually associated with what the user is looking at. */
+.bay-block:has(> .bay.variant.active) > .bay:not(.variant) {
+  background: var(--vscode-list-inactiveSelectionBackground, #37373d66);
 }
 
 /* ICONS */
@@ -192,25 +214,4 @@
   width: 11px;
   height: 11px;
   object-fit: contain;
-}
-
-/* STATE INDICATORS */
-.bay.variant .state-indicator-error,
-.bay.variant .state-indicator-warning,
-.bay.variant .state-indicator-conflict {
-  font-size: 12px;
-  margin-right: 4px;
-  flex-shrink: 0;
-}
-
-.bay.variant .state-indicator-error {
-  color: var(--vscode-editorError-foreground, #f48771);
-}
-
-.bay.variant .state-indicator-warning {
-  color: var(--vscode-editorWarning-foreground, #cca700);
-}
-
-.bay.variant .state-indicator-conflict {
-  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
 }

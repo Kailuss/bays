@@ -7,7 +7,7 @@ import { Logger } from '../../../utils/logger';
  * ActiveStateService - Sincronización del Estado Activo
  *
  * Sincroniza el estado activo (isActive) de todos los bays con VS Code.
- * Asegura un solo bay activo por grupo y elimina tabs huérfanos.
+ * Asegura un solo bay activo por grupo.
  */
 export class ActiveStateService {
   constructor(
@@ -21,17 +21,14 @@ export class ActiveStateService {
   syncActiveState(): { hasChanges: boolean } {
     let hasChanges = false;
 
-    const nativeIds = new Set<string>();
     const activeTabPerGroup = new Map<vscode.ViewColumn, string>();
-    
+
     for (const group of vscode.window.tabGroups.all) {
       for (const bay of group.tabs) {
+        if (!bay.isActive) { continue; }
         const id = generateIdFromNativeTab(bay);
         if (id) {
-          nativeIds.add(id);
-          if (bay.isActive) {
-            activeTabPerGroup.set(group.viewColumn, id);
-          }
+          activeTabPerGroup.set(group.viewColumn, id);
         }
       }
     }
@@ -52,37 +49,5 @@ export class ActiveStateService {
     }
 
     return { hasChanges };
-  }
-
-  /**
-   * Elimina bays del estado que ya no existen en VS Code (huérfanos).
-   * Útil para sincronizar después de cierres rápidos o race conditions.
-   */
-  removeOrphanedTabs(): { removedCount: number } {
-    const nativeIds = new Set<string>();
-    for (const group of vscode.window.tabGroups.all) {
-      for (const bay of group.tabs) {
-        const id = generateIdFromNativeTab(bay);
-        if (id) {
-          nativeIds.add(id);
-        }
-      }
-    }
-
-    const allBays = this.stateService.getAllBays();
-    const orphanedIds: string[] = [];
-    
-    for (const st of allBays) {
-      if (!nativeIds.has(st.metadata.id)) {
-        orphanedIds.push(st.metadata.id);
-      }
-    }
-
-    for (const id of orphanedIds) {
-      Logger.log(`[ActiveState] Removing orphaned bay: ${id}`);
-      this.stateService.removeBay(id);
-    }
-
-    return { removedCount: orphanedIds.length };
   }
 }

@@ -1,11 +1,19 @@
-import * as vscode from 'vscode';
 import { Bay } from '../models/Bay';
 import { BayStateService } from '../services/core/BayStateService';
 import { CopilotService } from '../services/integration/CopilotService';
+import type { MenuItem } from '../shared/protocol';
+
+// El modelo del menú vive en el protocolo compartido (cruza postMessage y el
+// cliente lo consume con los MISMOS tipos). Re-exportado por conveniencia.
+export type { MenuItem } from '../shared/protocol';
 
 /**
- * Maneja el menú contextual de las pestañas.
- * Separado del provider para mantener responsabilidades claras.
+ * Menú contextual de las bays.
+ *
+ * Sólo construye el modelo y ejecuta la acción elegida: el menú lo dibuja el
+ * webview (`BaysContextMenu`, réplica del nativo) porque un QuickPick aparece
+ * centrado arriba y no bajo el cursor, que es donde se espera un menú
+ * contextual. El host sigue siendo la única fuente de verdad de qué items hay.
  */
 export class BayContextMenu {
   constructor(
@@ -13,74 +21,85 @@ export class BayContextMenu {
     private readonly copilotService: CopilotService
   ) {}
 
-  async show(bay: Bay): Promise<void> {
+  /** Items para esta bay, en el orden en que se pintan. */
+  build(bay: Bay): MenuItem[] {
     const hasUri = !!bay.metadata.uri;
     const hasMultipleGroups = this.stateService.getGroups().length > 1;
-    const items: vscode.QuickPickItem[] = [
-      { label: '$(close)  Close' },
-      { label: '$(close-all)  Close Others' },
-      { label: '$(close-all)  Close to the Right' },
-      { label: '', kind: vscode.QuickPickItemKind.Separator },
-      { label: bay.state.isPinned ? '$(pin)  Unpin' : '$(pinned)  Pin' },
+
+    // Un grupo bloqueado no ofrece cerrar por ninguna vía: si el menú siguiera
+    // listando "Close", el candado sólo escondería el botón, no protegería nada.
+    const locked = this.stateService.getGroup(bay.state.groupId)?.isLocked ?? false;
+
+    const items: MenuItem[] = locked ? [] : [
+      { id: 'close',        label: 'Close',             icon: 'close'     },
+      { id: 'closeOthers',  label: 'Close Others',      icon: 'close-all' },
+      { id: 'closeToRight', label: 'Close to the Right', icon: 'close-all' },
+      { type: 'separator' },
     ];
 
-    if (hasMultipleGroups) {
+    items.push(
+      bay.state.isPinned
+        ? { id: 'unpin', label: 'Unpin', icon: 'pin'    }
+        : { id: 'pin',   label: 'Pin',   icon: 'pinned' }
+    );
+
+    if (hasMultipleGroups && !locked) {
       items.push(
-        { label: '', kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(close-all)  Close Group' },
+        { type: 'separator' },
+        { id: 'closeGroup', label: 'Close Group', icon: 'close-all' },
       );
     }
 
     if (hasUri) {
       items.push(
-        { label: '', kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(files)  Reveal in Explorer View' },
-        { label: '$(folder-opened)  Reveal in File Explorer' },
-        { label: '$(history)  Open Timeline' },
-        { label: '', kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(clippy)  Copy Relative Path' },
-        { label: '$(copy)  Copy Path' },
-        { label: '$(copy)  Copy File Contents' },
-        { label: '$(files)  Duplicate File' },
-        { label: '', kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(diff)  Compare with Active Editor' },
-        { label: '$(git-compare)  Open Changes' },
-        { label: '$(split-horizontal)  Split Right' },
-        { label: '$(multiple-windows)  Move to New Window' },
+        { type: 'separator' },
+        { id: 'revealInExplorer',     label: 'Reveal in Explorer View',  icon: 'files'          },
+        { id: 'revealInFileExplorer', label: 'Reveal in File Explorer',  icon: 'folder-opened'  },
+        { id: 'openTimeline',         label: 'Open Timeline',            icon: 'history'        },
+        { type: 'separator' },
+        { id: 'copyRelativePath',     label: 'Copy Relative Path',       icon: 'clippy'         },
+        { id: 'copyPath',             label: 'Copy Path',                icon: 'copy'           },
+        { id: 'copyFileContents',     label: 'Copy File Contents',       icon: 'copy'           },
+        { id: 'duplicateFile',        label: 'Duplicate File',           icon: 'files'          },
+        { type: 'separator' },
+        { id: 'compareWithActive',    label: 'Compare with Active Editor', icon: 'diff'         },
+        { id: 'openChanges',          label: 'Open Changes',             icon: 'git-compare'    },
+        { id: 'splitRight',           label: 'Split Right',              icon: 'split-horizontal' },
+        { id: 'moveToNewWindow',      label: 'Move to New Window',       icon: 'multiple-windows' },
       );
     }
 
     if (hasUri && this.copilotService.isAvailable()) {
       items.push(
-        { label: '', kind: vscode.QuickPickItemKind.Separator },
-        { label: '$(attach)  Add to Copilot Chat' },
+        { type: 'separator' },
+        { id: 'addToChat', label: 'Add to Copilot Chat', icon: 'attach' },
       );
     }
 
-    const pick = await vscode.window.showQuickPick(items, { placeHolder: bay.metadata.label });
-    if (!pick) { return; }
-
-    await this.executeAction(pick.label, bay);
+    return items;
   }
 
-  private async executeAction(label: string, bay: Bay): Promise<void> {
-    if      (label.includes('Close Others'))              { await bay.closeOthers(); }
-    else if (label.includes('Close to the Right'))        { await bay.closeToRight(); }
-    else if (label.includes('Close Group'))               { await bay.closeGroup(); }
-    else if (label.includes('Close'))                     { await bay.close(); }
-    else if (label.includes('Unpin'))                     { await bay.unpin();  this.stateService.reorderOnUnpin(bay.metadata.id); }
-    else if (label.includes('Pin'))                       { await bay.pin();    this.stateService.reorderOnPin(bay.metadata.id); }
-    else if (label.includes('Reveal in Explorer View'))   { await bay.revealInExplorerView(); }
-    else if (label.includes('Reveal in File Explorer'))   { await bay.revealInFileExplorer(); }
-    else if (label.includes('Open Timeline'))             { await bay.openTimeline(); }
-    else if (label.includes('Copy Relative Path'))        { await bay.copyRelativePath(); }
-    else if (label.includes('Copy Path'))                 { await bay.copyPath(); }
-    else if (label.includes('Copy File Contents'))        { await bay.copyFileContents(); }
-    else if (label.includes('Duplicate File'))            { await bay.duplicateFile(); }
-    else if (label.includes('Compare'))                   { await bay.compareWithActive(); }
-    else if (label.includes('Open Changes'))              { await bay.openChanges(); }
-    else if (label.includes('Split Right'))               { await bay.splitRight(); }
-    else if (label.includes('Move to New Window'))        { await bay.moveToNewWindow(); }
-    else if (label.includes('Add to Copilot Chat'))       { await this.copilotService.addFileToChat(bay.metadata.uri); }
+  /** Ejecuta el item elegido en el webview. Ignora los ids desconocidos. */
+  async execute(actionId: string, bay: Bay): Promise<void> {
+    switch (actionId) {
+      case 'close'                : await bay.close();                 break;
+      case 'closeOthers'          : await bay.closeOthers();           break;
+      case 'closeToRight'         : await bay.closeToRight();          break;
+      case 'closeGroup'           : await bay.closeGroup();            break;
+      case 'pin'                  : await bay.pin();   this.stateService.reorderOnPin(bay.metadata.id);   break;
+      case 'unpin'                : await bay.unpin(); this.stateService.reorderOnUnpin(bay.metadata.id); break;
+      case 'revealInExplorer'     : await bay.revealInExplorer();      break;
+      case 'revealInFileExplorer' : await bay.revealInFileExplorer();  break;
+      case 'openTimeline'         : await bay.openTimeline();          break;
+      case 'copyRelativePath'     : await bay.copyRelativePath();      break;
+      case 'copyPath'             : await bay.copyPath();              break;
+      case 'copyFileContents'     : await bay.copyFileContents();      break;
+      case 'duplicateFile'        : await bay.duplicateFile();         break;
+      case 'compareWithActive'    : await bay.compareWithActive();     break;
+      case 'openChanges'          : await bay.openChanges();           break;
+      case 'splitRight'           : await bay.splitRight();            break;
+      case 'moveToNewWindow'      : await bay.moveToNewWindow();       break;
+      case 'addToChat'            : await this.copilotService.addFileToChat(bay); break;
+    }
   }
 }

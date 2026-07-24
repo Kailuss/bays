@@ -7,7 +7,7 @@ import type { BayMetadata, BayState } from '../Bay';
 
 export async function copyRelativePath(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     vscode.window.showWarningMessage('This bay has no path to copy');
@@ -21,7 +21,7 @@ export async function copyRelativePath(
   vscode.window.showInformationMessage(`Copied: ${rel}`);
 }
 
-export async function copyPath(metadata: BayMetadata, state: BayState): Promise<void> {
+export async function copyPath(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
     vscode.window.showWarningMessage('This bay has no path to copy');
     return;
@@ -35,7 +35,7 @@ export async function copyPath(metadata: BayMetadata, state: BayState): Promise<
 
 export async function copyFileContents(
   metadata: BayMetadata,
-  state: BayState
+  _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
     return;

@@ -12,6 +12,7 @@
    - bay-animations.css  → Transiciones y animaciones
    - bay-file-states.css → Estados de archivos (git, dirty, etc.)
    - bay-actions.css     → Botones de acción de bays normales
+   - context-menu.css    → Menú contextual (réplica del nativo de VS Code)
    
    Diferencias clave Normal Bays vs Variant Bays:
    - Altura: 39px vs 22px
@@ -23,8 +24,14 @@
 
 /* Note: File icons are provided by VS Code's icon theme API */
 
+/* Glyph de un icon theme basado en fuente (vs-seti y similares).
+   La `font-family` se inyecta inline por icono: depende del @font-face que
+   BaysHtmlBuilder emite para el tema activo. Peso y estilo se fijan a normal
+   para que la fuente no se sintetice en negrita/cursiva al heredar del contexto. */
 .seti-icon {
   font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
   line-height: 1;
   display: inline-block;
   vertical-align: middle;
@@ -43,4 +50,5 @@
 @import './bay-animations.css';
 @import './bay-file-states.css';
 @import './bay-actions.css';       /* Normal bays actions */
+@import './context-menu.css';      /* Menú contextual (réplica del nativo) */
 @import './utilities.css';

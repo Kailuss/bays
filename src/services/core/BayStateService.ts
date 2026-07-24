@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { Bay } from '../../models/Bay';
-import { BayGroup } from '../../models/BayGroup';
+import { BayGroup, createTabGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
-import type { DocumentManager } from './DocumentManager';
+import type { GroupCustomizationService } from '../ui/GroupCustomizationService';
 
 /**
  * In-memory store for Bays and groups — the "source of truth" for the UI.
@@ -22,25 +22,58 @@ export class BayStateService {
   readonly onDidChangeStateSilent            = this._onDidChangeStateSilent.event;
   private _onDidChangeBayState               = new vscode.EventEmitter<string>();
   readonly onDidChangeBayState               = this._onDidChangeBayState.event;
+  private _onDidChangeBayLabel               = new vscode.EventEmitter<string>();
+  readonly onDidChangeBayLabel               = this._onDidChangeBayLabel.event;
 
   // Hierarchy service (injected to avoid circular dependency)
   private hierarchyService?: BayHierarchyService;
 
-  // Document manager (injected to avoid circular dependency)
-  private documentManager?: DocumentManager;
+  // Group customizations (name/color/lock) — injected from extension.ts, which
+  // owns the ExtensionContext the service persists to.
+  private groupCustomization?: GroupCustomizationService;
 
   /**
-   * ID de la última bay que activó el Markdown Preview.
-   * Se usa para saber qué bay debe mostrarse como activa cuando el preview está visible.
+   * Tracking de cierres intencionales con contador de referencias.
+   * Cuando cerramos variants programáticamente, marcamos el ID aquí.
+   * - markAsIntentionalClose: incrementa el contador (varios variants pueden marcar el mismo parent)
+   * - clearIntentionalClose: decrementa; solo se elimina cuando llega a 0
+   * - isIntentionalClose: true si contador > 0
+   * Esto evita que el primer timeout limpie el marcador antes de que llegue
+   * el evento de VS Code del segundo cierre.
    */
-  private _lastMarkdownPreviewBayId: string | null = null;
+  private intentionalCloses = new Map<string, number>();
 
-  get lastMarkdownPreviewBayId(): string | null {
-    return this._lastMarkdownPreviewBayId;
+  /**
+   * Marca un bay ID como cierre intencional.
+   * Usado cuando cerramos una bay programáticamente para evitar
+   * procesar el evento de cierre que VS Code disparará después.
+   */
+  markAsIntentionalClose(bayId: string): void {
+    const current = this.intentionalCloses.get(bayId) ?? 0;
+    this.intentionalCloses.set(bayId, current + 1);
+    Logger.log(`[BayState] Marked as intentional close: ${bayId} (count: ${current + 1})`);
   }
 
-  setLastMarkdownPreviewBayId(bayId: string | null): void {
-    this._lastMarkdownPreviewBayId = bayId;
+  /**
+   * Verifica si un bay ID está marcado como cierre intencional.
+   */
+  isIntentionalClose(bayId: string): boolean {
+    return (this.intentionalCloses.get(bayId) ?? 0) > 0;
+  }
+
+  /**
+   * Remueve un bay ID del tracking de cierres intencionales.
+   * Debe llamarse después de procesar el cierre para limpiar el estado.
+   */
+  clearIntentionalClose(bayId: string): void {
+    const current = this.intentionalCloses.get(bayId) ?? 0;
+    if (current <= 1) {
+      this.intentionalCloses.delete(bayId);
+      Logger.log(`[BayState] Cleared intentional close: ${bayId}`);
+    } else {
+      this.intentionalCloses.set(bayId, current - 1);
+      Logger.log(`[BayState] Decremented intentional close: ${bayId} (count: ${current - 1})`);
+    }
   }
 
   /**
@@ -54,6 +87,18 @@ export class BayStateService {
   }
 
   /**
+   * Notifica un cambio ligero de solo estado activo (isActive).
+   * Dispara el emisor "silent" para que el provider haga una actualización
+   * parcial por postMessage (toggle de la clase .active) en lugar de
+   * reconstruir todo el HTML del webview.
+   */
+  notifyActiveChange(): void {
+    if (!this._isBulkLoading) {
+      this._onDidChangeStateSilent.fire();
+    }
+  }
+
+  /**
    * Inyecta el hierarchy service para evitar dependencia circular.
    * Llamado desde BaySyncService después de crear BayHierarchyService.
    */
@@ -62,11 +107,45 @@ export class BayStateService {
   }
 
   /**
-   * Inyecta el document manager para gestión centralizada de documentos.
-   * Llamado desde BaySyncService después de crear DocumentManager.
+   * Obtiene el hierarchy service.
+   * Retorna undefined si aún no ha sido inyectado.
    */
-  setDocumentManager(manager: DocumentManager): void {
-    this.documentManager = manager;
+  getHierarchyService(): BayHierarchyService | undefined {
+    return this.hierarchyService;
+  }
+
+  /**
+   * Inyecta el servicio de personalización de grupos y lo aplica a los grupos
+   * ya presentes (la inyección ocurre antes del primer sync, pero también puede
+   * llegar después si el orden de arranque cambia).
+   */
+  setGroupCustomizationService(service: GroupCustomizationService): void {
+    this.groupCustomization = service;
+    this.applyGroupCustomizations();
+  }
+
+  getGroupCustomizationService(): GroupCustomizationService | undefined {
+    return this.groupCustomization;
+  }
+
+  /**
+   * Reaplica nombre, color y bloqueo sobre TODOS los grupos del mapa.
+   * Necesario tras cada sync (los grupos se reconstruyen desde la API nativa,
+   * que no sabe nada de la personalización) y tras cada cambio del usuario.
+   */
+  applyGroupCustomizations(): void {
+    if (!this.groupCustomization) { return; }
+    for (const group of this.groups.values()) { this.groupCustomization.apply(group); }
+  }
+
+  /**
+   * Reaplica la personalización y repinta. Nombre, color y bloqueo cambian el
+   * markup de la cabecera y de los botones de cierre, así que es un cambio
+   * estructural: rebuild completo, no parche por postMessage.
+   */
+  refreshGroupCustomizations(): void {
+    this.applyGroupCustomizations();
+    this.notifyChange();
   }
 
   //- Bay management
@@ -75,33 +154,25 @@ export class BayStateService {
   addBay(bay: Bay): void {
     this.bays.set(bay.metadata.id, bay);
 
-    const group = this.groups.get(bay.state.groupId);
+    let group = this.groups.get(bay.state.groupId);
+
+    // Safety net: the bay belongs to a group we don't know yet (e.g. a split
+    // created at runtime). Without this the bay would sit in the map but in no
+    // group, and the render (which iterates groups) would never show it.
+    if (!group) {
+      const native = vscode.window.tabGroups.all.find(g => g.viewColumn === bay.state.groupId);
+      if (native) {
+        group = createTabGroup(native);
+        this.groupCustomization?.apply(group);
+        this.groups.set(group.id, group);
+        Logger.log(`[BayState] Created missing group ${group.id} for bay: ${bay.metadata.label}`);
+      }
+    }
+
     if (group) {
       const existsInGroup = group.bays.find(t => t.metadata.id === bay.metadata.id);
       if (!existsInGroup) {
         group.bays.push(bay);
-      }
-    }
-
-    // Create/update document if this is a parent bay with URI
-    if (this.documentManager && bay.metadata.uri && !bay.metadata.parentId) {
-      const document = this.documentManager.getOrCreateDocument(
-        bay.metadata.uri,
-        bay.metadata.languageId || 'plaintext',
-        bay.metadata.label,
-        bay.metadata.fileExtension || ''
-      );
-      this.documentManager.associateVariant(document.documentId, bay.metadata.id);
-    }
-
-    // Associate child bay with document if parent exists
-    if (this.documentManager && bay.metadata.parentId && bay.metadata.uri) {
-      const parentBay = this.bays.get(bay.metadata.parentId);
-      if (parentBay?.metadata.uri) {
-        const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
-        if (document) {
-          this.documentManager.associateVariant(document.documentId, bay.metadata.id);
-        }
       }
     }
 
@@ -117,19 +188,80 @@ export class BayStateService {
     }
     
     // Si es child bay, desregistrar del parent
-    if (bay.metadata.parentId && this.hierarchyService) {
-      this.hierarchyService.unregisterChild(id, bay.metadata.parentId);
+    if (bay.metadata.sourceBayId && this.hierarchyService) {
+      this.hierarchyService.detachVariantFromParentBay(id, bay.metadata.sourceBayId);
     }
     
-    // Si es parent bay con children, eliminar children primero
-    if (bay.state.hasChildren && this.hierarchyService) {
-      const children = this.hierarchyService.getChildren(id);
+    // Si es parent bay con children, eliminar children primero.
+    // EXCEPCIÓN: las variantes de preview NO se eliminan en cascada — cerrar el
+    // .md no cierra su preview en VS Code, así que la pestaña nativa sigue viva;
+    // se dejan en el estado y el renderer las muestra como huérfanas.
+    if (bay.state.hasVariant && this.hierarchyService) {
+      const children = this.hierarchyService.fetchVariants(id);
       for (const child of children) {
+        if (child.metadata.diffType === 'preview') { continue; }
         this.removeBayInternal(child.metadata.id);
       }
     }
     
     this.removeBayInternal(id);
+  }
+
+  /**
+   * Remueve una bay del estado sin procesar jerarquía.
+   * SOLO usar cuando la jerarquía ya fue actualizada manualmente.
+   * Para cierres normales, usar removeBay() que maneja jerarquía automáticamente.
+   */
+  removeBayFromState(id: string): void {
+    this.removeBayInternal(id);
+  }
+
+  /**
+   * Re-key a bay after its backing file was renamed or moved. The bay id embeds the
+   * URI (`${uri}-${viewColumn}`), so a rename changes the id: the bay must move under
+   * the new key both in the map and in its group array — kept at the SAME position so
+   * manual drag order survives.
+   *
+   * `newBay` must be freshly converted from the post-rename native tab so every derived
+   * field (label, path parts, language, git status) is already correct.
+   *
+   * Scope: the caller guarantees the bay is a plain file bay (not itself a variant and
+   * with no variants of its own). Variant / parent-with-variant remaps go through a full
+   * resync instead, because their ids and `sourceBayId` links would all have to be
+   * rewired together — beyond what a single in-place swap can do safely.
+   *
+   * @returns true if the bay was found and re-keyed; false otherwise (caller should resync).
+   */
+  rekeyBay(oldId: string, newBay: Bay): boolean {
+    const oldBay = this.bays.get(oldId);
+    if (!oldBay) { return false; }
+
+    const newId = newBay.metadata.id;
+    // Nothing to do if the id didn't actually change.
+    if (newId === oldId) { return false; }
+    // Never clobber a distinct existing bay (e.g. the rename target already open here).
+    if (this.bays.has(newId)) { return false; }
+
+    // Capture the position BEFORE removal so the fresh bay lands in the same slot.
+    const group = this.groups.get(oldBay.state.groupId);
+    const idx = group ? group.bays.findIndex(b => b.metadata.id === oldId) : -1;
+
+    // removeBayInternal drops the map key, filters it out of the group and fires
+    // onDidChangeState. It does NOT cascade to children — this path only handles
+    // bays that have none.
+    this.removeBayInternal(oldId);
+
+    // Insert the fresh bay at the captured slot (preserves manual drag order).
+    newBay.state.indexInGroup = oldBay.state.indexInGroup;
+    this.bays.set(newId, newBay);
+    if (group) {
+      if (idx >= 0 && idx <= group.bays.length) { group.bays.splice(idx, 0, newBay); }
+      else { group.bays.push(newBay); }
+    }
+
+    this._onDidChangeState.fire();
+    Logger.log(`[BayState] Rekeyed bay ${oldId} → ${newId}`);
+    return true;
   }
 
   // Método interno para eliminar sin lógica de jerarquía (evita recursión)
@@ -140,26 +272,6 @@ export class BayStateService {
       const group = this.groups.get(bay.state.groupId);
 
       if (group) { group.bays = group.bays.filter(t => t.metadata.id !== id); }
-
-      // Cleanup document associations
-      if (this.documentManager) {
-        if (bay.metadata.parentId) {
-
-          // Desasociar child bay del documento
-          const parentBay = this.bays.get(bay.metadata.parentId);
-          if (parentBay?.metadata.uri) {
-            const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
-            if (document) { this.documentManager.dissociateVariant(document.documentId, id); }
-          }
-
-        } else if (bay.metadata.uri) {
-
-          // Desasociar parent bay del documento
-          const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
-          if (document) { this.documentManager.dissociateVariant(document.documentId, id); }
-
-        }
-      }
 
       this.bays.delete(id);
       this._onDidChangeState.fire();
@@ -181,20 +293,6 @@ export class BayStateService {
     this._onDidChangeState.fire();
   }
 
-  // Update a bay without triggering tree refresh (for silent state updates like isActive).
-  updateBaySilent(bay: Bay): void {
-    this.bays.set(bay.metadata.id, bay);
-
-    const group = this.groups.get(bay.state.groupId);
-    if (group) {
-      const index = group.bays.findIndex(t => t.metadata.id === bay.metadata.id);
-      if (index !== -1) {
-        group.bays[index] = bay;
-      }
-    }
-    this._onDidChangeStateSilent.fire();
-  }
-
   // Update a bay's diagnostic/git state and notify for animation.
   updateBayStateWithAnimation(bay: Bay): void {
     this.bays.set(bay.metadata.id, bay);
@@ -210,6 +308,18 @@ export class BayStateService {
     // Solo dispara el evento de cambio de estado para la animación
     // NO dispara _onDidChangeState para evitar rebuild completo
     this._onDidChangeBayState.fire(bay.metadata.id);
+  }
+
+  /**
+   * Notifica que el NOMBRE de una bay ha cambiado (título de webview reescrito en
+   * runtime, p.ej. Claude Code mostrando la sesión actual). Actualización parcial
+   * por postMessage: solo se reemplaza el texto de `.bay-name`, sin rebuild ni
+   * cambio de id (el id del webview deriva del viewType estable, no del label).
+   */
+  notifyBayLabelChange(bayId: string): void {
+    if (!this._isBulkLoading) {
+      this._onDidChangeBayLabel.fire(bayId);
+    }
   }
 
   /**
@@ -246,14 +356,17 @@ export class BayStateService {
 
   //- Group management
 
-  addGroup(group: BayGroup): void {
-    this.groups.set(group.id, group);
-    this._onDidChangeState.fire();
-  }
-
-  removeGroup(id: number): void {
-    this.groups.delete(id);
-    this._onDidChangeState.fire();
+  /**
+   * Reemplaza el conjunto de grupos SIN disparar eventos.
+   * Usado por syncAll/resyncAll: poda grupos obsoletos (columnas renumeradas o
+   * cerradas) y añade los nuevos; el replaceBays posterior ya notifica una vez.
+   */
+  setGroups(groups: BayGroup[]): void {
+    this.groups.clear();
+    for (const group of groups) {
+      this.groupCustomization?.apply(group);
+      this.groups.set(group.id, group);
+    }
   }
 
   getGroup(id: number): BayGroup | undefined {
@@ -262,13 +375,6 @@ export class BayStateService {
 
   getGroups(): BayGroup[] {
     return Array.from(this.groups.values());
-  }
-
-  setActiveGroup(id: number): void {
-    this.groups.forEach(group => {
-      group.isActive = group.id === id;
-    });
-    this._onDidChangeState.fire();
   }
 
   //- Search
@@ -286,6 +392,18 @@ export class BayStateService {
     }
 
     return undefined;
+  }
+
+  // Todas las bays que comparten una URI (el mismo archivo abierto en varios
+  // grupos son bays distintas). Diagnósticos y git status son por-URI, no
+  // por-grupo, así que cambios de estado deben aplicarse a todas.
+  findBaysByUri(uri: vscode.Uri): Bay[] {
+    const uriString = uri.toString();
+    const matches: Bay[] = [];
+    for (const bay of this.bays.values()) {
+      if (bay.metadata.uri?.toString() === uriString) { matches.push(bay); }
+    }
+    return matches;
   }
 
   //- Pin / unpin reordering
@@ -332,18 +450,10 @@ export class BayStateService {
     this.reorderAfterPinChange(bayId);
   }
 
-  //- Utilities
-
-  clear(): void {
-    this.bays.clear();
-    this.groups.clear();
-    this._onDidChangeState.fire();
-  }
-
-  getStats(): { bays: number; groups: number } {
-    return {
-      bays: this.bays.size,
-      groups: this.groups.size,
-    };
+  dispose(): void {
+    this._onDidChangeState.dispose();
+    this._onDidChangeStateSilent.dispose();
+    this._onDidChangeBayState.dispose();
+    this._onDidChangeBayLabel.dispose();
   }
 }

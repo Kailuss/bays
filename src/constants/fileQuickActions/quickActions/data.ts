@@ -24,8 +24,8 @@ export const DATA_ACTIONS: FileQuickAction[] = [
     tooltip : 'Format Document',
     match   : byExtension('.json', '.jsonc', '.json5'),
     execute : async (uri) => {
-      //await vscode.commands.executeCommand('vscode.open', uri);
-      //await vscode.commands.executeCommand('editor.action.formatDocument');
+      await vscode.commands.executeCommand('vscode.open', uri);
+      await vscode.commands.executeCommand('editor.action.formatDocument');
     },
   },
 

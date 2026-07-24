@@ -1,0 +1,136 @@
+/*
+   Menú contextual — réplica del nativo de VS Code (monaco-menu).
+
+   Medidas tomadas del original (`vs/base/browser/ui/menu/menu.css`):
+   - Contenedor: radio 5px, padding vertical 4px, sombra de widget, sin borde
+     salvo que el tema declare `menu.border`.
+   - Item: alto 2em, margen horizontal 4px y radio 4px → por eso la selección
+     queda embutida y con esquinas redondeadas, no pegada a los bordes.
+   - Selección: `menu.selection*`, NO los tokens de lista (que sí son de acento).
+   - Separador: línea de 1px de `menu.separatorBackground`, sangrada a los lados.
+
+   Todo cuelga de tokens `--vscode-menu-*`, así que sigue al tema sin tocar nada.
+*/
+
+/* Capa transparente a pantalla completa: captura el clic de descarte para que
+   no llegue a la lista de bays (un clic fuera del menú no debe abrir nada). */
+.bays-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.bays-menu {
+  position: fixed;
+  min-width: 130px;
+  max-width: calc(100vw - 4px);
+  max-height: calc(100vh - 4px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  box-sizing: border-box;
+
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+
+  border: 1px solid var(--vscode-menu-border, transparent);
+  border-radius: 5px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+
+  outline: none;
+  user-select: none;
+  cursor: default;
+}
+
+.bays-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 2em;
+  /* Margen lateral = la selección no toca el borde del menú. Radio propio = la
+     selección se redondea. Los dos son lo que distingue este resaltado del de
+     una lista, que sí ocupa todo el ancho. */
+  margin: 0 4px;
+  padding-right: 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  outline: none;
+}
+
+/* Canaleta izquierda de ancho fijo, presente en toda fila haya icono o no: es
+   lo que alinea el texto de las filas con icono y sin él a la misma altura. */
+.bays-menu-item-icon {
+  flex: 0 0 auto;
+  width: 1.9em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bays-menu-item-icon .codicon {
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.bays-menu-item-label {
+  flex: 1 1 auto;
+  /* Altura de línea normal: con `line-height: 1` heredado del contenedor, la
+     caja de la línea es tan justa que `overflow: hidden` (necesario para la
+     elipsis) recorta los trazos descendentes de g, p, y. */
+  line-height: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Atajo alineado a la derecha: nunca compite con la etiqueta y es lo primero
+   que se recorta si el panel es estrecho. Sin atenuar, como el nativo. */
+.bays-menu-item-keybinding {
+  flex: 0 1 auto;
+  padding-left: 2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bays-menu-submenu-indicator {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 1em;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+/* Un solo estilo para el resaltado: el teclado añade `.focused` y el ratón lo
+   mueve con él, así que hover y selección no pueden discrepar. Colores de menú,
+   nunca los de lista: son los que evitan el azul de acento. */
+.bays-menu-item.focused,
+.bays-menu-item.expanded {
+  color: var(--vscode-menu-selectionForeground);
+  background-color: var(--vscode-menu-selectionBackground);
+}
+
+.bays-menu-item.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bays-menu-separator {
+  height: 0;
+  margin: 4px 10px;
+  border-bottom: 1px solid var(--vscode-menu-separatorBackground, rgba(128, 128, 128, 0.35));
+}
+
+/* Sólo aparece cuando el menú no cabe en alto (listas muy largas o panel bajo). */
+.bays-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.bays-menu::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+.bays-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}

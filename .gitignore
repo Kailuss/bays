@@ -1,8 +1,8 @@
 out
 dist
 node_modules
-.vscode-test/
-.vscode/
+.vscode-test
+.vscode
 *.vsix
 *.md
 !README.md

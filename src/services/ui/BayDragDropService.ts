@@ -34,7 +34,7 @@ export class BayDragDropService {
     if (sourceBay.state.groupId !== targetBay.state.groupId) { return false; }
 
     // Restriction: child bays cannot be moved (linked to their parent)
-    if (sourceBay.metadata.parentId) {
+    if (sourceBay.metadata.sourceBayId) {
       Logger.log('[DragDrop] Blocked: Child bays cannot be dragged independently');
       return false;
     }
@@ -87,9 +87,10 @@ export class BayDragDropService {
       bay.state.indexInGroup = idx;
     });
 
-    // Notify change
-    this.stateService.updateBay(sourceBay);
-
+    // No UI notification here: the webview commits the DOM move client-side as
+    // part of the drop animation, so firing a full rebuild would only fight it.
+    // The in-memory order is already updated above. If this reorder is rejected
+    // (returns false), the caller refreshes to restore the authoritative order.
     return true;
   }
 
@@ -105,13 +106,30 @@ export class BayDragDropService {
     sourceBayId: string,
     targetGroupId: number,
     targetBayId?: string,
-    insertPosition?: 'before' | 'after',
+    //insertPosition?: 'before' | 'after',
   ): Promise<boolean> {
     const sourceBay = this.stateService.getBayById(sourceBayId);
-    if (!sourceBay || !sourceBay.metadata.uri) { return false; }
+    if (!sourceBay) { return false; }
+
+    // Restriction: child bays (variants) follow their parent — never move alone.
+    // Mirrors reorderWithinGroup; without it a variant could be torn off its group.
+    if (sourceBay.metadata.sourceBayId) {
+      Logger.log('[DragDrop] Blocked: variant bays cannot be moved between groups');
+      return false;
+    }
 
     // Restriction: pinned bays cannot be moved
     if (sourceBay.state.isPinned) { return false; }
+
+    // Restriction: a locked group doesn't let its bays leave. Moving between
+    // groups closes the bay in the source and reopens it in the target, so
+    // allowing it would be a back door to the close button the lock removed.
+    // Reordering INSIDE the group stays allowed — nothing closes there.
+    const sourceGroup = this.stateService.getGroup(sourceBay.state.groupId);
+    if (sourceGroup?.isLocked) {
+      Logger.log('[DragDrop] Blocked: source group is locked');
+      return false;
+    }
 
     const targetGroup = this.stateService.getGroup(targetGroupId);
     if (!targetGroup) { return false; }
@@ -124,8 +142,9 @@ export class BayDragDropService {
       }
     }
 
-    // Close bay in source group and open in destination
-    // This will change the bay ID (because it includes viewColumn)
+    // Relocate to the destination group. File bays close+reopen by URI; webview
+    // bays move the live tab natively (see actions/moveToGroup). Either way the
+    // bay ID changes (it embeds viewColumn) and native tab events rebuild the view.
     try {
       await sourceBay.moveToGroup(targetGroupId);
       return true;

@@ -9,8 +9,6 @@ import { TIMINGS } from '../../constants/timings';
  * Activation actions - Activar y hacer focus en tabs
  */
 
-const MARKDOWN_EXTENSIONS = ['.md', '.mdx', '.markdown'];
-
 export async function activate(metadata: BayMetadata, state: BayState): Promise<void> {
   return activateWithRetry(metadata, state, 0);
 }
@@ -20,28 +18,10 @@ async function activateWithRetry(
   state: BayState,
   attempt: number
 ): Promise<void> {
-  const maxAttempts = 2;
-
   try {
-    // Determine if we should open in preview mode
-    const config = vscode.workspace.getConfiguration('bays');
-    const openPreviewableInPreview = config.get<boolean>('openPreviewableInPreview', true);
-    
-    // Auto-enable preview mode for previewable files if config is active
-    const shouldOpenInPreview = 
-      state.viewMode === 'preview' || 
-      (openPreviewableInPreview && BayHelpers.isPreviewableFile(metadata));
-
-    // MARKDOWN PREVIEW MODE: If should open in preview, open the preview
-    if (
-      shouldOpenInPreview &&
-      metadata.uri &&
-      MARKDOWN_EXTENSIONS.some((ext) => metadata.fileExtension.toLowerCase() === ext)
-    ) {
-      Logger.log('[BayAction] Activating in preview mode: ' + metadata.label);
-      await vscode.commands.executeCommand(VSCODE_COMMANDS.MARKDOWN_SHOW_PREVIEW, metadata.uri);
-      return;
-    }
+    // NOTE: no markdown-preview special case here. The rendered preview is a
+    // real VARIANT bay with its own row/tab — clicking the .md bay activates
+    // the SOURCE tab, clicking the "Preview" variant activates the preview.
 
     // Re-buscar la bay nativa en cada intento (puede haber cambiado)
     const nativeTab = BayHelpers.findNativeTab(metadata, state);
@@ -57,7 +37,7 @@ async function activateWithRetry(
 
     // Para webview tabs, siempre usar el método nativo
     // Variants (with parentId) are also activated via native bay
-    if (metadata.bayType === 'webview' || metadata.parentId) {
+    if (metadata.bayType === 'webview' || metadata.sourceBayId) {
       return await BayHelpers.activateByNativeTab(metadata, state);
     }
 

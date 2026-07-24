@@ -1,91 +1,112 @@
-# 4. Implementación y refactorización
+# 4. Implementación y decisiones técnicas
 
-**Enlaces rápidos**
-[📄 Índice general](INDEX.md) | [🏁 Introducción](01_introduccion.md) | [🏗️ Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [🤖 Agentes Copilot](05_agentes.md)
+[📄 Índice](INDEX.md) | [🏁 Introducción](01_introduccion.md) | [🏗️ Arquitectura](02_arquitectura.md) | [🎯 Acciones](03_acciones.md) | [🤖 Agentes](05_agentes.md)
 
 ---
 
-Este documento resume las modificaciones técnicas de la extensión, con especial foco en la modularización de `SideTabActions` y otros cambios recientes. La intención es proporcionar una guía para desarrolladores que quieran entender o ampliar el código.
-
-## Modularización de SideTabActions
-La clase original contenía 476 líneas de métodos variados; ahora delega en ocho módulos puros con responsabilidades independientes:
-
-**Principios de diseño aplicados:** composición sobre herencia, responsabilidades individuales, funciones puras y dependencia inyectada.
-
-**Resultados cuantitativos:**
-- 64 % de reducción en líneas del archivo principal (476 → 171).
-- Archivo más grande ahora 120 líneas (‑75 %).
-- Aver. 55 lin/module (+800 % de modularidad).
-
-Estos datos reflejan la reducción de complejidad tras la refactorización.
-
-### Antes y después (ejemplo de método `close`)
-```ts
-// ANTES (monolítico)
-export abstract class SideTabActions {
-  async close(): Promise<void> {
-    if (!this.state.capabilities.canClose) {
-      vscode.window.showWarningMessage('This tab cannot be closed');
-      return;
-    }
-    const t = SideTabHelpers.findNativeTab(this.metadata, this.state);
-    if (t) {
-      await vscode.window.tabGroups.close(t);
-    }
-  }
-}
-```
-
-```ts
-// DESPUÉS (modularizado)
-// src/models/actions/closeActions.ts
-export async function close(metadata: SideTabMetadata, state: SideTabState): Promise<void> {
-  if (!state.capabilities.canClose) {
-    vscode.window.showWarningMessage('This tab cannot be closed');
-    return;
-  }
-  const t = SideTabHelpers.findNativeTab(metadata, state);
-  if (t) {
-    await vscode.window.tabGroups.close(t);
-  }
-}
-```
-
-El envoltorio en `SideTabActions` simplemente llama a `actions.close(this.metadata, this.state)`.
+## Arquitectura de composición (sin herencia profunda)
 
 ```
-src/models/actions/
-├── closeActions.ts
-├── pinActions.ts
-├── revealActions.ts
-├── copyActions.ts
-├── fileActions.ts
-├── activationActions.ts
-├── stateActions.ts
-└── customActions.ts
+Bay
+  └─ extends BayActions (abstract)
+      └─ delega → actions/ (funciones puras)
+
+BayActions recibe activateFn como callback (evita dependencia circular)
 ```
 
-Cada módulo exporta funciones que operan sobre `metadata` y `state`. El envoltorio `SideTabActions` inyecta dependencias cuando es necesario (por ejemplo, `activate()` para cerrar otras pestañas). La compatibilidad hacia atrás se mantiene al 100%.
+**Por qué no herencia:** Las acciones son funciones puras testables de forma aislada. Cambiar una acción no afecta a las demás.
 
-> Los detalles, métricas y ejemplos se describen en la sección anterior.
+## Modularización de servicios (Refactoring Marzo 2026)
 
-## Otros cambios principales
-- **Modelos enriquecidos**: `ActionContext`, `OperationState`, `Permissions`, `Integrations`, `CustomActions`, `Shortcuts`.  (Detalles en la sección de acciones del índice).
-- **FileActionRegistry**: soporte para `setFocus` y `DynamicFileAction`.
-- **Servicios**: `CopilotService` acepta ahora `SideTab` directamente y actualiza su estado.
-- **Documentación**: se añadieron múltiples MD dentro de `src/models` explicando el nuevo flujo.
+`BaySyncService` era monolítico (~900 LOC). Ahora delega en:
 
-## Migración y pruebas
-El nuevo diseño no introduce breaking changes; sin embargo, se recomienda:
-1. Añadir tests unitarios para cada módulo de `actions/` (actualmente pendientes).
-2. Actualizar `package.json` con scripts de prueba (ya existe `npm test`).
-3. Verificar ejemplos en `src/examples` para asegurar que compilan.
+| Sub-servicio | Responsabilidad |
+|---|---|
+| `BayEventService` | Registro de listeners de VS Code |
+| `BayHeadService` | Parent placeholders + apertura automática de docs |
+| `ActiveStateService` | Sincronización de `isActive` + cleanup de orphans |
 
-## Consejos de mantenimiento
-- Al expandir un área (p.ej. nuevas integraciones), agregar un nuevo módulo en `actions/` y actualizar el _barrel_ (`index.ts`).
-- Mantener la documentación sincronizada; todos los cambios complejos deben reflejarse en estos MD.
-- Usar `grep`/`semantic_search` para encontrar referencias a funciones exportadas cuando se haga refactor.
+**Regla**: `BaySyncService` es un coordinador delgado, no implementa lógica propia.
 
-> La descripción visual del proceso se encuentra en el texto de esta misma página.
+## Helpers de conversión en `services/core/helpers/`
 
+```
+services/core/helpers/
+├── tabClassifier.ts     → Clasifica native tabs → BayType / diffType
+└── tabConverter.ts      → Convierte vscode.Tab → Bay (función pura); también remapFileBayUri()
+```
 
+Los helpers de modelo (enriquecimiento de metadata, capabilities, matching de native tabs) viven en `src/models/BayHelpers.ts` (un solo archivo), **no** en `models/helpers/`.
+
+`convertToBay()` es determinista: mismos inputs → mismo Bay. Excepto git status (async).
+
+## Invariantes críticos
+
+1. `BayMetadata` es **inmutale** tras creación — nunca modificar campos
+2. `BayState` es **mutable** — cambios directos + `stateService.notifyChange()`
+3. `BayStateService` es **única fuente de verdad** — providers nunca consultan el Tab API
+4. **Markdown Preview se filtra** — `viewType === 'markdown.preview'` no crea Bay independiente
+5. **Orphans se limpian** en cada evento `closed` — tabs en estado pero no en VS Code se eliminan
+6. **IDs son deterministas** — `uri.toString() + '-' + viewColumn`
+
+## Patrones de ID y CSS
+
+```typescript
+// IDs contienen caracteres especiales (:, /, %)
+// ❌ Incorrecto en webview.js:
+document.querySelector(`.bay[data-bay-id="${bayId}"]`);
+
+// ✅ Correcto:
+document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
+```
+
+## Logger
+
+Solo dos métodos permitidos:
+
+```typescript
+Logger.error('[NombreModulo] Mensaje:', error);
+Logger.warn('[NombreModulo] Advertencia');
+// NO usar Logger.info(), Logger.log(), console.log()
+```
+
+## Actualización de la vista (dos canales)
+
+```typescript
+// Canal completo: reconstruye HTML (estructural)
+stateService.notifyChange();            // → onDidChangeState → refresh()
+
+// Canal silencioso: solo togglea .active (Bay activa)
+stateService.notifyActiveChange();      // → onDidChangeStateSilent → refreshSilent() → updateActiveBay
+
+// Cambio de estado de un Bay (git / diagnósticos)
+stateService.updateBayStateWithAnimation(bay); // → onDidChangeBayState → bayStateChanged
+
+// Cambio de solo la etiqueta (títulos Claude Code)
+stateService.notifyBayLabelChange(id);  // → onDidChangeBayLabel → updateBayLabel
+```
+
+**Usar canal silencioso** para: cambio de Bay activa.
+**Usar canal completo** para: añadir/eliminar/mover bays, pin/unpin, cambios de grupo.
+
+> `updateBaySilent()` y `removeOrphanedTabs()` siguen en el código pero están **sin cablear** (código muerto): no los uses como referencia.
+
+## Reglas de tamaño de archivos
+
+- **Máximo ~400-500 LOC** por archivo
+- Si supera: dividir con separación lógica clara (un módulo = una responsabilidad)
+- **Preferir más archivos pequeños** que un monolito
+
+## Proceso de desarrollo
+
+```bash
+npm run compile        # verifica tipos + lint + build
+npm run watch          # watch mode para desarrollo
+# Después de cambios: F5 → recargar Extension Host
+```
+
+Verificar siempre:
+- [ ] ¿Compila sin errores? (`npm run compile`)
+- [ ] ¿Manejé tabs webview (`uri: undefined`)?
+- [ ] ¿Usé solo `Logger.error/warn`?
+- [ ] ¿Usé `async/await` (sin I/O síncrono)?
