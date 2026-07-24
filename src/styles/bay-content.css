@@ -38,9 +38,14 @@
 }
 
 .bay-name {
-  white-space: nowrap;
+  /* Wrap instead of a single-line ellipsis: a bay has vertical room the editor
+     tab bar doesn't, so long names (e.g. a Claude Code conversation title) show
+     in full. Bounded to 2 lines so rows don't grow without limit. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
   font-size: 13px;
 }
 

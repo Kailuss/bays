@@ -41,6 +41,16 @@ export class BayHelpers {
     7: 'workbench.action.focusSeventhEditorGroup',
     8: 'workbench.action.focusEighthEditorGroup',
   };
+  private static readonly MOVE_TO_GROUP_CMDS: Record<number, string> = {
+    1: 'workbench.action.moveEditorToFirstGroup',
+    2: 'workbench.action.moveEditorToSecondGroup',
+    3: 'workbench.action.moveEditorToThirdGroup',
+    4: 'workbench.action.moveEditorToFourthGroup',
+    5: 'workbench.action.moveEditorToFifthGroup',
+    6: 'workbench.action.moveEditorToSixthGroup',
+    7: 'workbench.action.moveEditorToSeventhGroup',
+    8: 'workbench.action.moveEditorToEighthGroup',
+  };
 
   //· --- SETS DE EXTENSIONES (O(1) lookup, inicializados una sola vez) ---
   private static readonly EXT_CONFIG   = new Set(['.json', '.yaml', '.yml', '.toml', '.ini', '.env']);
@@ -67,6 +77,15 @@ export class BayHelpers {
   }
   static async focusGroup(viewColumn: vscode.ViewColumn): Promise<void> {
     const cmd = BayHelpers.FOCUS_GROUP_CMDS[viewColumn];
+    if (cmd) { await vscode.commands.executeCommand(cmd); }
+  }
+  /**
+   * Moves the ACTIVE editor to another group via the native workbench command.
+   * The only way to relocate a webview tab (no URI to reopen) between groups, so
+   * the caller must activate the source tab first. Works for any tab type.
+   */
+  static async moveActiveEditorToGroup(viewColumn: vscode.ViewColumn): Promise<void> {
+    const cmd = BayHelpers.MOVE_TO_GROUP_CMDS[viewColumn];
     if (cmd) { await vscode.commands.executeCommand(cmd); }
   }
   static async activateByNativeTab(metadata: BayMetadata, state: BayState): Promise<void> {
@@ -97,7 +116,13 @@ export class BayHelpers {
 
   /**  */
   static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
-    if (t.input instanceof vscode.TabInputWebview) { return t.label === metadata.label; }
+    if (t.input instanceof vscode.TabInputWebview) {
+      // Prefer the STABLE viewType. Some webview panels rewrite their title at
+      // runtime (e.g. Claude Code's chat/plan tabs show the session name), so a
+      // label-only match goes stale and the bay can no longer be activated/closed.
+      if (metadata.viewType && t.input.viewType === metadata.viewType) { return true; }
+      return t.label === metadata.label;
+    }
     if (!t.input) { return metadata.bayType === 'webview' && !metadata.uri && t.label === metadata.label; }
     if (t.input instanceof vscode.TabInputTextDiff) {
       // Match on modified URI AND original URI so two different diffs of the same

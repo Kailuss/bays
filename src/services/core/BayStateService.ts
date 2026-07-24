@@ -23,6 +23,8 @@ export class BayStateService {
   readonly onDidChangeStateSilent            = this._onDidChangeStateSilent.event;
   private _onDidChangeBayState               = new vscode.EventEmitter<string>();
   readonly onDidChangeBayState               = this._onDidChangeBayState.event;
+  private _onDidChangeBayLabel               = new vscode.EventEmitter<string>();
+  readonly onDidChangeBayLabel               = this._onDidChangeBayLabel.event;
 
   // Hierarchy service (injected to avoid circular dependency)
   private hierarchyService?: BayHierarchyService;
@@ -385,6 +387,18 @@ export class BayStateService {
     // Solo dispara el evento de cambio de estado para la animación
     // NO dispara _onDidChangeState para evitar rebuild completo
     this._onDidChangeBayState.fire(bay.metadata.id);
+  }
+
+  /**
+   * Notifica que el NOMBRE de una bay ha cambiado (título de webview reescrito en
+   * runtime, p.ej. Claude Code mostrando la sesión actual). Actualización parcial
+   * por postMessage: solo se reemplaza el texto de `.bay-name`, sin rebuild ni
+   * cambio de id (el id del webview deriva del viewType estable, no del label).
+   */
+  notifyBayLabelChange(bayId: string): void {
+    if (!this._isBulkLoading) {
+      this._onDidChangeBayLabel.fire(bayId);
+    }
   }
 
   /**

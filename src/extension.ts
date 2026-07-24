@@ -9,10 +9,12 @@ import { BayIconManager          } from './services/ui/BayIconManager';
 import { GroupCustomizationService } from './services/ui/GroupCustomizationService';
 import { ThemeService            } from './services/ui/ThemeService';
 import { CopilotService          } from './services/integration/CopilotService';
+import { ClaudeConversationService } from './services/integration/ClaudeConversationService';
 import { registerBayCommands     } from './commands/bayCommands';
 import { registerGroupCommands   } from './commands/groupCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
 import { activateLanguageRegistry } from './utils/languageRegistry';
+import { preloadWebviewExtensionIcons } from './utils/webviewExtensionIcons';
 import { Logger                  } from './utils/logger';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -86,7 +88,8 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.extensions.onDidChange(() => {
         syncCopilotContext();
-        provider.refresh();
+        // An extension whose webview icon we render may have just been installed.
+        void preloadWebviewExtensionIcons().then(() => provider.refresh());
       }),
     );
 
@@ -109,6 +112,41 @@ export async function activate(context: vscode.ExtensionContext) {
 
     //· Preload icons for all open bays in background
     iconManager.preloadIconsInBackground(context);
+
+    //· Preload extension-owned webview icons (Claude Code, …) then repaint so the
+    //  real brand logo replaces the placeholder codicon. Non-blocking.
+    void preloadWebviewExtensionIcons().then(() => provider.refresh());
+
+    //· Claude Code chat tabs: replace the 24-char native tab title with the full
+    //  conversation title read from Claude's transcripts. Enrich on load, on
+    //  structural changes (a chat tab opened), and whenever a transcript is written
+    //  (the title updates as the conversation evolves). Coalesced to one run at a
+    //  time; each resolved label is patched in place (no full rebuild).
+    const claudeConversation = new ClaudeConversationService();
+    context.subscriptions.push({ dispose: () => claudeConversation.dispose() });
+
+    let enriching = false, enrichAgain = false;
+    const enrichClaudeTitles = async () => {
+      if (enriching) { enrichAgain = true; return; }
+      enriching = true;
+      try {
+        do {
+          enrichAgain = false;
+          const bays = stateService.getAllBays()
+            .filter(b => ClaudeConversationService.isClaudeConversationBay(b));
+          if (bays.length > 0) {
+            for (const id of await claudeConversation.enrichLabels(bays)) {
+              stateService.notifyBayLabelChange(id);
+            }
+          }
+        } while (enrichAgain);
+      } finally {
+        enriching = false;
+      }
+    };
+    stateService.onDidChangeState(() => void enrichClaudeTitles());
+    claudeConversation.watch(() => void enrichClaudeTitles());
+    void enrichClaudeTitles();
 
     //· Register commands
     registerBayCommands(context, stateService);

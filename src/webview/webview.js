@@ -209,6 +209,23 @@ window.addEventListener('message', e => {
     });
   }
 
+  if (msg.type === 'updateBayLabel') {
+    // A webview panel rewrote its title (e.g. Claude Code). Swap only the leading
+    // text node of .bay-name so any trailing pin badge / state class survives.
+    const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(msg.bayId)}"]`);
+    if (bay) {
+      const nameEl = bay.querySelector('.bay-name');
+      if (nameEl) {
+        const first = nameEl.firstChild;
+        if (first && first.nodeType === Node.TEXT_NODE) {
+          first.nodeValue = msg.label;
+        } else {
+          nameEl.insertBefore(document.createTextNode(msg.label), nameEl.firstChild);
+        }
+      }
+    }
+  }
+
   if (msg.type === 'updateIcons') {
     // Deferred icons resolved by the host — swap each placeholder in place
     for (const it of msg.icons) {

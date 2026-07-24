@@ -190,7 +190,7 @@ export function convertToBay(
   } else if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     id = generateVariantId(uri, undefined, viewColumn);
   } else {
-    id = generateId(label, uri, viewColumn, tabType, !!parentId);
+    id = generateId(label, uri, viewColumn, tabType, !!parentId, viewType);
   }
 
   const baseMetadata: BayMetadata = {
@@ -346,6 +346,7 @@ export function generateId(
   viewColumn : vscode.ViewColumn,
   tabType    : BayType,
   isDiff?    : boolean,
+  viewType?  : string,
 ): string {
   if (uri) {
     if (isDiff) {
@@ -356,8 +357,13 @@ export function generateId(
     }
     return `${uri.toString()}-${viewColumn}`;
   }
-  const safe = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-  return `${tabType}:${safe}-${viewColumn}`;
+  // Uriless tabs (webviews): key off the STABLE viewType, not the mutable label.
+  // Some webview panels rewrite their title at runtime — e.g. Claude Code's chat
+  // tab (`mainThreadWebview-claudeVSCodePanel`) shows the current session name — so
+  // a label-derived id drifts on every title change, orphaning the bay and breaking
+  // active-highlight/close sync. The viewType is fixed for the panel's lifetime.
+  const key = (viewType || label).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+  return `${tabType}:${key}-${viewColumn}`;
 }
 
 /**
@@ -405,7 +411,7 @@ export function getDiagnosticSeverity(uri: vscode.Uri): vscode.DiagnosticSeverit
  * Usado para mejor performance en operaciones de sincronización.
  */
 export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
-  const { uri, label, tabType, originalUri, modifiedUri } = extractTabInputData(VSTab);
+  const { uri, label, tabType, viewType, originalUri, modifiedUri } = extractTabInputData(VSTab);
   // Must mirror convertToBay's id derivation exactly, or close/active-sync lookups
   // for diff/variant tabs silently miss their stored bay.
   if (VSTab.input instanceof vscode.TabInputTextDiff && modifiedUri) {
@@ -414,7 +420,9 @@ export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
   if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     return generateVariantId(uri, undefined, VSTab.group.viewColumn);
   }
-  return generateId(label, uri, VSTab.group.viewColumn, tabType);
+  // Pass viewType so webview ids stay stable across the panel's runtime title
+  // changes — mirrors convertToBay exactly (see generateId).
+  return generateId(label, uri, VSTab.group.viewColumn, tabType, undefined, viewType);
 }
 
 /**

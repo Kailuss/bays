@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { TabIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
+import { resolveWebviewExtensionIcon } from '../../utils/webviewExtensionIcons';
 import { DEFAULT_FILE_ICON, parseFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
 import { Logger } from '../../utils/logger';
 import { IconData } from './types';
@@ -27,6 +28,10 @@ export class IconRenderer {
     const { bayType: tabType, viewType, label, fileExtension: fileType } = bay.metadata;
 
     if (tabType === 'webview') {
+      // Prefer the owning extension's real logo (Claude Code, …) when available;
+      // fall back to a built-in codicon for everything else.
+      const extIcon = resolveWebviewExtensionIcon(viewType);
+      if (extIcon) { return { html: extIcon, pending: null }; }
       return { html: this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6'), pending: null };
     }
 

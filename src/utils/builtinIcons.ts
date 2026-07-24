@@ -8,6 +8,11 @@ const BUILTIN_ICON_MAP: Record<string, string> = {
   'vscode.markdown.preview.editor'     : 'open-preview',
   'mainThreadWebview-markdown.preview' : 'open-preview',
 
+  // AI chat webviews (Claude Code) — otherwise they fall back to the generic
+  // 'preview' codicon and read as a markdown preview.
+  'mainThreadWebview-claudeVSCodePanel' : 'sparkle',
+  'mainThreadWebview-claudePlanPreview' : 'checklist',
+
   // Por label exacto (editores built-in sin URI)
   // TODO los íconos de estas pestañas deben variar según el tema y el idioma
   'Settings'                           : 'settings-gear',
@@ -37,6 +42,12 @@ const BUILTIN_PREFIX_MAP: [string, string][] = [
 export function resolveBuiltInCodicon(label: string, viewType?: string): string {
   if (viewType && BUILTIN_ICON_MAP[viewType]) {
     return BUILTIN_ICON_MAP[viewType];
+  }
+
+  // AI chat webviews rewrite their title at runtime, so key off the stable
+  // viewType substring rather than the (unmatched) label.
+  if (viewType && /claude/i.test(viewType)) {
+    return 'sparkle';
   }
 
   if (BUILTIN_ICON_MAP[label]) {

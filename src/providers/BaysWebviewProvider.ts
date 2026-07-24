@@ -59,6 +59,8 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     stateService.onDidChangeStateSilent(() => this.refreshSilent());
     // Notify bay state changes for animation
     stateService.onDidChangeBayState((bayId: string) => this.notifyBayStateChanged(bayId));
+    // Partial update when a webview's title is rewritten at runtime (Claude Code, …)
+    stateService.onDidChangeBayLabel((bayId: string) => this.notifyBayLabelChanged(bayId));
     // Rebuild when workspace folders change (updates header title)
     vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh());
   }
@@ -205,6 +207,24 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       bayId: bayId,
       stateClass: stateIndicator.nameClass,
       stateHtml: stateIndicator.html,
+    });
+  }
+
+  /**
+   * Notifica al webview que el NOMBRE de una bay ha cambiado. Envía el label en
+   * crudo; el cliente lo aplica como texto (sin HTML) sobre `.bay-name`, dejando
+   * intactos los badges (pin) que le siguen.
+   */
+  private notifyBayLabelChanged(bayId: string): void {
+    if (!this._view || this._fullRefreshPending) { return; }
+
+    const bay = this.stateService.getBayById(bayId);
+    if (!bay) { return; }
+
+    this._view.webview.postMessage({
+      type: 'updateBayLabel',
+      bayId,
+      label: bay.metadata.label,
     });
   }
 

@@ -109,7 +109,14 @@ export class BayDragDropService {
     //insertPosition?: 'before' | 'after',
   ): Promise<boolean> {
     const sourceBay = this.stateService.getBayById(sourceBayId);
-    if (!sourceBay || !sourceBay.metadata.uri) { return false; }
+    if (!sourceBay) { return false; }
+
+    // Restriction: child bays (variants) follow their parent — never move alone.
+    // Mirrors reorderWithinGroup; without it a variant could be torn off its group.
+    if (sourceBay.metadata.sourceBayId) {
+      Logger.log('[DragDrop] Blocked: variant bays cannot be moved between groups');
+      return false;
+    }
 
     // Restriction: pinned bays cannot be moved
     if (sourceBay.state.isPinned) { return false; }
@@ -135,8 +142,9 @@ export class BayDragDropService {
       }
     }
 
-    // Close bay in source group and open in destination
-    // This will change the bay ID (because it includes viewColumn)
+    // Relocate to the destination group. File bays close+reopen by URI; webview
+    // bays move the live tab natively (see actions/moveToGroup). Either way the
+    // bay ID changes (it embeds viewColumn) and native tab events rebuild the view.
     try {
       await sourceBay.moveToGroup(targetGroupId);
       return true;

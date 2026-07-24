@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { convertToBay, generateIdFromNativeTab, remapFileBayUri } from '../helpers/tabConverter';
 import { BayStateService } from '../BayStateService';
 import { GitSyncService } from '../../integration/GitSyncService';
+import { ClaudeConversationService } from '../../integration/ClaudeConversationService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { BayHeadService } from './BayHeadService';
 import { ActiveStateService } from './ActiveStateService';
@@ -113,6 +114,7 @@ export class BayEventService {
     // Dirty-only changes can be patched in place via the state animation channel.
     let structuralChange = false;
     const dirtyChangedBays: Bay[] = [];
+    const labelChangedBays: Bay[] = [];
 
     for (const bay of event.opened) {
       const st = convertToBay(bay, this.gitSyncService);
@@ -194,6 +196,30 @@ export class BayEventService {
           hasChanges = true;
           dirtyChangedBays.push(existingBay);
         }
+
+        // Active flips also arrive here. onDidChangeActiveTextEditor only fires for
+        // TEXT editors, so a switch between two non-text tabs (e.g. Claude Code ↔ a
+        // markdown preview) never reaches the highlight sync otherwise. Flag the
+        // change and let the post-loop syncActiveState reconcile it (partial update).
+        if (existingBay.state.isActive !== bay.isActive) {
+          hasChanges = true;
+        }
+
+        // Webview panels rewrite their title at runtime (Claude Code shows the
+        // current session). The bay id derives from the stable viewType, not the
+        // label, so the tab still resolves here — just refresh the display name in
+        // place. Restricted to webviews: file/custom labels only change on rename,
+        // which re-keys the bay through onDidRenameFiles instead. Claude chat tabs
+        // are excluded: ClaudeConversationService owns their label (it shows the
+        // full, untruncated ai-title) and would fight a 24-char native update here.
+        if (existingBay.metadata.bayType === 'webview'
+            && existingBay.metadata.label !== bay.label
+            && !ClaudeConversationService.isClaudeConversationBay(existingBay)) {
+          existingBay.metadata.label = bay.label;
+          existingBay.metadata.tooltipText = bay.label;
+          hasChanges = true;
+          labelChangedBays.push(existingBay);
+        }
       }
     }
 
@@ -208,6 +234,9 @@ export class BayEventService {
         // Only lightweight changes → partial updates, no full DOM rebuild
         for (const b of dirtyChangedBays) {
           this.stateService.updateBayStateWithAnimation(b);
+        }
+        for (const b of labelChangedBays) {
+          this.stateService.notifyBayLabelChange(b.metadata.id);
         }
         if (activeChanges) {
           this.stateService.notifyActiveChange();

@@ -47,4 +47,9 @@
 
 .bay.compact .bay-name {
   flex-shrink: 0;
+  /* Compact mode stays a dense single line — keep the ellipsis here. */
+  display: block;
+  -webkit-line-clamp: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
