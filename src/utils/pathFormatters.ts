@@ -79,11 +79,17 @@ export function formatFilePathWithParts(
     formattedPath = uri.fsPath;
     parts = [uri.fsPath];
   } else if (useWorkspaceRelative) {
-    // Ruta relativa al workspace
+    // Ruta relativa al workspace.
+    // OJO: asRelativePath solo devuelve una ruta con '/' cuando el archivo está
+    // DENTRO de una carpeta del workspace. Si no lo está —o si no hay carpeta
+    // abierta, como en el Extension Development Host lanzado sin --folder-uri—
+    // devuelve el fsPath tal cual, que en Windows va con '\'. Partir solo por
+    // '/' dejaba entonces un único trozo que el pop() de abajo se comía entero:
+    // parts quedaba vacío, detailLabel salía '' y la fila de ruta desaparecía
+    // de TODAS las bays. Por eso se parte por ambos separadores.
     const relativePath = vscode.workspace.asRelativePath(uri, false);
-    // Normalizar separadores: asRelativePath usa '/' en todas las plataformas
-    parts = relativePath.split('/');
-    
+    parts = relativePath.split(/[\\/]/);
+
     // Si NO queremos el nombre del archivo, lo quitamos
     if (!includeFileName && parts.length > 0) {
       parts.pop(); // Eliminar el nombre del archivo
