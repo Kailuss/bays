@@ -54,6 +54,19 @@ export class BayEventService {
       })
     );
 
+    // Filesystem-level events. On a rename/move VS Code updates the open editor in
+    // place, but onDidChangeTabs only reports it as a `changed` flag event whose
+    // recomputed id no longer matches the stored bay (the id embeds the URI) — so the
+    // bay would keep its stale URI/label/path/git forever. Handle the rename (and the
+    // matching delete cleanup) explicitly against the filesystem events.
+    this.disposables.push(
+      vscode.workspace.onDidRenameFiles((event) => this.handleFilesRenamed(event))
+    );
+
+    this.disposables.push(
+      vscode.workspace.onDidDeleteFiles((event) => this.handleFilesDeleted(event))
+    );
+
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabGroups((event) => {
         this.handleGroupChanges(event);
@@ -201,6 +214,103 @@ export class BayEventService {
         }
       }
     }
+  }
+
+  /**
+   * VS Code renamed/moved one or more files (or whole folders). The open editors follow
+   * to the new URIs, but a bay's id embeds its URI, so every affected bay must be
+   * re-keyed or it keeps stale label/path/git decorations.
+   *
+   * Clean file bays are re-keyed in place (manual drag order preserved). Anything that
+   * touches a variant — a diff/preview child, or a parent that has them — falls back to
+   * a full resync, which rebuilds the hierarchy from native truth instead of risking a
+   * child left pointing at a stale parent id.
+   */
+  private handleFilesRenamed(event: vscode.FileRenameEvent): void {
+    const affected: Array<{ bay: Bay; newUri: vscode.Uri }> = [];
+    for (const { oldUri, newUri } of event.files) {
+      for (const bay of this.stateService.getAllBays()) {
+        const u = bay.metadata.uri;
+        if (!u || !this.isSameOrUnder(u, oldUri)) { continue; }
+        if (u.path === oldUri.path) {
+          affected.push({ bay, newUri });
+        } else {
+          // Descendant of a renamed folder: swap the folder prefix, keep the suffix.
+          const suffix = u.path.slice(oldUri.path.length); // includes leading '/'
+          affected.push({ bay, newUri: newUri.with({ path: newUri.path + suffix }) });
+        }
+      }
+    }
+    if (affected.length === 0) { return; }
+
+    // Variants and parents-with-variants need coordinated id + sourceBayId rewiring
+    // (and diff URIs the targeted path can't reconstruct) → reconcile from native truth.
+    if (affected.some(a => a.bay.metadata.sourceBayId || a.bay.state.hasVariant)) {
+      Logger.log('[BayEvent] Rename touches a variant/parent — full resync');
+      void this.resyncAll?.();
+      return;
+    }
+
+    for (const { bay, newUri } of affected) {
+      const nativeTab = this.findNativeTabByUri(newUri, bay.state.viewColumn);
+      const fresh = nativeTab
+        ? convertToBay(nativeTab, this.gitSyncService, bay.state.indexInGroup)
+        : null;
+      if (!fresh || !this.stateService.rekeyBay(bay.metadata.id, fresh)) {
+        // Editor hasn't settled at the new URI yet, or an id collision — reconcile
+        // everything from the native API instead of leaving a half-remapped state.
+        Logger.warn(`[BayEvent] Targeted rekey failed for ${bay.metadata.label} — full resync`);
+        void this.resyncAll?.();
+        return;
+      }
+      Logger.log(`[BayEvent] Rekeyed bay after rename: ${bay.metadata.label} → ${newUri.fsPath}`);
+    }
+    // rekeyBay fired onDidChangeState per bay (debounced by the provider into one rebuild).
+  }
+
+  /**
+   * VS Code deleted one or more files/folders. It normally closes the affected editors
+   * (handled by onDidChangeTabs.closed), but a bay can linger if VS Code kept the editor
+   * open (e.g. unsaved changes) or a close event was missed. Purge any top-level file
+   * bay whose file was deleted AND no longer has a live native tab; leave the rest so an
+   * intentionally-kept editor still shows.
+   */
+  private handleFilesDeleted(event: vscode.FileDeleteEvent): void {
+    for (const deletedUri of event.files) {
+      for (const bay of this.stateService.getAllBays()) {
+        const u = bay.metadata.uri;
+        if (!u || !this.isSameOrUnder(u, deletedUri)) { continue; }
+        // Variants follow their parent's removal; don't purge them standalone.
+        if (bay.metadata.sourceBayId) { continue; }
+        // Leave bays whose editor VS Code intentionally kept open.
+        if (this.findNativeTabByUri(u, bay.state.viewColumn)) { continue; }
+        Logger.log(`[BayEvent] Removing bay for deleted file: ${bay.metadata.label}`);
+        this.stateService.removeBay(bay.metadata.id);
+      }
+    }
+  }
+
+  /** True if `u` is `base` itself or lives under it (same scheme/authority). */
+  private isSameOrUnder(u: vscode.Uri, base: vscode.Uri): boolean {
+    if (u.scheme !== base.scheme || u.authority !== base.authority) { return false; }
+    return u.path === base.path || u.path.startsWith(base.path + '/');
+  }
+
+  /** Live native tab (text / custom editor / notebook) backing `uri` in `viewColumn`. */
+  private findNativeTabByUri(
+    uri: vscode.Uri,
+    viewColumn: vscode.ViewColumn
+  ): vscode.Tab | undefined {
+    const group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+    if (!group) { return undefined; }
+    const target = uri.toString();
+    return group.tabs.find(t => {
+      const input = t.input;
+      if (input instanceof vscode.TabInputText)     { return input.uri.toString() === target; }
+      if (input instanceof vscode.TabInputCustom)   { return input.uri.toString() === target; }
+      if (input instanceof vscode.TabInputNotebook) { return input.uri.toString() === target; }
+      return false;
+    });
   }
 
   /**

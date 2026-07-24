@@ -248,6 +248,65 @@ export class BayStateService {
     this.removeBayInternal(id);
   }
 
+  /**
+   * Re-key a bay after its backing file was renamed or moved. The bay id embeds the
+   * URI (`${uri}-${viewColumn}`), so a rename changes the id: the bay must move under
+   * the new key both in the map and in its group array — kept at the SAME position so
+   * manual drag order survives — and its document association must point at the new URI.
+   *
+   * `newBay` must be freshly converted from the post-rename native tab so every derived
+   * field (label, path parts, language, git status) is already correct.
+   *
+   * Scope: the caller guarantees the bay is a plain file bay (not itself a variant and
+   * with no variants of its own). Variant / parent-with-variant remaps go through a full
+   * resync instead, because their ids and `sourceBayId` links would all have to be
+   * rewired together — beyond what a single in-place swap can do safely.
+   *
+   * @returns true if the bay was found and re-keyed; false otherwise (caller should resync).
+   */
+  rekeyBay(oldId: string, newBay: Bay): boolean {
+    const oldBay = this.bays.get(oldId);
+    if (!oldBay) { return false; }
+
+    const newId = newBay.metadata.id;
+    // Nothing to do if the id didn't actually change.
+    if (newId === oldId) { return false; }
+    // Never clobber a distinct existing bay (e.g. the rename target already open here).
+    if (this.bays.has(newId)) { return false; }
+
+    // Capture the position BEFORE removal so the fresh bay lands in the same slot.
+    const group = this.groups.get(oldBay.state.groupId);
+    const idx = group ? group.bays.findIndex(b => b.metadata.id === oldId) : -1;
+
+    // removeBayInternal drops the map key, filters it out of the group, dissociates the
+    // old document and fires onDidChangeState. It does NOT cascade to children — this
+    // path only handles bays that have none.
+    this.removeBayInternal(oldId);
+
+    // Insert the fresh bay at the captured slot (preserves manual drag order).
+    newBay.state.indexInGroup = oldBay.state.indexInGroup;
+    this.bays.set(newId, newBay);
+    if (group) {
+      if (idx >= 0 && idx <= group.bays.length) { group.bays.splice(idx, 0, newBay); }
+      else { group.bays.push(newBay); }
+    }
+
+    // Associate the fresh bay with a document for the NEW uri (mirrors addBay).
+    if (this.documentManager && newBay.metadata.uri && !newBay.metadata.sourceBayId) {
+      const document = this.documentManager.getOrCreateDocument(
+        newBay.metadata.uri,
+        newBay.metadata.languageId || 'plaintext',
+        newBay.metadata.label,
+        newBay.metadata.fileExtension || ''
+      );
+      this.documentManager.associateVariant(document.documentId, newId);
+    }
+
+    this._onDidChangeState.fire();
+    Logger.log(`[BayState] Rekeyed bay ${oldId} → ${newId}`);
+    return true;
+  }
+
   // Método interno para eliminar sin lógica de jerarquía (evita recursión)
   private removeBayInternal(id: string): void {
     const bay = this.bays.get(id);

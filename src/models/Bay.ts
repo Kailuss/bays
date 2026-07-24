@@ -143,7 +143,7 @@ export type BayMetadata = {
 
   //: RELATIONSHIPS
   relatedTabIds?: string[];      // Related tabs (diff pair, preview pair, etc.)
-  originalUri?  : vscode.Uri;    // Original URI before rename/move (for tracking)
+  originalUri?  : vscode.Uri;    // Left (original) side of a diff tab. Rename/move is handled by re-keying the bay, not this field.
 
   //: EXTENSIBILITY
   customData?   : Record<string, any>;  // Extension-specific metadata
