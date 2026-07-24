@@ -5,13 +5,26 @@
 out/**
 node_modules/**
 src/**
+docs/**
 .gitignore
+.gitattributes
 .yarnrc
+.npmrc
 esbuild.js
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/eslint.config.mjs
 **/.vscode-test.*
-*.map
-*.ts
-!dist/**
+**/*.map
+
+# Internal documentation — not for end users
+CLAUDE.md
+PLAN.md
+ARCHITECTURE.md
+
+# Non-runtime codicon extras. Only codicon.css + codicon.ttf ship — the @font-face
+# loads the .ttf and nothing references the .svg (verified against src/ and dist/).
+dist/codicons/codicon.html
+dist/codicons/codicon.csv
+dist/codicons/codicon.svg
+dist/codicons/codiconsLibrary.ts
