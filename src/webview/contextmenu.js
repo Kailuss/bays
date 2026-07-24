@@ -54,22 +54,22 @@ const BaysContextMenu = (function () {
 
   //= CONSTRUCCIÓN
 
-  function createIconSlot(item) {
+  // Sólo el primer item de cada grupo (el que abre la lista o el que sigue a un
+  // separador) dibuja icono, a modo de rótulo de lo que agrupa esas acciones.
+  // El hueco existe igual en las demás filas para que el texto quede alineado.
+  function createIconSlot(item, isGroupLeader) {
     const slot = document.createElement('span');
     slot.className = 'bays-menu-item-icon';
 
-    // El hueco de la izquierda es el mismo que usa el menú nativo para la marca
-    // de verificación: si el item está marcado, el check gana al icono propio.
-    const codicon = item.checked ? 'check' : item.icon;
-    if (codicon) {
+    if (isGroupLeader && item.icon) {
       const glyph = document.createElement('span');
-      glyph.className = 'codicon codicon-' + codicon;
+      glyph.className = 'codicon codicon-' + item.icon;
       slot.appendChild(glyph);
     }
     return slot;
   }
 
-  function createItemEl(item, menuEl) {
+  function createItemEl(item, menuEl, isGroupLeader) {
     if (isSeparator(item)) {
       const sep = document.createElement('div');
       sep.className = 'bays-menu-separator';
@@ -86,12 +86,7 @@ const BaysContextMenu = (function () {
       el.classList.add('disabled');
       el.setAttribute('aria-disabled', 'true');
     }
-    if (item.checked !== undefined) {
-      el.setAttribute('aria-checked', String(!!item.checked));
-      el.setAttribute('role', 'menuitemcheckbox');
-    }
-
-    el.appendChild(createIconSlot(item));
+    el.appendChild(createIconSlot(item, isGroupLeader));
 
     const label = document.createElement('span');
     label.className = 'bays-menu-item-label';
@@ -142,10 +137,16 @@ const BaysContextMenu = (function () {
     menu._focusIndex = -1;
     menu._depth = depth;
 
+    // Un grupo es el tramo entre separadores: su primer item lleva icono. El
+    // arranque de la lista cuenta como principio de grupo, así que el primer
+    // item también lo es.
+    let leaderPending = true;
     for (const item of items) {
-      const el = createItemEl(item, menu);
+      const isLeader = leaderPending && !isSeparator(item);
+      const el = createItemEl(item, menu, isLeader);
       menu._itemEls.push(el);
       menu.appendChild(el);
+      leaderPending = isSeparator(item);
     }
 
     menu.addEventListener('keydown', event => handleKeydown(menu, event));

@@ -20,8 +20,6 @@ export type MenuItem =
       keybinding?: string;
       /** `false` lo dibuja atenuado y no seleccionable. */
       enabled?: boolean;
-      /** Dibuja la marca de verificación en el hueco de la izquierda. */
-      checked?: boolean;
       tooltip?: string;
       submenu?: MenuItem[];
     };
@@ -58,8 +56,8 @@ export class BayContextMenu {
 
     items.push(
       bay.state.isPinned
-        ? { id: 'unpin', label: 'Unpin', icon: 'pin',    checked: true }
-        : { id: 'pin',   label: 'Pin',   icon: 'pinned', checked: false }
+        ? { id: 'unpin', label: 'Unpin', icon: 'pin'    }
+        : { id: 'pin',   label: 'Pin',   icon: 'pinned' }
     );
 
     if (hasMultipleGroups && !locked) {
