@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { convertToBay, generateIdFromNativeTab } from '../helpers/tabConverter';
+import { convertToBay, generateIdFromNativeTab, remapFileBayUri } from '../helpers/tabConverter';
 import { BayStateService } from '../BayStateService';
 import { GitSyncService } from '../../integration/GitSyncService';
 import { BayHierarchyService } from '../BayHierarchyService';
@@ -225,6 +225,10 @@ export class BayEventService {
    * touches a variant — a diff/preview child, or a parent that has them — falls back to
    * a full resync, which rebuilds the hierarchy from native truth instead of risking a
    * child left pointing at a stale parent id.
+   *
+   * The remap is derived from the event's newUri (not the native tab), so it does NOT
+   * depend on VS Code having already propagated the tab-model update to the extension
+   * host by the time this event fires.
    */
   private handleFilesRenamed(event: vscode.FileRenameEvent): void {
     const affected: Array<{ bay: Bay; newUri: vscode.Uri }> = [];
@@ -252,14 +256,11 @@ export class BayEventService {
     }
 
     for (const { bay, newUri } of affected) {
-      const nativeTab = this.findNativeTabByUri(newUri, bay.state.viewColumn);
-      const fresh = nativeTab
-        ? convertToBay(nativeTab, this.gitSyncService, bay.state.indexInGroup)
-        : null;
-      if (!fresh || !this.stateService.rekeyBay(bay.metadata.id, fresh)) {
-        // Editor hasn't settled at the new URI yet, or an id collision — reconcile
-        // everything from the native API instead of leaving a half-remapped state.
-        Logger.warn(`[BayEvent] Targeted rekey failed for ${bay.metadata.label} — full resync`);
+      const fresh = remapFileBayUri(bay, newUri, this.gitSyncService);
+      if (!this.stateService.rekeyBay(bay.metadata.id, fresh)) {
+        // Only fails on an id collision (rename overwrote another open file) — that
+        // genuinely needs native reconciliation, so hand off to a full resync.
+        Logger.warn(`[BayEvent] Rekey rejected for ${bay.metadata.label} — full resync`);
         void this.resyncAll?.();
         return;
       }

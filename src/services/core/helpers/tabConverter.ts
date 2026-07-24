@@ -283,6 +283,58 @@ export function convertToBay(
 }
 
 /**
+ * Rebuilds a plain file/custom/notebook bay for a NEW uri after a rename/move.
+ *
+ * Deterministic on purpose: it derives everything from `newUri` (mirroring the file
+ * branch of convertToBay) and carries the native flags — isActive/isDirty/isPinned/
+ * isPreview, which a pure move does not change — from the old bay's state. It never
+ * reads the native tab, so re-keying does NOT depend on whether VS Code has already
+ * propagated the tab-model update to the extension host when onDidRenameFiles fires.
+ *
+ * Caller contract: `oldBay` is a plain bay (no sourceBayId, no variants). Diff/variant
+ * remaps are handled by a full resync, which can rewire ids and links together.
+ */
+export function remapFileBayUri(
+  oldBay     : Bay,
+  newUri     : vscode.Uri,
+  gitService : GitSyncService,
+): Bay {
+  const viewColumn = oldBay.state.viewColumn;
+  const pathData   = formatFilePathWithParts(newUri, { useWorkspaceRelative: true });
+  const label      = path.basename(newUri.fsPath);
+  const fileType   = path.extname(newUri.fsPath);
+
+  // Mirror convertToBay's file-branch baseMetadata, but for the new uri. bayType/
+  // viewType/customData are the only non-uri fields worth carrying over.
+  const baseMetadata: BayMetadata = {
+    id            : `${newUri.toString()}-${viewColumn}`,
+    uri           : newUri,
+    label,
+    detailLabel   : pathData.formatted,
+    pathParts     : pathData.parts,
+    tooltipText   : newUri.fsPath,
+    fileExtension : fileType,
+    bayType       : oldBay.metadata.bayType,
+    viewType      : oldBay.metadata.viewType,
+    languageId    : resolveLanguageId(label),
+    customData    : oldBay.metadata.customData,
+  };
+
+  const metadata = BayHelpers.enrichMetadata(baseMetadata);
+
+  // Clone the current mutable state; only the uri-derived facets change on a move.
+  const state: BayState = {
+    ...oldBay.state,
+    capabilities       : BayHelpers.computeCapabilities(metadata, oldBay.state),
+    gitStatus          : gitService.getGitStatus(newUri),
+    diagnosticSeverity : getDiagnosticSeverity(newUri),
+    lastAccessTime     : Date.now(),
+  };
+
+  return new Bay(metadata, state);
+}
+
+/**
  * Genera un ID único y estable para una bay.
  * Archivos: URI + viewColumn. Webviews: label sanitizado. Diffs: prefijo "diff:".
  */
