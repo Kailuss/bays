@@ -7,12 +7,12 @@ It is the **bidirectional bridge** between the VS Code Tab API and the internal 
 It manages the complete lifecycle of Bays: detection, conversion, update, hierarchical relationships, and cleanup.
 
 **Exact responsibilities:**
-- Listen to VS Code events (tabs, groups, cursor, diagnostics) and convert them into state changes
+- Listen to VS Code events (tabs, groups, cursor, diagnostics, file renames/deletes) and convert them into state changes
 - Convert native tabs (`vscode.Tab`) to Bay objects with enriched metadata
 - Maintain in-memory store of Bays and groups with change events
-- Manage parent-child relationships (variants with placeholders)
-- Synchronize active states, preview ownership, and orphan cleanup
-- Provide ID cache to avoid duplicates and reduce recalculations
+- Manage parent-variant relationships (diffs, snapshots, Markdown previews)
+- Synchronize active state (one active bay per group, recomputed from native tabs) and clean up orphaned bays
+- Generate deterministic Bay IDs from native tab data (no cache layer)
 
 **It is NOT responsible for:**
 - HTML rendering (see providers/)
@@ -25,15 +25,15 @@ It manages the complete lifecycle of Bays: detection, conversion, update, hierar
 ## TECHNICAL INVARIANTS
 
 1. **BayStateService is the only source of truth** - providers and commands consult State, never Tab API directly
-2. **Generated ID is deterministic** - Same URI + viewColumn → Same ID always (`uri.toString() + '-' + viewColumn`)
+2. **Generated ID is deterministic** - same inputs → same ID always. Three schemes: file/custom/notebook = `uri.toString() + '-' + viewColumn`; webview = `${bayType}:${sanitizedKey}-${viewColumn}` (key = `viewType || label`); diff/variant = `` `diff:${modifiedUri}::${originalUri}-${viewColumn}` ``. No cache is involved — see "ID Generation" below.
 3. **Webview tabs do NOT have URI** - `bay.metadata.uri === undefined` for Settings/Extensions/custom webviews
-4. **Markdown previews are filtered** - `viewType === 'markdown.preview'` does NOT create independent Bays, only marks `isPreviewOwner`
-5. **Variants always have parentId** - If `metadata.parentId` exists, it's a child bay (diff/snapshot/compare)
-6. **Parent placeholders are temporary** - Created if variant appears before parent, replaced when parent opens
-7. **Orphaned tabs are cleaned up automatically** - Tabs in state but not in VS Code are removed on each `e.closed`
-8. **hasChildren synchronized with reality** - `recalculateAllCounts()` keeps `childrenCount` and real children in sync
-9. **Silent updates do NOT rebuild UI** - `updateTabSilent()` only for visual changes (isActive), avoids costly refresh
-10. **Git/diagnostics updated lazily** - Only when tab changes state, not in continuous polling
+4. **Markdown previews are modeled as variants, not filtered** - a `.md` preview tab (`viewType` includes `markdown.preview`) becomes a child bay of its source file (`diffType: 'preview'`, `metadata.sourceBayId` resolved by matching the preview label's filename suffix against open text tabs). It is NOT dropped and does NOT set any "preview owner" flag on the parent — `isPreviewOwner`/`PreviewService` do not exist in this codebase.
+5. **Variants always have `sourceBayId`** - if `metadata.sourceBayId` exists, it's a variant bay (diff/snapshot/preview)
+6. **Parent auto-open, not a synthetic placeholder** - if a variant's parent isn't open yet, `BayHeadService` opens the real file automatically (`workspace.openTextDocument` + `window.showTextDocument`); if that fails the variant is still added, rendered as an orphan row. Nothing sets `state.isLoading = true` in current code — `isLoading` exists on `BayState` but is always `false` from `convertToBay()`.
+7. **Orphaned tabs are cleaned up inline on close** - `BayEventService.handleTabChanges()`'s `closed` loop removes the matching stored bay directly (`stateService.removeBay(id)`) when it isn't an intentional close. `ActiveStateService.removeOrphanedTabs()` also exists but currently has **no caller** — dead code, like `BayStateService.updateBaySilent()`.
+8. **hasVariant/variantCount synchronized with reality** - `BayHierarchyService.recalculateAllCounts()` keeps them in sync with actual variants after a full sync
+9. **Silent updates do NOT rebuild UI** - `notifyActiveChange()` fires `onDidChangeStateSilent` for active-only changes across all bays, avoiding a costly HTML rebuild. `updateBaySilent()` still exists on `BayStateService` but is unwired (no callers).
+10. **Git/diagnostics updated lazily** - only when a tab changes state or a `onDidChangeDiagnostics`/rename event fires, not via continuous polling
 
 ---
 
@@ -42,285 +42,233 @@ It manages the complete lifecycle of Bays: detection, conversion, update, hierar
 ### Modular Architecture (bay/ subfolder)
 
 ```
-BaySyncService (orchestrator)
-  ├─ BayEventService (VS Code listeners registry)
-  ├─ BayHeadService (parent placeholders + doc opening)
-  ├─ ActiveStateService (isActive sync + orphan cleanup)
-  └─ uses →
-      ├─ BayStateService (in-memory store)
-      ├─ BayHierarchyService (parent-child relationships)
-      ├─ PreviewService (ephemeral Markdown preview)
-      └─ GitSyncService (git status)
+BaySyncService (thin orchestrator)
+  ├─ BayEventService (VS Code + filesystem event listeners)   [services/core/bay/]
+  ├─ BayHeadService  (parent auto-open for variants)           [services/core/bay/]
+  ├─ ActiveStateService (isActive sync + orphan cleanup)       [services/core/bay/]
+  └─ also constructs / holds →
+      ├─ BayHierarchyService (parent-variant relationships, cursor sync)
+      ├─ GitSyncService (git status)
+      └─ DocumentManager (document/version bookkeeping for diff stats)
 ```
 
-**Reason for separation:**
-- `BaySyncService` was ~900 LOC monolithic → split into 4 specialized services
-- Each service has a unique and testable responsibility
-- Avoids circular dependencies via injection
+`BayStateService` (the in-memory store) is constructed *outside* `BaySyncService` (in `extension.ts`) and injected via the constructor; `BaySyncService` injects `hierarchyService` and `documentManager` back into it (`setHierarchyService`/`setDocumentManager`) to avoid a circular import.
+
+**Reason for separation:** `BaySyncService` was a ~900-LOC monolith → split into a thin orchestrator plus the three services above. This split is the CURRENT architecture — do not describe it as later "consolidated into one file"; it wasn't.
 
 ### Conversion Flow (Native Tab → Bay)
 
 ```typescript
 vscode.Tab (input)
   ↓
-extractRawTabData() → RawTabData
+extractTabInputData()      // switches on input instanceof TabInputText/TabInputTextDiff/
+                            // TabInputWebview/TabInputCustom/TabInputNotebook
   ↓
-processHiddenDiff() → ProcessedTabData (adds parentId, diffType)
+classifyDiffType() / determineParentId() / determineParentUri()   // diffs & snapshots only
   ↓
 new Bay(metadata, state)
-  ├─ metadata: enrichMetadata()
-  ├─ state: createDefaultState()
-  ├─ capabilities: computeCapabilities()
-  └─ gitStatus: gitSyncService.getGitStatus()
+  ├─ metadata: BayHelpers.enrichMetadata(baseMetadata)
+  ├─ state: BayHelpers.createDefaultState() merged with native flags
+  │         (isActive/isDirty/isPinned/isPreview read straight off VSTab)
+  ├─ capabilities: BayHelpers.computeCapabilities(metadata, state)
+  └─ gitStatus / diagnosticSeverity: gitService.getGitStatus(uri) / getDiagnosticSeverity(uri)
   ↓
 Bay (output)
 ```
 
-**Key point:** `convertToBay()` is a **pure function** (except git status) - same inputs → same Bay.
+**Key point:** `convertToBay()` is a **pure function** of its inputs except for the git-status and diagnostics reads (both synchronous, cached inside their own services) — same tab → same Bay.
 
-### ID Caching (Performance)
+`tabConverter.ts` also exports `remapFileBayUri(oldBay, newUri, gitService)`, used by the rename/move sync path below: it mirrors the file branch of `convertToBay()` for a *new* URI while carrying over the old bay's native flags, without reading the native tab at all.
 
-**WeakMap cache (automatic GC):**
+### ID Generation (deterministic, no cache)
+
+There is **no `idCache`/`uriCache`** anywhere in this codebase — ids are recomputed on demand from the native tab every time, by `generateId()` / `generateVariantId()` / `generateIdFromNativeTab()` in `tabConverter.ts`:
+
 ```typescript
-const idCache = new WeakMap<vscode.Tab, string>();
-// Maps native tab → generated ID
-// Automatically freed when VS Code discards the tab
-```
-
-**Map cache (manual):**
-```typescript
-const uriCache = new Map<string, string>();
-// Maps canonical URI → base ID
-// To collapse diffs with volatile query params (git:?ref=HEAD)
-```
-
-**ID scheme:**
-```typescript
-// With URI
+// File / custom / notebook (has uri)
 id = uri.toString() + '-' + viewColumn
-// Ex: "file:///c:/src/file.ts-1"
 
-// Without URI (webviews)
-id = 'webview:' + sanitizedLabel + '-' + viewColumn
-// Ex: "webview:settings-1"
+// Webview (no uri) — keyed off the STABLE viewType, falling back to label
+const key = (viewType || label).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+id = `${tabType}:${key}-${viewColumn}`;
+// Ex: "webview:mainthreadwebview-claudevscodepanel-1"
 
-// Diffs with parentId (variants)
-// Same scheme but metadata.parentId is defined
+// Diff / variant (TabInputTextDiff, or a chat-editing-snapshot uri)
+id = `diff:${modifiedUri.toString()}::${originalUriOrEmpty}-${viewColumn}`;
 ```
 
-### Diff Types Classification (Hybrid)
+The webview scheme is keyed off `viewType`, not `label`, specifically because some panels (Claude Code's chat tab) rewrite their tab title at runtime — a label-derived id would drift on every title change and orphan the bay, breaking active-highlight/close sync.
 
-**Combined strategy: instanceof + scheme + query + viewType**
+The diff/variant scheme (`generateVariantId`) is fully reconstructable from a native tab alone (modified URI + original URI + viewColumn, all readable off `vscode.Tab`), so the open path (`convertToBay`) and the close/active-sync paths (`generateIdFromNativeTab`) always agree on the same id for a given tab — no cache needed to keep them in sync. A leftover module-level `diffIdCounter` only feeds the *unused* fallback branch of `generateId()` (timestamp+counter ids for a hypothetical uri-less-but-diff case that the current diff/snapshot paths never take, since they always go through `generateVariantId`).
+
+### Diff Types Classification
+
+Classification (`classifyDiffType()` in `helpers/tabClassifier.ts`) is primarily **label-text driven** (VS Code's own diff-tab titles are the strongest signal), with URI scheme as a fallback — not scheme/query lookups alone:
 
 ```typescript
-// 1. Check if TabInputTextDiff
-if (input instanceof vscode.TabInputTextDiff) {
-  
-  // 2. Analyze scheme of modified URI
-  const scheme = input.modified?.scheme;
-  
-  // 3. Extract query params (git refs)
-  const query = input.modified?.query;
-  
-  // 4. Classify by observed patterns
-  return classifyDiffType(scheme, query, label);
+// Ordered cascade over the lowercased tab label:
+'working tree'                       → 'working-tree'
+'staged' | 'index'                   → 'staged'
+/[+]\d+[-]\d+/ (e.g. "+12-3")        → 'edit'                (Copilot/AI edit stats)
+both URIs scheme === 'chat-editing-snapshot-text-model'
+  and label doesn't include 'snapshot' → 'edit'
+'snapshot' | 'timeline' | 'local history' | 'history:' → 'snapshot'
+commit hash /\b[a-f0-9]{7,40}\b/i    → 'commit'
+date/time pattern (YYYY-MM-DD, H:MM) → 'snapshot'
+
+// Fallback when the label didn't match: inspect original/modified URI scheme+query
+originalScheme === 'git' && query has 'ref=' or a hash → 'commit'
+scheme is 'git' | 'timeline' | 'chat-editing-snapshot-text-model' | 'vscode-timeline*' → 'snapshot'
+
+'merge conflict' | 'conflict'        → 'merge-conflict'
+'incoming' (+'current')              → 'incoming-current' | 'incoming'
+'current'                            → 'current'
+'↔' | ' vs ' | 'compare'/'comparing' → 'unknown' if original/modified paths differ, else 'snapshot'
+(nothing matched)                    → 'unknown'
+```
+
+`resolveSourceUri(uri)` normalizes a variant's own-scheme URI (`git:`, `timeline:`, `chat-editing-snapshot-text-model:`, `vscode-timeline*:`) to a plain `file://` URI by keeping only its `.path` — this is what `determineParentUri()`/`determineParentId()` use so the variant's `sourceBayId` points at the SAME id the real file bay gets, and so auto-opening a missing parent opens the real file instead of a phantom index/snapshot tab.
+
+### Parent Auto-Open Flow (`BayHeadService`)
+
+**Problem:** a variant tab (diff/snapshot) can appear before its source file tab (VS Code timing / user opened the diff directly).
+
+**Flow (`ensureParentExists`, called from `BayEventService.handleTabChanges` before the variant is added):**
+1. If a bay with `variant.metadata.sourceBayId` already exists in state → return it (nothing to do).
+2. Else look for a **native tab** in the same group whose id already matches `sourceBayId` (`findTabForBayId`) → convert it (`buildParentBay`, rejecting an id mismatch) and `stateService.addBay(parentBay)`.
+3. Else **open the real file automatically**: `vscode.workspace.openTextDocument(variant.metadata.sourceUri)` then `vscode.window.showTextDocument(doc, { viewColumn, preview: false, preserveFocus: true })`. `showTextDocument` synchronously drives `onDidChangeTabs`, so by the time it resolves the parent is usually already in state (checked directly); a `group.tabs` scan is the fallback.
+4. If auto-open throws (remote/deleted file, permissions, …) → the variant is still added to state, just with no parent in state — the renderer draws it as an orphan row, never as a hidden/dropped bay.
+
+Markdown-preview variants (`diffType === 'preview'`) skip `BayHeadService` entirely (they have no `uri`, so `ensureParentExists` would just discard them) — they resolve their `sourceBayId` synchronously in `convertToBay()`/`findPreviewSource()` instead, and render as an orphan if the source `.md` file isn't open.
+
+### Active State Synchronization (`ActiveStateService`)
+
+`syncActiveState()` recomputes `isActive` for every bay from native truth in one pass — no "preview owner"/hybrid logic:
+
+```typescript
+syncActiveState(): { hasChanges: boolean } {
+  // 1. One winner per viewColumn, straight from VS Code
+  const activeTabPerGroup = new Map<vscode.ViewColumn, string>(); // viewColumn -> bay id
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const id = generateIdFromNativeTab(tab);
+      if (id && tab.isActive) { activeTabPerGroup.set(group.viewColumn, id); }
+    }
+  }
+  // 2. Every stored bay's isActive = "am I the winner in my group?"
+  let hasChanges = false;
+  for (const bay of stateService.getAllBays()) {
+    const shouldBeActive = activeTabPerGroup.get(bay.state.viewColumn) === bay.metadata.id;
+    if (bay.state.isActive !== shouldBeActive) {
+      bay.state.isActive = shouldBeActive;
+      hasChanges = true;
+    }
+  }
+  return { hasChanges };
 }
 ```
 
-**Known diff schemes:**
-- `git:?ref=~` → `working-tree` (unstaged changes)
-- `git:?ref=` (empty) → `staged` (staged changes)
-- `git:?ref=HEAD` → `compare` (compare with commit)
-- `file:` + diff context → `snapshot` (temp edit)
-- `vscode-merge-conflict:` → `unknown` (merge editor)
-
-### Parent Placeholder Flow
-
-**Problem:** Variant can appear before its parent (VS Code timing).
-
-**Solution:**
-1. Detect `metadata.parentId !== null` but parent does not exist in state
-2. Create `placeholder` Bay with minimal metadata:
-   ```typescript
-   {
-     label: extractFileName(variantUri),
-     uri: variantUri,
-     bayType: 'file',
-     isLoading: true,  // visual flag
-   }
-   ```
-3. Add placeholder to state with `parentId` as ID
-4. Register variant as child of the placeholder
-5. When real parent appears, **replace** placeholder:
-   ```typescript
-   replaceWithRealParent(nativeParent, variant, (realBay) => {
-     stateService.updateTab(realBay);  // Keeps same ID
-   });
-   ```
-
-**Guarantees:**
-- Placeholder ID === real parent ID (deterministic)
-- Children keep valid `parentId` during replacement
-- `hasChildren` and `childrenCount` are recalculated automatically
-
-### Active State Synchronization
-
-**Problem:** `isActive` state from VS Code does not always reflect visible UI (Markdown preview).
-
-**Strategy (ActiveStateService):**
-1. **Synchronize preview ownership:**
-   ```typescript
-   syncPreviewOwnership() {
-     const activePreview = findActivePreviewTab(group);
-     if (activePreview) {
-       const sourceBay = resolvePreviewSourceId(group, activePreview);
-       if (sourceBay) {
-         sourceBay.state.isPreviewOwner = true;
-       }
-     }
-   }
-   ```
-
-2. **Synchronize isActive of all tabs:**
-   ```typescript
-   syncTabActiveStates() {
-     // Mark all as inactive
-     allBays.forEach(bay => bay.state.isActive = false);
-     
-     // Mark active according to VS Code
-     for (const group of vscode.window.tabGroups.all) {
-       const activeTab = group.activeTab;
-       const bay = findBayFromNativeTab(activeTab);
-       if (bay) bay.state.isActive = true;
-     }
-   }
-   ```
-
-**Called in:**
-- Each `handleTabChanges()` (after processing changes)
-- `openTab` in WebviewProvider (before activating)
-- Active text editor change
+**Called from:** `BayEventService` after `onDidChangeActiveTextEditor`, after `handleTabChanges` (whenever anything changed), and after non-structural `handleGroupChanges`; also from `BaySyncService.updateActiveTab()` and at the end of `syncAll()`. Every caller that only sees `hasChanges === true` (no structural change alongside it) fires `stateService.notifyActiveChange()` for a partial `updateActiveBay` update instead of a full rebuild.
 
 ### Orphaned Tabs Cleanup
 
-**Definition:** Tabs that exist in `BayStateService` but no longer in VS Code.
+**Definition:** bays that exist in `BayStateService` but no longer in VS Code.
 
-**Common causes:**
-- Preview tabs converted to permanent (VS Code reuses ID)
-- Tabs closed by another extension
-- Tabs moved between groups (ID changes)
+**Where it actually happens today:** inline in `BayEventService.handleTabChanges()`'s `for (const bay of event.closed)` loop — for each closed native tab it recomputes the id (`generateIdFromNativeTab`), skips it if `stateService.isIntentionalClose(id)` (a program-driven close already being handled elsewhere), and otherwise calls `stateService.removeBay(id)` directly if a stored bay matches.
 
-**Detection:**
+`ActiveStateService.removeOrphanedTabs()` (diff the full `nativeIds` set against `getAllBays()`) implements the same idea as a batch sweep, but **nothing currently calls it** — treat it as dead code, not the live cleanup path, when documenting or debugging.
+
+**IMPORTANT:** `stateService.removeBay()` does NOT cascade-remove a parent's `preview`-type variants when the parent itself is removed (closing the `.md` doesn't close its preview tab in VS Code) — those are left in state and rendered as orphans.
+
+### Event Handling (`BayEventService`)
+
+**Registered listeners (`activate()`):**
 ```typescript
-removeOrphanedTabs() {
-  const nativeIds = new Set<string>();
-  for (const group of vscode.window.tabGroups.all) {
-    for (const tab of group.tabs) {
-      nativeIds.add(generateIdFromNativeBay(tab));
-    }
-  }
-  
-  const orphans = allBays.filter(bay => !nativeIds.has(bay.metadata.id));
-  
-  orphans.forEach(bay => {
-    Logger.log(`Removing orphaned: ${bay.metadata.label}`);
-    stateService.removeTab(bay.metadata.id);
-  });
-}
+vscode.window.tabGroups.onDidChangeTabs         → handleTabChanges()        // async
+vscode.workspace.onDidRenameFiles                → handleFilesRenamed()      // NEW, see below
+vscode.workspace.onDidDeleteFiles                → handleFilesDeleted()      // NEW, see below
+vscode.window.tabGroups.onDidChangeTabGroups     → handleGroupChanges()
+vscode.window.onDidChangeActiveTextEditor        → syncActiveState() + notifyActiveChange()
+vscode.window.onDidChangeTextEditorSelection     → hierarchyService.syncCursorPosition() (only if bays.syncCursorPosition is on — cached flag, re-read on config change)
 ```
+Diagnostics (`vscode.languages.onDidChangeDiagnostics`) is registered directly by `BaySyncService.activate()`, not by `BayEventService`.
 
-**IMPORTANT:** Do NOT remove variants whose parent is closed - they are valid "orphan variants", shown in UI.
-
-### Event Handling (BayEventService)
-
-**Registered listeners:**
+**`handleTabChanges(event)` pattern — distinguishes structural vs. patchable changes:**
 ```typescript
-vscode.window.tabGroups.onDidChangeTabs        → handleTabChanges()
-vscode.window.tabGroups.onDidChangeTabGroups   → handleGroupChanges()
-vscode.window.onDidChangeActiveTextEditor      → updateActiveTab()
-vscode.languages.onDidChangeDiagnostics        → updateTabDiagnostics()
-vscode.window.onDidChangeTextEditorSelection   → handleCursorChange()
-```
+async handleTabChanges(event) {
+  let hasChanges = false, structuralChange = false;
+  const dirtyChangedBays = [], labelChangedBays = [];
 
-**Handling pattern:**
-```typescript
-async handleTabChanges(e: TabChangeEvent) {
-  // 1. Process openings (can be async if placeholders)
-  for (const tab of e.opened) {
+  for (const tab of event.opened) {
     const bay = convertToBay(tab, gitSyncService);
-    if (bay.metadata.parentId) {
-      await parentService.ensureParentExists(bay, tab);
-      hierarchyService.registerChild(bay.id, bay.metadata.parentId);
+    if (bay.metadata.sourceBayId && bay.metadata.diffType !== 'preview') {
+      await bayHeadService.ensureParentExists(bay, tab);       // may auto-open the parent
     }
     stateService.addBay(bay);
+    if (bay.metadata.sourceBayId) {
+      hierarchyService.linkVariantToParentBay(bay.metadata.id, bay.metadata.sourceBayId);
+    }
+    hasChanges = structuralChange = true;
   }
-  
-  // 2. Clean closed (sync)
-  if (e.closed.length > 0) {
-    activeStateService.removeOrphanedTabs();
+
+  for (const tab of event.closed) {
+    const id = generateIdFromNativeTab(tab);
+    if (stateService.isIntentionalClose(id)) { continue; }     // already handled elsewhere
+    if (stateService.getBayById(id)) {
+      stateService.removeBay(id);
+      hasChanges = structuralChange = true;
+    }
   }
-  
-  // 3. Update changes (optimized)
-  for (const tab of e.changed) {
-    const bay = convertToBay(tab, gitSyncService);
-    const existing = stateService.fetchBayById(bay.id);
-    
-    // Detect if only isActive changed (silent update)
-    const onlyActive = /* ... comparison ... */;
-    
-    if (onlyActive) {
-      stateService.updateTabSilent(existing);  // No rebuild UI
+
+  for (const tab of event.changed) {
+    const existing = stateService.getBayById(generateIdFromNativeTab(tab));
+    if (!existing) { continue; }
+    if (existing.state.isPreview !== tab.isPreview) { existing.state.isPreview = tab.isPreview; }        // silent, unrendered
+    if (existing.state.isPinned  !== tab.isPinned)  { existing.state.isPinned = tab.isPinned; hasChanges = structuralChange = true; }
+    if (existing.state.isDirty   !== tab.isDirty)   { existing.state.isDirty = tab.isDirty; hasChanges = true; dirtyChangedBays.push(existing); }
+    if (existing.state.isActive  !== tab.isActive)  { hasChanges = true; }                                 // reconciled by syncActiveState below
+    if (existing.metadata.bayType === 'webview'
+        && existing.metadata.label !== tab.label
+        && !ClaudeConversationService.isClaudeConversationBay(existing)) {
+      existing.metadata.label = tab.label; hasChanges = true; labelChangedBays.push(existing);
+    }
+  }
+
+  if (hasChanges) {
+    const { hasChanges: activeChanges } = activeStateService.syncActiveState();
+    if (structuralChange) {
+      stateService.notifyChange();                                    // full rebuild
     } else {
-      stateService.updateTab(existing);        // Full rebuild
+      dirtyChangedBays.forEach(b => stateService.updateBayStateWithAnimation(b));  // per-bay postMessage
+      labelChangedBays.forEach(b => stateService.notifyBayLabelChange(b.metadata.id));
+      if (activeChanges) { stateService.notifyActiveChange(); }        // bulk postMessage
     }
   }
-  
-  // 4. Synchronize active state
-  activeStateService.syncActiveState();
 }
 ```
+`isDirty`-only and label-only changes are patched via `postMessage` without a DOM rebuild; `isPinned` forces a full rebuild because pinning reorders the list. Active-state flips (`isActive`) are detected here too (needed because `onDidChangeActiveTextEditor` only fires for *text* editors — switching between two non-text tabs, e.g. Claude Code ↔ a Markdown preview, never reaches it otherwise) but are reconciled uniformly by the post-loop `syncActiveState()` call, not inline.
 
-### Full Sync (syncAll)
+### File Rename / Move / Delete Sync (`BayEventService` + `tabConverter.remapFileBayUri`)
 
-**When executed:**
-- Extension activation (`activate()`)
-- Explicit command `bays.refresh`
+VS Code updates an open editor's URI in place on a rename/move, but `onDidChangeTabs` only reports it as a `changed` event whose *recomputed* id no longer matches the stored bay (the id embeds the URI) — left alone, the bay would keep a stale URI/label/path/git status forever. `BayEventService` listens to the filesystem events directly and rekeys deterministically instead of waiting for the tab event:
 
-**Process:**
-```typescript
-syncAll() {
-  // 1. Synchronize groups
-  for (const nativeGroup of vscode.window.tabGroups.all) {
-    stateService.addGroup(createBayGroup(nativeGroup));
-  }
-  
-  // 2. Convert all tabs to Bays
-  const allBays: Bay[] = [];
-  for (const group of vscode.window.tabGroups.all) {
-    for (const tab of group.tabs) {
-      const bay = convertToBay(tab, gitSyncService);
-      if (bay) {
-        // Process parent-child relationships
-        if (bay.metadata.parentId) {
-          await parentService.ensureParentExistsForSync(bay, tab, allBays);
-        }
-        allBays.push(bay);
-      }
-    }
-  }
-  
-  // 3. Replace complete state (atomic)
-  stateService.replaceTabs(allBays);
-  
-  // 4. Recalculate hierarchy
-  hierarchyService.recalculateAllCounts();
-  
-  // 5. Synchronize active state
-  activeStateService.syncActiveState();
-}
-```
+- **`workspace.onDidRenameFiles` → `handleFilesRenamed(event)`:** for each `{oldUri, newUri}`, finds every bay whose `metadata.uri` `isSameOrUnder(oldUri)` (same scheme+authority, path equal or nested under `oldUri.path + '/'`) — this covers both a single file rename and an entire folder move (descendant bays get their old-folder path prefix swapped for the new one, suffix preserved).
+  - If **any** affected bay is a variant or a parent-with-variants (`bay.metadata.sourceBayId || bay.state.hasVariant`) → bail out to a full `resyncAll()` (variant links/diff URIs can't be safely patched in place).
+  - Otherwise, each affected bay is rebuilt via `remapFileBayUri(bay, newUri, gitSyncService)` — deterministic: new id `${newUri}-${viewColumn}`, re-derived label/pathParts/tooltip/extension/languageId, fresh git status + diagnostics, carrying over native flags (isActive/isDirty/isPinned/isPreview) from the old bay's state. It never reads the native tab, so it doesn't depend on VS Code having already propagated the tab-model update.
+  - `stateService.rekeyBay(oldId, freshBay)` swaps the map key **and** the bay's slot inside its group array (same index — preserves manual drag order), reassociates the document manager entry, and fires `onDidChangeState`. If the new id already exists (rename overwrote another open bay) → `rekeyBay` returns `false` → falls back to `resyncAll()`.
+- **`workspace.onDidDeleteFiles` → `handleFilesDeleted(event)`:** for each deleted uri, purges top-level file bays under it (again via `isSameOrUnder`) that have **no live native tab** (`findNativeTabByUri`, checked against `TabInputText`/`TabInputCustom`/`TabInputNotebook`). Variants are skipped (`bay.metadata.sourceBayId` set) — they follow their parent's removal, not deletion directly — and a bay VS Code intentionally kept open (e.g. unsaved changes) is left alone.
+- **`onDidChangeTabGroups` structural changes** (a split opened or closed) also fall back to `resyncAll()`: VS Code renumbers `viewColumn` on every remaining group, which invalidates every bay id in this codebase (they embed the column), so incremental patching isn't attempted.
 
-**Atomic replacement** (`replaceTabs()`) avoids inconsistencies during massive sync.
+### Full Sync (`syncAll`) & Structural Resync (`resyncAll`)
+
+**`syncAll()`** (private, called from `activate()`):
+1. `stateService.setGroups(vscode.window.tabGroups.all.map(createTabGroup))` — replaces the whole group map, which also *prunes* stale groups (old `addGroup`-only loops left ghost groups behind).
+2. First pass over every native tab: parents/standalone bays go straight into `allBays`; anything with a `sourceBayId` is deferred into a `variants` array.
+3. Second pass over `variants`, sequentially: `diffType === 'preview'` variants just look up their parent in `allBays` (no `BayHeadService` — they have no `uri`) and inherit state if found, else are pushed anyway as an orphan; everything else goes through `bayHeadService.ensureParentExistsForSync()` (same auto-open logic as the live path, searching the in-flight `allBays` array first).
+4. `stateService.replaceBays(allBays)` — atomic (`_isBulkLoading` suppresses per-bay events, fires `onDidChangeState` once at the end).
+5. `hierarchyService.recalculateAllCounts()`.
+
+**`resyncAll()`** (public, used as the structural-fallback callback passed into `BayEventService`): serialized through a promise queue (`resyncInFlight`) so overlapping structural events don't run concurrently. `doResync()` snapshots the current manual drag order **per group, keyed by URI** (bay ids are unusable as the key since the viewColumn — part of the id — is exactly what's about to change), calls `syncAll()`, then re-sorts each new group's bays back into that captured order (unknown/new bays sort last) and fires one `notifyChange()`.
 
 ---
 
@@ -328,62 +276,45 @@ syncAll() {
 
 ### 1. Variant Appears Before Parent
 
-**Scenario:** User opens diff (`git:?ref=~`) before the base file.
+**Scenario:** user opens a diff (e.g. `git:` working-tree) before the base file is open anywhere.
 
 **Flow:**
 ```
 1. e.opened → TabInputTextDiff detected
-2. convertToBay() → bay.metadata.parentId = "file:///src/file.ts-1"
-3. stateService.fetchBayById(parentId) → undefined
-4. parentService.ensureParentExists(bay, nativeTab)
-   → createParentPlaceholder() → placeholder with isLoading: true
-5. stateService.addBay(placeholder)
-6. stateService.addBay(bay)  // variant with valid parentId
-7. hierarchyService.registerChild(bay.id, parentId)
+2. convertToBay() → bay.metadata.sourceBayId = "file:///src/file.ts-1", sourceUri = file:///src/file.ts
+3. bayHeadService.ensureParentExists(bay, tab):
+   a. stateService.getBayById(sourceBayId) → undefined
+   b. findTabForBayId(group, sourceBayId) → not found in this group either
+   c. vscode.workspace.openTextDocument(sourceUri) + showTextDocument(viewColumn, preview:false, preserveFocus:true)
+   d. onDidChangeTabs fires synchronously during the await → parent already in state when checked
+4. stateService.addBay(variant)
+5. hierarchyService.linkVariantToParentBay(variant.id, sourceBayId)
 ```
 
-**UI Result:** Parent shows "Loading..." until user opens real file.
-
-**Autocomplete (optional):**
-- `ensureParentExists()` can try `vscode.workspace.openTextDocument(parentUri)`
-- If it fails (e.g., remote file), placeholder remains
+**UI result:** the real parent file opens (preserving focus on the diff) and appears immediately with the variant nested under it — there is no "Loading…" placeholder state in current code. If the auto-open fails (remote file, permission error, file deleted), the variant is added anyway and the renderer draws it as an orphan row with no parent.
 
 ### 2. Preview Tab Converted to Permanent
 
-**Symptom:** Tab disappears from state after editing preview.
+**Symptom:** a VS Code "preview" (italic) editor becomes a permanent tab after editing.
 
-**Cause:** VS Code reuses the slot, changing `isPreview: true → false`.
+**Detection:** in `handleTabChanges`'s `changed` loop, `existing.state.isPreview !== tab.isPreview` → the flag is updated in place.
 
-**Detection:**
+**Treatment:** this is intentionally silent — it does NOT set `hasChanges`/`structuralChange` and triggers no `postMessage` at all, because `isPreview` isn't rendered anywhere in the current UI. The bay's id is unaffected (it isn't derived from `isPreview`), so it's a pure no-op from the webview's perspective.
+
+### 3. Markdown Preview Tabs Are Variants
+
+There is no `PreviewService`/`isPreviewOwner` in this codebase. A Markdown preview tab (`TabInputWebview` whose `viewType` includes `markdown.preview`) is converted to its own Bay — a **variant** with `diffType: 'preview'` — exactly like a diff or snapshot:
+
 ```typescript
-if (existing.state.isPreview && !tab.isPreview) {
-  Logger.log('[TabSync] Preview became permanent: ' + existing.metadata.label);
-}
+// convertToBay(), for tabType === 'webview' && viewType?.includes('markdown.preview')
+diffType = 'preview';
+const previewSource = findPreviewSource(VSTab);   // match by filename suffix of the label
+parentId = previewSource?.id;                     // e.g. "file:///readme.md-1"
 ```
 
-**Treatment:**
-- Update `bay.state.isPreview = false`
-- Do NOT remove or recreate Bay (ID remains)
-- `removeOrphanedTabs()` should NOT remove (native tab exists)
+`findPreviewSource()` matches the preview's label ("Preview readme.md", "Vista previa readme.md", …) against open `.md`/`.mdx`/`.markdown` text tabs by checking the label ends with `' ' + fileName` — preferring a match in the preview's own group, falling back to a single unambiguous match across all groups. If no source matches, `sourceBayId` stays `undefined` and the preview renders as a top-level orphan bay rather than being dropped.
 
-### 3. Markdown Preview Active Tab
-
-**Problem:** When preview is active, source file appears inactive in UI.
-
-**PreviewService strategy:**
-```typescript
-// activePreview = tab with viewType === 'markdown.preview'
-const sourceFileName = activePreview.label.replace('Preview ', '');
-const sourceTab = group.tabs.find(t => t.uri.path.endsWith(sourceFileName));
-const sourceBay = stateService.fetchBayById(sourceTab.id);
-
-// Mark source as "owner" of the preview
-sourceBay.state.isPreviewOwner = true;
-
-// CSS in UI shows sourceBay as active
-```
-
-**Invariant:** Only 1 Bay can have `isPreviewOwner: true` globally.
+Preview variants bypass `BayHeadService` entirely (no `uri` to auto-open) and are exempted from `removeBay()`'s cascade-delete-children behavior — closing the source `.md` does not close the live preview tab in VS Code, so the preview bay is deliberately left in state (rendered as an orphan) rather than removed alongside its parent.
 
 ### 4. Same File in Multiple Groups
 
@@ -395,116 +326,70 @@ Group 1: "file:///c:/src/file.ts-1"
 Group 2: "file:///c:/src/file.ts-2"
 ```
 
-**Independent Bays:**
-- Different `groupId`
-- Can have different `isDirty`, `isPinned`, `cursorLine`
-- Shared git status (same URI)
-- Shared icons (BayIconManager cache)
+**Independent Bays:** different `groupId`/`viewColumn`; can have different `isDirty`, `isPinned`, `cursorLine`. Git status and diagnostics are per-URI, not per-group — `BaySyncService.updateTabDiagnostics()` and rename/delete handling use `stateService.findBaysByUri(uri)` (plural) specifically so every group's copy gets refreshed together, not just the first match.
 
-**NO collision** - ID includes `viewColumn`.
+**No collision** — the id includes `viewColumn`.
 
-### 5. Diff with Volatile Query Params
+### 5. Diff/Variant IDs Are Fully Deterministic (No Cache)
 
-**Problem:** Git diffs have query params that change (`?ref=~12345` timestamp).
+There is no query-param-collapsing cache in this codebase (see "ID Generation" above). `generateVariantId(modifiedUri, originalUri, viewColumn)` embeds the *full* `modifiedUri.toString()` — including any query string VS Code attaches (e.g. a git ref) — directly into the id. This works because `vscode.Tab.input` doesn't mutate while a tab stays open: the same open diff tab always yields the same `modifiedUri.toString()` on every recomputation (`convertToBay` on open, `generateIdFromNativeTab` on close/active-sync), so the id is stable for that tab's lifetime without needing to remember anything across calls. A brand-new diff tab (even of the same file) simply gets its own id from its own concrete URI — there is no attempt to collapse "the same logical diff" across separate tab instances.
 
-**Observed scheme:**
-```
-git://file.ts?ref=~1234567890  → working-tree diff
-git://file.ts?ref=~9876543210  → same diff, different timestamp
-```
-
-**Solution (URI cache):**
-```typescript
-const canonicalUri = uri.with({ query: '' });  // Remove query
-const baseId = uriCache.get(canonicalUri);
-
-if (baseId) {
-  return baseId + '-' + viewColumn;  // Reuse base ID
-} else {
-  const newId = uri.toString() + '-' + viewColumn;
-  uriCache.set(canonicalUri, newId.split('-')[0]);
-  return newId;
-}
-```
-
-**Result:** Multiple instances of the "same" diff collapse into one Bay.
-
-### 6. Webview Tab (Settings/Extensions)
+### 6. Webview Tab (Settings/Extensions/Claude Code)
 
 **Characteristics:**
 ```typescript
 input: TabInputWebview
-  viewType: "settings" | "workbench.extension.config" | ...
-  uri: undefined  // ⚠️ NO URI
+  viewType: "settings" | "workbench.extension.config" | "mainThreadWebview-claudeVSCodePanel" | ...
+  uri: undefined  // no URI
 ```
 
-**Conversion:**
-```typescript
-extractFromWebview() {
-  return {
-    label: tab.label,           // "Settings"
-    bayType: 'webview',
-    viewType: input.viewType,   // "settings"
-    uri: undefined,             // ⚠️ CRITICAL
-    fileExtension: '',
-  };
-}
-```
+**Conversion (`extractTabInputData`):** `bayType: 'webview'`, `uri: undefined`, `viewType: input.viewType`, `fileType: ''`.
 
-**Generated ID:**
-```typescript
-id = 'webview:' + label.replace(/\s+/g, '-').toLowerCase() + '-' + viewColumn
-// Ex: "webview:settings-1"
-```
+**Generated ID:** `` `webview:${sanitizedViewTypeOrLabel}-${viewColumn}` `` — keyed off `viewType` (falls back to `label` only if `viewType` is empty), specifically so a runtime label rewrite (Claude Code shows the current session name) doesn't change the id and orphan the bay.
 
-**Restricted capabilities:**
-- `canPin: false` (no URI)
-- `canSplit: false`
-- `canReveal: false`
-- `canHaveChildren: false`
+**Restricted capabilities** (`BayCapabilities` has exactly 5 fields total): a uri-less webview bay computes `canPin: false`, `canRevealInExplorer: false`, `canHaveChildren: false`; `canClose`/`canTogglePreview` still apply normally. There is no `canSplit`/`canReveal` field on `BayCapabilities` — other action gating (split, reveal, etc.) is computed on demand from `metadata.uri` presence in `models/actions/*`, not stored as a capability flag.
 
 ### 7. Cursor Position Tracking
 
-**Listener:**
+**Listener (only active when `bays.syncCursorPosition` is enabled — default `false`, flag cached and refreshed only on config change to keep the hot path cheap):**
 ```typescript
 vscode.window.onDidChangeTextEditorSelection(e => {
-  const uri = e.textEditor.document.uri;
-  const cursor = e.selections[0].active;  // Position
-  
-  const bay = stateService.findTabByUri(uri, e.textEditor.viewColumn);
-  if (bay) {
-    bay.state.cursorLine = cursor.line + 1;    // 1-indexed
-    bay.state.cursorColumn = cursor.character + 1;
-    stateService.updateTabSilent(bay);  // No rebuild
-  }
+  if (!syncCursorEnabled) { return; }
+  const bay = stateService.findBayByUri(e.textEditor.document.uri);
+  if (!bay || !e.selections[0]) { return; }
+  const { line, character } = e.selections[0].active;
+  hierarchyService.syncCursorPosition(bay.metadata.id, line + 1, character + 1);  // 1-indexed
 });
 ```
-
-**Debouncing:** NOT implemented (VS Code already debounces internally).
+`syncCursorPosition()` (in `BayCursorSyncUtils.ts`) mutates `cursorLine`/`cursorColumn` on the changed bay and on its whole parent+variants family, and nudges the actual editor cursor of any other open sibling editors (`updateEditorCursor`) — it does NOT fire any state-change event. Cursor position is backend bookkeeping only; nothing in the current renderer reads it into the DOM, so no `postMessage`/rebuild is triggered by a cursor move.
 
 ### 8. Diagnostics Sync
 
-**Problem:** Diagnostics change independently of tab events.
-
-**Listener:**
+**Listener** (registered by `BaySyncService.activate()`, not `BayEventService`):
 ```typescript
 vscode.languages.onDidChangeDiagnostics(e => {
-  for (const uri of e.uris) {
-    const bay = stateService.findTabByUri(uri);
-    if (bay) {
-      const oldSeverity = bay.state.diagnosticSeverity;
-      const newSeverity = getDiagnosticSeverity(uri);
-      
-      if (oldSeverity !== newSeverity) {
-        bay.state.diagnosticSeverity = newSeverity;
-        stateService.updateTabStateWithAnimation(bay);  // Trigger badge animation
-      }
-    }
-  }
+  for (const uri of e.uris) { this.updateTabDiagnostics(uri); }
 });
 ```
+```typescript
+private updateTabDiagnostics(uri: vscode.Uri): void {
+  const bays = this.stateService.findBaysByUri(uri);   // ALL groups sharing this file
+  const newSeverity = getDiagnosticSeverity(uri);
+  const newGitStatus = this.gitSyncService.getGitStatus(uri);
+  for (const bay of bays) {
+    if (bay.state.diagnosticSeverity !== newSeverity || bay.state.gitStatus !== newGitStatus) {
+      bay.state.diagnosticSeverity = newSeverity;
+      bay.state.gitStatus = newGitStatus;
+      this.stateService.updateBayStateWithAnimation(bay);   // fires onDidChangeBayState only
+    }
+  }
+}
+```
+`updateBayStateWithAnimation()` fires `onDidChangeBayState(bayId)` → `provider.notifyBayStateChanged()` posts `{type:'bayStateChanged', bayId, stateClass, stateHtml}` — a single-bay `postMessage` patch, never a full rebuild.
 
-**updateTabStateWithAnimation():** Fires `onDidChangeTabState` event for animation, NOT rebuild.
+### 9. Claude Code Chat Tabs Are Excluded From Generic Label Refresh
+
+The generic webview-label-changed branch in `handleTabChanges` (`existing.metadata.bayType === 'webview' && existing.metadata.label !== tab.label`) explicitly adds `&& !ClaudeConversationService.isClaudeConversationBay(existing)`. VS Code only ever exposes Claude Code's *truncated* tab label (`aiTitle.slice(0, 24) + "…"`); `ClaudeConversationService` separately reads the full, untruncated title straight from Claude's own JSONL transcripts and calls `stateService.notifyBayLabelChange()` itself. Without this exclusion, the generic path would immediately overwrite that full title with VS Code's 24-character truncation on the very next tab-changed event — the two label sources would fight indefinitely. See `src/services/integration/ClaudeConversationService.ts`.
 
 ---
 
@@ -523,23 +408,17 @@ Input (vscode.Tab):
   group.viewColumn: 1
 
 Processing:
-  1. extractFromText() → RawTabData
-     bayType: 'file'
-     uri: "file:///c:/src/extension.ts"
-     label: "extension.ts"
-  
+  1. extractTabInputData() → { uri, label: "extension.ts", tabType: 'file' }
   2. convertToBay() → Bay
      metadata.id: "file:///c:/src/extension.ts-1"
-     metadata.parentId: undefined
-     state.groupId: 1
+     metadata.sourceBayId: undefined
+     state.groupId / viewColumn: 1
      state.isActive: true
-  
-  3. stateService.addBay(bay)
-  
-  4. _onDidChangeState.fire()
+  3. stateService.addBay(bay)     → fires onDidChangeState
+  4. handleTabChanges: hasChanges = structuralChange = true → stateService.notifyChange()
 
 Result:
-  Bay created, providers receive event, UI renders new row
+  Bay created, provider.refresh() rebuilds the webview HTML, new row renders.
 ```
 
 ### Example 2: Variant Opened (Working Tree Diff)
@@ -548,127 +427,99 @@ Result:
 Input (vscode.Tab):
   input: TabInputTextDiff
     original: "file:///c:/src/file.ts"
-    modified: "git:///c:/src/file.ts?ref=~1234"
+    modified: "git:///c:/src/file.ts?ref=~"
   label: "file.ts (Working Tree)"
   group.viewColumn: 1
 
 Processing:
-  1. extractFromDiff() → RawTabData
-     bayType: 'diff'
-     uri: "git:///c:/src/file.ts?ref=~1234"
-     originalUri: "file:///c:/src/file.ts"
-  
-  2. classifyDiffType(scheme: 'git', query: 'ref=~1234')
-     → diffType: 'working-tree'
-  
-  3. determineParentId(modifiedUri, label)
-     → parentId: "file:///c:/src/file.ts-1"
-  
-  4. stateService.fetchBayById(parentId) → undefined
-  
-  5. parentService.ensureParentExists()
-     → createParentPlaceholder()
-        metadata.id: "file:///c:/src/file.ts-1"
-        metadata.label: "file.ts"
-        state.isLoading: true
-     → stateService.addBay(placeholder)
-  
+  1. classifyDiffType("file.ts (Working Tree)", ...) → label includes "working tree" → 'working-tree'
+  2. resolveSourceUri(modifiedUri) → "file:///c:/src/file.ts" (git: scheme stripped)
+  3. determineParentId() → sourceBayId = "file:///c:/src/file.ts-1"
+  4. id = generateVariantId(modifiedUri, originalUri, 1)
+       = "diff:git:///c:/src/file.ts?ref=~::file:///c:/src/file.ts-1"
+  5. bayHeadService.ensureParentExists(): parent not in state, not in group.tabs
+     → openTextDocument(file:///c:/src/file.ts) + showTextDocument(preserveFocus:true)
+     → parent bay appears in state via the nested onDidChangeTabs event
   6. stateService.addBay(variant)
-  
-  7. hierarchyService.registerChild(variant.id, parentId)
-     → placeholder.state.hasChildren = true
-     → placeholder.state.childrenCount = 1
+  7. hierarchyService.linkVariantToParentBay(variant.id, parentId)
+       → parent.state.hasVariant = true, parent.state.variantCount = 1
 
 Result:
   UI shows:
-    file.ts (loading...)
+    file.ts
       └─ Working Tree (+0/-0)
 ```
 
-### Example 3: Tab Changed (Only isActive)
+### Example 3: Tab Changed (Only isDirty — patched, no rebuild)
 
 ```yaml
 Input (TabChangeEvent):
   changed: [tab]
-  tab.isActive: true (was false)
-  tab.isDirty: false (unchanged)
-  tab.isPinned: false (unchanged)
+  tab.isDirty: true (was false); isPinned/isActive unchanged
 
 Processing:
-  existing = stateService.fetchBayById(tab.id)
-  
-  onlyActive = (
-    existing.state.isDirty === tab.isDirty &&
-    existing.state.isPinned === tab.isPinned &&
-    existing.state.isActive !== tab.isActive
-  ) // → true
-  
-  existing.state.isActive = true
-  stateService.updateTabSilent(existing)
-  
-  _onDidChangeStateSilent.fire()  // NOT _onDidChangeState
+  existing = stateService.getBayById(generateIdFromNativeTab(tab))
+  existing.state.isDirty = true
+  hasChanges = true; structuralChange stays false; dirtyChangedBays = [existing]
+
+  // post-loop
+  activeStateService.syncActiveState()      // no-op here, isActive unchanged
+  stateService.updateBayStateWithAnimation(existing)   // fires onDidChangeBayState, NOT onDidChangeState
 
 Result:
-  WebviewProvider receives silent event
-  → postMessage({ command: 'updateBayState', bayId, state: { isActive: true } })
-  → webview.js updates CSS class without rebuilding HTML
+  provider.notifyBayStateChanged(bayId) posts
+    { type: 'bayStateChanged', bayId, stateClass, stateHtml }
+  webview.js swaps the `.bay-state` node in place — no HTML rebuild.
 ```
+(An active-only change follows the same "no structural change" branch but ends in `stateService.notifyActiveChange()` instead, which posts `{ type: 'updateActiveBay', activeBayIds }` — a bulk list of every currently-active bay id, not a single-bay message.)
 
-### Example 4: Orphaned Tab Cleanup
+### Example 4: Orphaned Tab Cleanup (inline, on close)
 
 ```yaml
 State Before:
-  shelves: [
-    Bay("file:///a.ts-1"),
-    Bay("file:///b.ts-1"),  // ← This was closed in VS Code
-  ]
+  bays: [ Bay("file:///a.ts-1"), Bay("file:///b.ts-1") ]
 
-VS Code Reality:
-  groups.all[0].tabs: [
-    Tab(uri: "file:///a.ts")
-  ]
+VS Code closes b.ts → event.closed = [Tab(uri: "file:///b.ts")]
 
-Processing (removeOrphanedTabs):
-  nativeIds = ["file:///a.ts-1"]
-  
-  orphans = shelves.filter(bay => !nativeIds.has(bay.id))
-  // → [Bay("file:///b.ts-1")]
-  
-  for (orphan of orphans) {
-    Logger.log("Removing orphaned: b.ts")
-    stateService.removeTab("file:///b.ts-1")
-  }
+Processing (inside handleTabChanges, NOT ActiveStateService.removeOrphanedTabs — that method has no caller):
+  id = generateIdFromNativeTab(tab)              // "file:///b.ts-1"
+  stateService.isIntentionalClose(id)            // false (user closed it directly in the tab bar)
+  stateService.getBayById(id)                    // found
+  stateService.removeBay(id)                     // removes it, fires onDidChangeState
+  hasChanges = structuralChange = true → notifyChange()
 
 State After:
-  shelves: [Bay("file:///a.ts-1")]
+  bays: [ Bay("file:///a.ts-1") ]
 ```
 
-### Example 5: Markdown Preview Active
+### Example 5: Markdown Preview Opened as Variant
 
 ```yaml
 VS Code State:
   group.tabs: [
     Tab(uri: "file:///readme.md", isActive: false),
-    Tab(viewType: "markdown.preview", label: "Preview readme.md", isActive: true)
+    Tab(viewType: "mainThreadWebview-markdown.preview", label: "Preview readme.md", isActive: true)
   ]
 
-Processing (syncPreviewOwnership):
-  activePreview = findActivePreviewTab(group)
-  // → Tab with viewType === "markdown.preview"
-  
-  sourceFileName = "readme.md"  // from label
-  
-  sourceTab = group.tabs.find(t => t.uri.path.endsWith("readme.md"))
-  // → Tab(uri: "file:///readme.md")
-  
-  sourceId = "file:///readme.md-1"
-  
-  sourceBay = stateService.fetchBayById(sourceId)
-  sourceBay.state.isPreviewOwner = true
+Processing (convertToBay, for the preview tab):
+  tabType === 'webview' && viewType.includes('markdown.preview')
+  diffType = 'preview'
+  previewSource = findPreviewSource(tab)
+    → label "Preview readme.md" ends with " readme.md"
+    → matches Tab(uri: "file:///readme.md") in the same group
+    → { id: "file:///readme.md-1", uri: "file:///readme.md" }
+  sourceBayId = "file:///readme.md-1"
+  id = `webview:mainthreadwebview-markdown-preview-1`   // NOT parent-derived — its own webview id
+
+  hierarchyService.linkVariantToParentBay(previewBay.id, sourceBayId)
+    → readme.md bay: state.hasVariant = true, state.variantCount = 1
 
 UI Result:
-  readme.md row has .preview-owner class (CSS: visually active)
-  Preview tab does NOT appear in list (filtered in BaysHtmlBuilder)
+  readme.md
+    └─ Preview readme.md
+  (No `isPreviewOwner`/"active" trick on the source row — plain variant nesting,
+   same as a diff. If readme.md is later closed, the preview bay is NOT
+   cascade-removed and is rendered as an orphan.)
 ```
 
 ### Example 6: Same File, Multiple Groups
@@ -683,16 +534,16 @@ Generated IDs:
   Group 2: "file:///app.tsx-2"
 
 State:
-  shelves: [
+  bays: [
     Bay(id: "file:///app.tsx-1", groupId: 1, isDirty: true),
     Bay(id: "file:///app.tsx-2", groupId: 2, isDirty: false)
   ]
 
 Independent State:
-  ✓ Group 1 can be dirty, Group 2 clean
-  ✓ Different cursor position in each group
-  ✓ Independent pin state
-  ✓ Git status SHARED (same URI)
+  - Group 1 can be dirty, Group 2 clean
+  - Different cursor position in each group (if bays.syncCursorPosition is on, only within its own family)
+  - Independent pin state
+  - Git status / diagnostics SHARED (findBaysByUri(uri) updates both together)
 ```
 
 ---
@@ -701,49 +552,42 @@ Independent State:
 
 **Logger patterns in services/core:**
 ```typescript
-// BaySyncService
-Logger.log('[TabSync] Opened preview tab: ' + label);
-Logger.log('[TabSync] Orphan Variant: ' + label);
-Logger.log('[TabSync] Removing orphaned tab: ' + label);
+// BayEventService
+Logger.log('[BayEvent] Parent confirmed for variant: ...');
+Logger.warn('[BayEvent] Failed to ensure parent exists for variant: ... (rendered as orphan)');
+Logger.log('[BayEvent] Rekeyed bay after rename: ...');
+Logger.log('[BayEvent] Rename touches a variant/parent — full resync');
+Logger.log('[BayEvent] Removing bay for deleted file: ...');
 
-// BayHierarchyService
-Logger.log('[TabHierarchy] Registered child: ' + childLabel + ' → ' + parentLabel);
-Logger.log('[TabHierarchy] Recalculated counts for N parents');
+// BaySyncService
+Logger.log('[BaySync] Starting full syncAll');
+Logger.log('[BaySync] Structural group change → full resync');
 
 // ActiveStateService
-Logger.log('[ActiveState] Syncing preview ownership for: ' + label);
+Logger.log('[ActiveState] Synchronized active state across all tabs');
+Logger.log('[ActiveState] Removing orphaned bay: ...');   // only if something ever calls removeOrphanedTabs()
+
+// BayHierarchyService
+Logger.log('[BayHierarchy] Registered child: ... → ... (count: N)');
+Logger.log('[BayHierarchy] Recalculated counts for N parents');
 
 // tabConverter
-Logger.warn('[TabConverter] Unknown scheme detected: ' + scheme);
+Logger.warn('[TabConverter] Unknown scheme detected: ...');
 ```
 
-**Check synchronization:**
+**Check parent-variant consistency:**
 ```typescript
-// In DevTools console of webview
-vscode.postMessage({ command: 'debugState' });
-// → Backend prints full state
-```
-
-**Check cache hits:**
-```typescript
-// Add before convertToBay()
-const cached = idCache.get(nativeTab);
-if (cached) {
-  Logger.log('[Cache] ID hit: ' + cached);
-}
-```
-
-**Check parent-child:**
-```typescript
-const parents = stateService.fetchAllBays().filter(b => b.state.hasChildren);
-Logger.log(`[Debug] Parents with children: ${JSON.stringify(
+const parents = stateService.getAllBays().filter(b => b.state.hasVariant);
+Logger.log(`[Debug] Parents with variants: ${JSON.stringify(
   parents.map(p => ({
     label: p.metadata.label,
-    childrenCount: p.state.childrenCount,
-    actualChildren: hierarchyService.getChildren(p.id).length
+    variantCount: p.state.variantCount,
+    actualVariants: hierarchyService.fetchVariants(p.metadata.id).length,
   }))
 )}`);
 ```
+
+**Check for id drift after a rename:** if a renamed file's bay stops updating git/diagnostics, confirm `handleFilesRenamed` actually rekeyed it — `rekeyBay()` logs `[BayState] Rekeyed bay ${oldId} → ${newId}` on success, or `BayEventService` logs a fallback-to-resync warning on an id collision.
 
 ---
 
@@ -753,46 +597,41 @@ Logger.log(`[Debug] Parents with children: ${JSON.stringify(
 - Generate HTML or CSS (providers/)
 - Execute VS Code commands as user (commands/)
 - Manage icons or themes (services/ui/)
-- Integrate with external APIs (services/integration/)
+- Integrate with external APIs (services/integration/) — including reading Claude's own transcripts, which belongs to `ClaudeConversationService`
 - Render UI or handle webview events (providers/)
 
 **This module MUST:**
 - Convert native tabs to Bays with complete metadata
-- Keep state consistent with VS Code at all times
-- Manage Bays lifecycle (create, update, delete)
-- Provide change events for UI to react
+- Keep state consistent with VS Code at all times (tabs, groups, renames, deletes)
+- Manage Bays lifecycle (create, update, delete, rekey)
+- Provide change events for UI to react to (`onDidChangeState`, `onDidChangeStateSilent`, `onDidChangeBayState`, `onDidChangeBayLabel`)
 - Guarantee unique and deterministic IDs
-- Clean up inconsistencies (orphans, placeholders)
-- Synchronize derived states (active, preview, diagnostics)
+- Clean up inconsistencies (orphans on close, stale groups on resync)
+- Synchronize derived states (active, hierarchy counts, diagnostics/git)
 
 ---
 
 ## PERFORMANCE CONSIDERATIONS
 
-**Caching:**
-- `idCache` (WeakMap) → O(1) lookup, automatic GC
-- `uriCache` (Map) → O(1) lookup, avoids duplicate volatile diffs
+**No id/uri caching layer:** ids are cheap to recompute from a native tab (string concatenation over already-available fields), so there is nothing to cache and nothing to invalidate — see "ID Generation" above.
 
 **Debouncing:**
-- NOT implemented in core (VS Code already does it)
-- UI debouncing in providers/ (100ms)
+- Not implemented in `services/core` itself (VS Code already coalesces rapid tab events).
+- UI-side debounce lives in `providers/BaysWebviewProvider.refresh()`: **30ms** (`TIMINGS.WEBVIEW_REFRESH_DEBOUNCE`).
 
-**Silent updates:**
-- `updateTabSilent()` → Only for `isActive` (frequent)
-- Avoids HTML rebuild (costly)
-- webview.js only updates CSS classes
+**Partial updates over full rebuilds:**
+- `notifyActiveChange()` → one bulk `updateActiveBay` postMessage for every active-flag flip, no matter how many groups changed.
+- `updateBayStateWithAnimation()` → one `bayStateChanged` postMessage per affected bay (dirty/diagnostics/git), never a rebuild.
+- `notifyBayLabelChange()` → one `updateBayLabel` postMessage per renamed webview label.
+- `updateBaySilent()` remains on `BayStateService` but is dead code — do not treat it as the live silent-update path.
 
 **Bulk loading:**
-- `replaceTabs()` uses `_isBulkLoading` flag
-- Suppresses individual events during `syncAll()`
-- Single event at the end (`_onDidChangeState.fire()`)
+- `replaceBays()` sets `_isBulkLoading = true`, calls `addBay()` per bay (each one would normally fire `onDidChangeState`) with events suppressed, then fires a single event at the end.
+- `resyncAll()` additionally preserves per-group manual drag order across the rebuild by snapshotting it (keyed by URI) before `syncAll()` and re-sorting after.
 
 **Hierarchy recalc:**
-- Called only when structure changes (parent/child added/removed)
-- NOT on every tab change
-- O(n) where n = number of parents
+- `recalculateAllCounts()` runs only after a full sync, O(n) over stored bays.
+- Per-event linking (`linkVariantToParentBay`/`detachVariantFromParentBay`) is O(1) and runs only when a variant is actually opened/closed, not on every tab change.
 
 **Git status:**
-- Queried once in `convertToBay()`
-- NO continuous polling
-- GitSyncService caches results internally
+- Read synchronously once per `convertToBay()`/`remapFileBayUri()` call and again on diagnostics/rename events — `GitSyncService` caches results internally, so this module never re-runs git plumbing itself.

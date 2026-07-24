@@ -6,12 +6,14 @@
 
 ## ¿Qué es Bays?
 
-Extensión de VS Code con **vista lateral de pestañas** mejorada: agrupa, ordena y decora tabs con integración Git y Copilot. La UI es un `WebviewViewProvider` (HTML/CSS puro) para control total de layout y hover.
+Extensión de VS Code que sustituye la barra horizontal de pestañas por una **lista vertical de "bays"** en la barra lateral: agrupa, ordena y decora los editores abiertos con integración Git, Copilot y Claude Code. La UI es un `WebviewView` (HTML/CSS puro) para control total de layout y hover. Se activa en `onStartupFinished`.
+
+El término de dominio es **"Bay"**, no "Tab".
 
 ## Requisitos
 
 - VS Code 1.85.0+
-- Node 16+ para compilación
+- Node 18+ / npm para compilación
 
 ## Arranque rápido
 
@@ -28,18 +30,21 @@ La vista aparece en la Activity Bar bajo el nombre **Bays**.
 
 ```
 src/
-├── extension.ts        # Punto de entrada: activa servicios y registra el provider
-├── models/             # Bay (modelo), BayActions, helpers, actions puras
-├── providers/          # BaysWebviewProvider: HTML/CSS + mensajería
+├── extension.ts        # Punto de entrada: construye servicios y registra el provider
+├── models/             # Bay (modelo), BayActions, BayGroup, BayHelpers, DocumentModel + actions/ puras
+├── providers/          # BaysWebviewProvider, BaysHtmlBuilder, BayContextMenu, GroupActions,
+│                       #   renderers/ (BayRow, GroupHeader, VariantRow) y html/ (Icon, Styles)
 ├── services/
-│   ├── core/           # BaySyncService (sync), BayStateService (store)
-│   ├── ui/             # BayIconManager, ThemeService, BayDragDropService
-│   └── integration/    # GitSyncService, CopilotService
-├── commands/           # Registro de comandos VS Code
-├── constants/          # FileActions, iconos, estilos, timings
-├── webview/            # JS cliente: dragdrop.js, webview.js, pathTruncation.js
-├── styles/             # CSS modular de la vista
-└── utils/              # Logger, fileFormatters, stateIndicator
+│   ├── core/           # BaySyncService, BayStateService, BayHierarchyService, DocumentManager,
+│   │                   #   bay/ (BayEventService, BayHeadService, ActiveStateService), helpers/ (tabConverter, tabClassifier)
+│   ├── ui/             # BayIconManager, ThemeService, BayDragDropService, GroupCustomizationService
+│   ├── integration/    # GitSyncService, CopilotService, ClaudeConversationService
+│   └── registry/       # FileActionRegistry
+├── commands/           # bayCommands, groupCommands, copilotCommands
+├── constants/          # commands, diffTypes, fileQuickActions/, styles, timings
+├── webview/            # JS cliente: webview.js, dragdrop.js, contextmenu.js, pathTruncation.js
+├── styles/             # CSS modular de la vista (incluye context-menu.css)
+└── utils/              # logger, builtinIcons, webviewExtensionIcons, iconMarkers, languageRegistry, pathFormatters, stateIndicator
 ```
 
 ## Solución de problemas frecuentes

@@ -48,7 +48,7 @@ bay.state.isPinned = true;  // Direct mutation OK
 stateService.notifyChange(); // Trigger UI refresh
 
 // ✅ CSS selector with escape (Bay IDs have special chars)
-document.querySelector(`.bay[data-bayid="${CSS.escape(id)}"]`);
+document.querySelector(`.bay[data-bay-id="${CSS.escape(id)}"]`);
 
 // ✅ Logger (tres métodos permitidos)
 Logger.error('[ModuleName] Failed:', error);
@@ -189,11 +189,11 @@ Follow this hierarchy when making decisions:
 For detailed patterns and implementation guides, consult the module-specific AGENT.md files:
 
 ### Core Modules
-- **`src/models/AGENT.md`** - Bay model architecture, action patterns, helpers (nativeTab, enricher, capabilities)
-- **`src/services/core/AGENT.md`** - Bay synchronization, state management, hierarchy, preview tracking
+- **`src/models/AGENT.md`** - Bay model architecture, action patterns, helpers (consolidated in `models/BayHelpers.ts`; tab conversion lives in `services/core/helpers/tabClassifier.ts` + `tabConverter.ts`)
+- **`src/services/core/AGENT.md`** - Bay synchronization, state management, hierarchy (variants)
 - **`src/providers/AGENT.md`** - WebView rendering, HTML generation, message protocol, CSP security
-- **`src/services/ui/AGENT.md`** - Icon resolution, theme detection, drag & drop logic
-- **`src/services/integration/AGENT.md`** - Git status, Copilot chat integration
+- **`src/services/ui/AGENT.md`** - Icon resolution, theme detection, drag & drop logic, group customization
+- **`src/services/integration/AGENT.md`** - Git status, Copilot chat, Claude Code title enrichment
 - **`src/commands/AGENT.md`** - Command registration patterns, resolve() pattern
 
 ### When to Read Module AGENT.md
@@ -287,23 +287,85 @@ Before completing any task, verify:
 ## Documentation
 **Always consult**: `docs/INDEX.md` → Links to all architecture, actions, implementation, and agent guides.
 
-## Core Architecture (Post-Refactoring Marzo 2026)
+## Core Architecture
 
 ### High-Level Structure
 ```
 src/
-├── models/          # Bay model, actions (close/pin/file), helpers
-├── providers/       # WebView rendering, HTML builders, renderers
+├── models/          # Bay model, actions (close/pin/file), BayGroup, BayHelpers
+├── providers/       # WebView rendering, HTML builders, renderers, GroupActions, BayContextMenu
 ├── services/
-│   ├── core/        # Sync, state, hierarchy, preview
-│   ├── ui/          # Icons, themes, drag & drop
-│   └── integration/ # Git, Copilot
-├── commands/        # Command registration
+│   ├── core/        # Sync, state, hierarchy (variants); bay/ subservices + helpers/ tab conversion
+│   ├── ui/          # Icons, themes, drag & drop, GroupCustomizationService
+│   └── integration/ # Git, Copilot, ClaudeConversationService
+├── commands/        # Command registration (incl. groupCommands)
 ├── constants/       # File actions, icons, styles
-└── webview/         # Client-side JS
+└── webview/         # Client-side JS (webview / dragdrop / contextmenu / pathTruncation)
 ```
 
 **For detailed architecture**: See module-specific AGENT.md files and `ARCHITECTURE.md`.
+
+## The Update Loop (host ↔ webview)
+
+`BayStateService` is the in-memory source of truth (`Map<id, Bay>` + groups). It fires **four**
+event channels; `BaysWebviewProvider` translates each to the webview:
+
+1. `onDidChangeState` → `refresh()` — **structural, full HTML rebuild** (sets `webview.html`). Fired by `notifyChange()` and direct mutators (`addBay`, `removeBay`, `updateBay`, `rekeyBay`, `replaceBays`, group ops, pin/unpin reorders, `clear`, `refreshGroupCustomizations`). Debounced **30ms**. `BaysHtmlBuilder.buildHtml()` returns `{html, pendingIcons}`; icon cache-misses are deferred to a post-paint `updateIcons` message.
+2. `onDidChangeStateSilent` → `refreshSilent()` posts `{type:'updateActiveBay', activeBayIds}`. Driven by `notifyActiveChange()`. (`updateBaySilent()` remains but is dead/unwired.)
+3. `onDidChangeBayState` → `notifyBayStateChanged()` posts `{type:'bayStateChanged', bayId, stateClass, stateHtml}`. Fired only by `updateBayStateWithAnimation()` (single-bay git/diagnostic change).
+4. `onDidChangeBayLabel` → `notifyBayLabelChanged()` posts `{type:'updateBayLabel', …}`. Fired by `notifyBayLabelChange()` (Claude title enrichment).
+
+Inbound webview→host messages go through a `messageHandlers` Map (17 types): `openBay`, `closeBay`,
+`closeVariant`, `pinBay`, `unpinBay`, `addToChat`, `contextMenu`, `menuAction`, `dropBay`, `fileAction`,
+`saveAll`, `reorder`, `renameGroup`, `setGroupColor`, `toggleGroupLock`, `toggleCompactMode`, `refresh`.
+Message `type` strings, payload field names, and the `data-bay-id` DOM attributes must match **exactly**
+on both sides — any mismatch silently drops the partial update and falls back to a rebuild.
+
+Renderers (`src/providers/`): `BaysHtmlBuilder` → `BayRowRenderer` (parent/standalone rows),
+`GroupHeaderRenderer` (label/color/lock + collapse twisty + rename/color/lock buttons),
+`VariantRowRenderer` (attached + orphan variants); icons via `html/IconRenderer`, CSS/CSP via `html/StylesBuilder`.
+
+## New Subsystems (branch `developer`, v0.3.6)
+
+### Claude Code / special webview tab title enrichment — `services/integration/ClaudeConversationService.ts`
+VS Code only exposes Claude's truncated tab label (`aiTitle.slice(0,24)+"…"`). The service reads the FULL
+title from Claude's JSONL transcripts at `~/.claude/projects/<workspace-slug>/<sessionId>.jsonl`, matches
+a tab by stripping the trailing `…` and `startsWith` (accepting only unambiguous single matches), and
+`enrichLabels(bays)` mutates `label`/`tooltipText`, returning changed ids → `stateService.notifyBayLabelChange(id)`.
+Detection: `static isClaudeConversationBay(bay)` — `bayType==='webview'` whose lowercased `viewType`
+contains `claudevscodepanel`. `extension.ts` runs a single-flight `enrichClaudeTitles()` on `onDidChangeState`,
+on transcript writes (debounced `fs.watch`), and at startup. `BayEventService` excludes Claude chat tabs from
+the generic webview-label refresh so the two don't fight. Icons resolve via `utils/webviewExtensionIcons.ts`
+(viewType substring `claude` → `resources/claude-logo.svg`; codicon fallbacks `sparkle` / `checklist`).
+
+### Editor-group customization — `models/BayGroup.ts`, `services/ui/GroupCustomizationService.ts`, `providers/GroupActions.ts`, `commands/groupCommands.ts`
+Each group carries `label` (`"Group N"`), optional `customLabel`, a `color: BayGroupColor` (always present,
+mapped to theme-following `--vscode-charts-*` tokens), and `isLocked`. `GROUP_COLORS = ['blue','green','yellow','orange','red','purple']`.
+Customizations persist in `context.workspaceState` (`bays.groupCustomizations`) keyed by **viewColumn** (VS Code
+exposes no stable group id). Commands `bays.renameGroup` / `bays.setGroupColor` / `bays.toggleGroupLock` delegate
+to `GroupActions` (input box / QuickPick with an "Auto" option / toggle); success → `stateService.refreshGroupCustomizations()`.
+A **locked** group emits no close items and hides the per-bay X.
+
+### View Options toolbar (view/title) — `package.json`
+`view/title` shows `bays.saveAll` at `navigation@1` (`when: bays.hasUnsavedBays`) plus a `bays.viewOptions`
+submenu (label "View Options", icon `$(settings)`) at `navigation@2`, whose items are `bays.toggleCompactMode`
+and `bays.toggleShowPath` (both flip a Global setting). `bays.saveAll` → `workspace.saveAll(false)`.
+
+### File rename / move / delete sync — `BayEventService` + `tabConverter.remapFileBayUri`
+`onDidRenameFiles` / `onDidDeleteFiles` keep open bays consistent. Rename/move finds affected bays via
+`isSameOrUnder` and, unless a variant/parent-with-variants is involved (→ full `resyncAll()`), deterministically
+rebuilds each bay with `remapFileBayUri()` (new id `${newUri}-${viewColumn}`, re-derived label/pathParts/tooltip,
+fresh git + diagnostics — never reads the native tab) then `stateService.rekeyBay(oldId, fresh)`. Delete purges
+top-level file bays with no live native tab. Group structural changes (splits renumber viewColumns) → `resyncAll()`.
+
+### Custom context menu — `providers/BayContextMenu.ts` + `src/webview/contextmenu.js`
+Right-click `.bay` → webview posts `{type:'contextMenu', bayId, x, y}`; host `handleContextMenu()` builds
+`MenuItem[]` and posts `{type:'showContextMenu', bayId, x, y, items}`; `BaysContextMenu.show()` renders and
+posts `{type:'menuAction', bayId, actionId}` back → `contextMenu.execute(actionId, bay)`. `contextmenu.js` is a
+hand-built replica of the native monaco menu (needed because a QuickPick renders centered-top, not at the cursor):
+nested submenus, viewport-aware placement, keyboard nav + typeahead, group-leader icon rule, overlay dismiss.
+`build(bay)` is conditional — locked group hides close items; only bays with a `uri` get reveal/copy/compare/split
+items; `uri` + copilot available adds "Add to Copilot Chat".
 
 ## Development Philosophy
 
@@ -385,45 +447,42 @@ npm run watch-tests   # Watch mode for tests
 ## Settings & Configuration
 
 ### All Available Settings
+
+Exactly **five** settings are contributed in `package.json`. (Earlier docs listed
+`bays.tabHeight` / `bays.iconSize` / `bays.enableStateIndicators` / `bays.showStateIcons` —
+none of those exist. Do not document them.)
+
 ```typescript
 // User-configurable settings (package.json contributes.configuration)
 
 bays.showFilePath: boolean
-  // Show relative file path as description
+  // Relative path line under each bay
   // Default: true
 
 bays.compactMode: boolean
-  // Single-line tabs with 28px height
+  // Single-line, reduced-height tabs (28px)
   // Default: false
 
-bays.iconSize: number
-  // File icon size in pixels
-  // Default: 16
-
 bays.enableHoverActions: boolean
-  // Show pin/chat/close buttons on hover
-  // Default: true
-
-bays.showStateIcons: boolean
-  // Show pinned/modified/Copilot badges
+  // Show file / copilot / close buttons on hover
   // Default: true
 
 bays.enableDragDrop: boolean
-  // Enable drag & drop reordering
+  // Enable drag & drop reordering (within and across groups)
   // Default: true
 
 bays.syncCursorPosition: boolean
-  // Sync cursor between parent and variants
-  // Default: false (experimental)
+  // Sync cursor line/col between a bay and its variants
+  // Default: false
 ```
 
 ### Reading Settings in Code
 ```typescript
 const config = vscode.workspace.getConfiguration('bays');
 const showPath = config.get<boolean>('showFilePath', true);
-const iconSize = config.get<number>('iconSize', 16);
+const hoverActions = config.get<boolean>('enableHoverActions', true);
 
-// Listen for changes
+// Listen for changes (the extension refreshes on affectsConfiguration('bays'))
 vscode.workspace.onDidChangeConfiguration(e => {
   if (e.affectsConfiguration('bays.compactMode')) {
     // Refresh UI
@@ -488,9 +547,11 @@ type BayMetadata = {
   label: string;
   uri?: vscode.Uri;        // undefined for webviews
   bayType: BayType;        // 'file' | 'webview' | 'custom' | 'notebook'
-  diffType?: DiffType;     // Only for variants
-  parentId?: string;       // Only for variants
-  fileName?: string;
+  diffType?: DiffType;     // Only for variants (diffs)
+  sourceBayId?: string;    // Only for variants → id of the parent bay
+  sourceUri?: vscode.Uri;  // Parent's real file uri (git/diff/timeline normalized to file://)
+  originalUri?: vscode.Uri;// Left side of a diff
+  viewType?: string;       // Stable webview/custom viewType
   viewColumn: vscode.ViewColumn;
   // ... see models/AGENT.md for full definition
 };
@@ -499,9 +560,21 @@ type BayState = {
   isActive: boolean;
   isDirty: boolean;
   isPinned: boolean;
-  hasChildren: boolean;
-  capabilities: BayCapabilities;
+  hasVariant: boolean;
+  isVariant: boolean;
+  variantCount: number;
+  capabilities: BayCapabilities;   // exactly 5 fields (see below)
   // ... see models/AGENT.md for full definition
+};
+
+// BayCapabilities is exactly these 5 flags. Everything else is computed
+// on-demand inside the action functions, NOT stored on state.
+type BayCapabilities = {
+  canClose: boolean;
+  canPin: boolean;
+  canRevealInExplorer: boolean;
+  canTogglePreview: boolean;
+  canHaveChildren: boolean;
 };
 ```
 
@@ -520,74 +593,82 @@ fs.readFileSync(uri.fsPath);
 ```typescript
 type BayType = 'file' | 'webview' | 'custom' | 'notebook';
 
-// TabInputText | TabInputTextDiff → 'file'
+// TabInputText → 'file'
+// TabInputTextDiff → 'file' + diffType + sourceBayId (a variant, NOT a separate type)
 // TabInputWebview → 'webview' (uri: undefined)
 // TabInputCustom → 'custom'
 // TabInputNotebook → 'notebook'
 
-// DiffType for Variants (Bays with parentId)
-type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'compare' | 'unknown';
+// DiffType for Variants (Bays with sourceBayId). Diffs are bayType 'file'.
+type DiffType =
+  | 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit'
+  | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current'
+  | 'preview' | 'unknown';
 ```
 
-### Bay Identification System
+### Bay Identification System (`services/core/helpers/tabConverter.ts`)
 ```typescript
 // With URI (file, custom, notebook)
 id = uri.toString() + '-' + viewColumn
 // Example: "file:///c:/project/src/extension.ts-1"
 
-// Without URI (webview)
-id = 'webview:' + sanitizedLabel + '-' + viewColumn
-// Example: "webview:settings-1"
+// Without URI (webview) — keyed off the STABLE viewType (falls back to label),
+// so runtime title rewrites (e.g. Claude Code) don't orphan the bay.
+const key = (viewType || label).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+id = `${bayType}:${key}-${viewColumn}`;
+// Example: "webview:mainthreadwebview-claudevscodepanel-1"
 
-// Variants (diffs) - same pattern, but have parentId defined
+// Variants (diffs) - "diff:${modifiedUri}::${original}-${viewColumn}", sourceBayId points at the parent
 ```
 
 **For detailed Bay patterns**: See `src/models/AGENT.md`
 
 ## Available Commands
 
-Key commands (see `src/commands/` for full list):
-- **View**: `bays.refresh`, `bays.toggleCompactMode`, `bays.saveAll`
-- **Bay Actions**: `bays.openTab`, `bays.closeTab`, `bays.closeOthers`, `bays.closeAll`
-- **State**: `bays.pinTab`, `bays.unpinTab`
-- **Navigation**: `bays.splitRight`, `bays.revealInFileExplorer`
-- **File Ops**: `bays.duplicateFile`, `bays.copyPath`, `bays.compareWithActive`
+Key commands (see `src/commands/` and `package.json` for the full list). Per-bay commands
+receive a **bay id string** and are hidden from the palette (invoked from the UI):
+- **Toolbar/global**: `bays.refresh`, `bays.saveAll`, `bays.closeAll`, `bays.toggleCompactMode`, `bays.toggleShowPath`, `bays.addMultipleToCopilotChat`
+- **Bay actions**: `bays.openBay`, `bays.closeBay`, `bays.closeOthers`, `bays.closeToRight`
+- **State**: `bays.pinBay`, `bays.unpinBay`
+- **Navigation**: `bays.splitRight`, `bays.moveToGroup`, `bays.moveToNewWindow`, `bays.revealInFileExplorer`, `bays.revealInExplorerView`
+- **File ops**: `bays.duplicateFile`, `bays.copyPath`, `bays.copyRelativePath`, `bays.copyFileContents`, `bays.compareWithActive`, `bays.openChanges`, `bays.openTimeline`
+- **Group**: `bays.closeGroup`, `bays.renameGroup`, `bays.setGroupColor`, `bays.toggleGroupLock`
 - **Copilot**: `bays.addToCopilotChat`, `bays.addMultipleToCopilotChat`
 
 ## Context Keys
 
 Used in package.json "when" clauses:
 - `view == bays` - Current view is Bays
-- `bays.hasDirty` - At least one bay has unsaved changes
-- `bays.copilotAvailable` - Copilot extension installed
+- `bays.hasUnsavedBays` - At least one native tab has unsaved changes (gates the toolbar Save All)
+- `bays.copilotAvailable` - Copilot extension installed (gates copilot menu items)
 
 ## Critical Rules
 
 1. **Never create fake URIs** for webview tabs → causes `[UriError]`
 2. **All 4 tab input types** must be handled (file, webview, custom, notebook)
-3. **Variants are NOT a separate type** - they're Bays with `parentId` defined
+3. **Variants are NOT a separate type** - they're `bayType:'file'` bays with `sourceBayId` + `diffType` set
 4. **Icons are base64** data URIs in HTML (not ThemeIcon)
 5. **Commands receive Bay ID strings** (not Bay instances)
 6. **Use `fs/promises`** for all file I/O (never `fs.readFileSync`)
 7. **Logger ONLY for errors/warnings** - no info/debug (see Logger Policy)
-8. **Debounced refreshes** (don't add extra setTimeout - already handled)
+8. **Debounced refreshes** (30ms; don't add extra setTimeout - already handled)
 9. **File-only actions** check `if (bay.metadata.uri)` before executing
-10. **`setFocus` defaults to `false`** (explicit `true` for navigation/preview)
+10. **`setFocus` defaults to `false`** (explicit `true` for navigation)
 11. **VS Code ≥ 1.85.0** required
 12. **BayCapabilities has only 5 fields** - other capabilities computed on-demand
-13. **ID uniqueness**: URI + viewColumn for files, webview: + label + viewColumn
+13. **ID uniqueness**: `${uri}-${viewColumn}` for files, `${bayType}:${key}-${viewColumn}` for webviews
 14. **CSS.escape()** required for Bay IDs in selectors (contain `://%` characters)
-15. **PreviewService handles Markdown previews** - don't manually track
+15. **Diffs/previews are variants**, not a subsystem - there is no PreviewService; do not track preview ownership
 16. **Always call `npm run compile`** after changes (watch may need restart)
 17. **Full reload (Ctrl+R)** in dev host after structural changes
 
 ## Performance Guidelines
 
-- **Icon caching**: VS Code handles caching (don't add more)
-- **Debouncing**: Webview updates are micro-debounced (don't add more)
+- **Icon caching**: cache-first; misses deferred to a post-paint `updateIcons` message (don't add more)
+- **Debouncing**: `refresh()` is debounced 30ms (don't add more setTimeout)
 - **Lazy state**: CustomActions initialized on demand
-- **Silent updates**: Use `updateBaySilent()` for active-only changes
-- **Hierarchy recalc**: Only when parent-child relationships change
+- **Silent updates**: active-only changes flow through `notifyActiveChange()` → `updateActiveBay` (never a rebuild). `updateBaySilent()` still exists but is **dead/unwired**.
+- **Hierarchy recalc**: Only when parent/variant relationships change
 
 **For detailed patterns**: See module-specific AGENT.md files
 
@@ -627,59 +708,48 @@ export * from './myActions';
 
 ### Scenario 2: Working with Variants (Diffs)
 ```typescript
-// Variants are Bays with parentId defined
+// Variants are Bays with sourceBayId defined (bayType stays 'file')
 // Check if it's a variant
-if (bay.metadata.parentId) {
-  const parent = stateService.getBay(bay.metadata.parentId);
+if (bay.metadata.sourceBayId) {
+  const parent = stateService.getBayById(bay.metadata.sourceBayId);
 }
 
 // Check if bay has variants
-if (bay.state.hasChildren) {
-  const variants = hierarchyService.getChildren(bay.id);
+if (bay.state.hasVariant) {
+  const count = bay.state.variantCount;
+  const variants = hierarchyService.fetchVariants(bay.id);
 }
 // See services/core/AGENT.md for detailed variant handling
 ```
 
-### Scenario 3: Markdown Preview Tracking
-```typescript
-// PreviewService handles this automatically
-if (bay.state.isPreviewOwner) {
-  // This Bay's content is displayed in preview
-}
-// See services/core/AGENT.md for preview tracking details
-```
-
-### Scenario 4: Handling Webview Tabs
+### Scenario 3: Handling Webview Tabs
 ```typescript
 // CRITICAL: Webview tabs have uri: undefined
 if (bay.metadata.bayType === 'webview') {
-  // NO URI available - use nativeTabHelper for activation
+  // NO URI available - activate via the native tab, keyed off viewType
 }
 // See models/AGENT.md for webview activation strategies
 ```
 
-### Scenario 5: Updating Bay State Efficiently
+### Scenario 4: Updating Bay State Efficiently
 ```typescript
-// For visual-only changes (active state)
-// Use updateBaySilent() - no HTML rebuild
-bay.state.isActive = true;
-webview.postMessage({
-  command: 'updateBayState',
-  bayId: bay.id,
-  state: { isActive: true }
-});
+// For active-state only: never rebuild the DOM.
+// notifyActiveChange() → onDidChangeStateSilent → refreshSilent()
+//   → postMessage({ type: 'updateActiveBay', activeBayIds })
+stateService.notifyActiveChange();
 
-// For structural changes (pinned, dirty, children)
-// Use updateBay() - triggers HTML rebuild
+// For a single-bay git/diagnostic change: animated partial swap.
+// updateBayStateWithAnimation() → onDidChangeBayState → notifyBayStateChanged()
+//   → postMessage({ type: 'bayStateChanged', bayId, stateClass, stateHtml })
+stateService.updateBayStateWithAnimation(bay);
+
+// For structural changes (pinned, dirty, opened/closed, variants, group changes)
+// mutate then notify → full HTML rebuild via refresh() (30ms debounce)
 bay.state.isPinned = true;
-stateService.notifyChange();  // Triggers refresh
-
-// For hierarchy changes
-hierarchyService.recalculateAllCounts();
-stateService.notifyChange();
+stateService.updateBay(bay);   // or notifyChange()
 ```
 
-### Scenario 6: Same File in Different Groups
+### Scenario 5: Same File in Different Groups
 ```typescript
 // ID system handles this automatically
 // file.ts in group 1: "file:///path/file.ts-1"
@@ -689,27 +759,27 @@ stateService.notifyChange();
 // No collision
 ```
 
-### Scenario 7: CSS Selectors with Bay IDs
+### Scenario 6: CSS Selectors with Bay IDs
 ```typescript
 // Bay IDs contain special characters: file:///c:/path-1
-// MUST use CSS.escape()
+// MUST use CSS.escape(); the DOM attribute is data-bay-id (dataset.bayId)
 
 // ❌ WRONG
-const el = document.querySelector(`.bay[data-bayid="${bayId}"]`);
+const el = document.querySelector(`.bay[data-bay-id="${bayId}"]`);
 
 // ✅ CORRECT
-const el = document.querySelector(`.bay[data-bayid="${CSS.escape(bayId)}"]`);
+const el = document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
 
 // Or use attribute contains if pattern matching
-const els = document.querySelectorAll(`.bay[data-bayid*="extension.ts"]`);
+const els = document.querySelectorAll(`.bay[data-bay-id*="extension.ts"]`);
 ```
 
-### Scenario 8: Adding Functionality
+### Scenario 7: Adding Functionality
 ```typescript
 // For new Bay actions → models/actions/
-// For helper utilities → models/helpers/
+// For shared helpers → models/BayHelpers.ts (tab conversion → services/core/helpers/)
 // For UI logic → services/ui/
-// For sync logic → services/core/
+// For sync logic → services/core/ (+ core/bay/ subservices)
 // See module-specific AGENT.md for patterns
 ```
 
@@ -762,9 +832,9 @@ Fix: Full reload (Ctrl+R), not just refresh button
 | `[UriError]` | Ensure `uri: undefined` for webview tabs |
 | Icons missing | Check `BayIconManager.buildIconMap()` logs |
 | Slow activation | Use `fs/promises`, not `fs.readFileSync` |
-| Variant not showing | Check `parentId` is set and parent exists |
-| Preview not tracking | PreviewService handles automatically |
-| Wrong Bay active | Check `syncPreviewOwnership()` for Markdown |
+| Variant not showing | Check `sourceBayId` is set and the parent bay exists |
+| Wrong Bay active | Check `ActiveStateService` recompute + `notifyActiveChange()` |
+| Claude title truncated | `ClaudeConversationService.enrichLabels()` reads the full title from `~/.claude` transcripts |
 | Hierarchy broken | Call `hierarchyService.recalculateAllCounts()` |
 | CSS not updating | Delete dist/, restart watch, recompile |
 | Tests failing | Run `npm run pretest` to compile tests |
@@ -789,9 +859,9 @@ Fix: Full reload (Ctrl+R), not just refresh button
 6. **Type safety**: No `any` without justification, use `unknown` instead
 7. **Async/await**: Always use async/await, never blocking I/O
 8. **Check services organization**:
-   - core/ → state and sync (BaySyncService, BayStateService, BayHierarchyService)
-   - ui/ → presentation (ThemeService, BayIconManager)
-   - integration/ → external APIs (CopilotService, GitSyncService)
+   - core/ → state and sync (BayStateService, BaySyncService orchestrator + `bay/` subservices, BayHierarchyService, DocumentManager)
+   - ui/ → presentation (ThemeService, BayIconManager, GroupCustomizationService, BayDragDropService)
+   - integration/ → external APIs (CopilotService, GitSyncService, ClaudeConversationService)
    - registry/ → extensibility (FileActionRegistry)
 
 ### Testing & Validation
@@ -817,11 +887,11 @@ Fix: Full reload (Ctrl+R), not just refresh button
 - Don't create fake URIs for webviews
 - Don't use `console.log` (use Logger.error/warn)
 - Don't split files unnecessarily
-- Don't add setTimeout for debouncing (already handled)
+- Don't add setTimeout for debouncing (already handled — 30ms)
 - Don't mutate metadata (only state)
-- Don't forget CSS.escape() for Bay IDs in selectors
+- Don't forget CSS.escape() for Bay IDs in selectors (attribute is `data-bay-id`)
 - Don't assume URI always exists (check bayType)
-- Don't manually track Markdown preview (PreviewService handles it)
+- Don't invent a preview subsystem — there is no PreviewService; previews/diffs are variants
 
 ## Key Mental Models
 
@@ -833,16 +903,18 @@ custom    → Has URI, custom editors
 notebook  → Has URI, Jupyter notebooks
 ```
 
-### Variants (Parent-Child)
-Variants are regular Bays with `parentId` defined. Not a separate type.
-- Same URI as parent, different label
-- Close parent → closes variants
+### Variants (Parent → Variant)
+Variants are regular `bayType:'file'` Bays with `sourceBayId` (parent id) + `diffType` defined. Not a separate type.
+- `sourceUri` normalizes the parent's real file uri; different label from the parent
+- Parent tracks `state.hasVariant` / `state.variantCount`
 - Managed by BayHierarchyService
 
-### Update Patterns
+### Update Patterns (4 host→webview channels)
 ```typescript
-updateBaySilent()  // Visual only (isActive), no HTML rebuild
-updateBay()        // Structural (isPinned, isDirty), full rebuild
+notifyActiveChange()             // onDidChangeStateSilent → updateActiveBay (active toggle, no rebuild)
+updateBayStateWithAnimation()    // onDidChangeBayState   → bayStateChanged (single-bay git/diag swap)
+notifyBayLabelChange(id)         // onDidChangeBayLabel   → updateBayLabel (Claude title enrichment)
+updateBay() / notifyChange()     // onDidChangeState      → refresh() full HTML rebuild (structural)
 ```
 
 ### Guard Pattern
@@ -869,4 +941,8 @@ If you remember nothing else, remember these:
 5. **CSS.escape() for IDs** → Bay IDs have special characters
 6. **Compile often** → `npm run compile` catches issues early
 7. **Follow patterns** → Search existing code before creating new abstractions
-8. **Variants have parentId** → They're Bays with `parentId` defined, not a separate type
+8. **Variants have sourceBayId** → `bayType:'file'` Bays with `sourceBayId` + `diffType`, not a separate type
+
+---
+
+*Bays v0.3.6 · doc last verified against branch `developer` on 2026-07-24.*

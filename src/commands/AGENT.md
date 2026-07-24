@@ -9,7 +9,7 @@ It acts as a thin layer between the VS Code Command API and the business logic i
 - Register commands in package.json as executables
 - Resolve Bay ID string → Bay instance using BayStateService
 - Delegate execution to Bay methods or services
-- Handle global commands (saveAll, closeAll, toggleCompactMode)
+- Handle global commands (saveAll, closeAll, toggleCompactMode, toggleShowPath)
 - Validate arguments before delegation
 
 **It is NOT responsible for:**
@@ -31,8 +31,8 @@ It acts as a thin layer between the VS Code Command API and the business logic i
 6. **Validation before execution** - `if (bay)` before calling methods
 7. **Zero side effects** - Commands do NOT modify state directly
 8. **Type safety in resolve** - `arg: unknown` → validate → Bay | undefined
-9. **Copilot commands separated** - copilotCommands.ts with its own register
-10. **Quick picks for selection** - moveToGroup, addMultipleToCopilotChat use UI
+9. **Copilot and group commands separated** - copilotCommands.ts and groupCommands.ts each with their own register function
+10. **Quick picks for selection** - moveToGroup, addMultipleToCopilotChat, setGroupColor use UI
 
 ---
 
@@ -42,15 +42,23 @@ It acts as a thin layer between the VS Code Command API and the business logic i
 
 ```
 bayCommands.ts (Bay-related commands)
-  ├─ openBay/closeBay/closeOthers → Bay methods
-  ├─ pinBay/unpinBay → Bay state methods
-  ├─ copyRelativePath/compareWithActive → Bay file actions
+  ├─ openBay/closeBay/closeOthers/closeToRight → Bay methods
+  ├─ pinBay/unpinBay → Bay state methods (+ stateService.reorderOnPin/Unpin)
+  ├─ copyRelativePath/copyPath/copyFileContents/compareWithActive → Bay file actions
+  ├─ openChanges/openTimeline/splitRight/moveToNewWindow/duplicateFile → Bay file actions
+  ├─ revealInExplorer/revealInExplorerView/revealInFileExplorer → Bay reveal actions
+  ├─ moveToGroup/closeGroup → Bay group actions
   ├─ saveAll/closeAll → VS Code global commands
-  └─ toggleCompactMode → Configuration changes
+  └─ toggleCompactMode/toggleShowPath → Configuration changes
 
 copilotCommands.ts (Copilot integration commands)
   ├─ addToCopilotChat → Single file attach
   └─ addMultipleToCopilotChat → Multi-select UI
+
+groupCommands.ts (editor-group customization commands)
+  ├─ renameGroup → GroupActions.rename (input box)
+  ├─ setGroupColor → GroupActions.pickColor (QuickPick)
+  └─ toggleGroupLock → GroupActions.toggleLock
 ```
 
 **Design pattern:**
@@ -64,7 +72,7 @@ copilotCommands.ts (Copilot integration commands)
 ```typescript
 const resolve = (arg: unknown) => {
   if (typeof arg === 'string') {
-    return stateService.fetchBayById(arg);
+    return stateService.getBayById(arg);
   }
   return undefined;
 };
@@ -135,8 +143,17 @@ context.subscriptions.push(
     const current = cfg.get<boolean>('compactMode', false);
     await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
   }),
+
+  // Toggle "show file path" setting — same shape as toggleCompactMode, different key
+  vscode.commands.registerCommand('bays.toggleShowPath', async () => {
+    const cfg = vscode.workspace.getConfiguration('bays');
+    const current = cfg.get<boolean>('showFilePath', true);
+    await cfg.update('showFilePath', !current, vscode.ConfigurationTarget.Global);
+  }),
 );
 ```
+
+Both are registered in `bayCommands.ts` (not a separate settings module) and both write `vscode.ConfigurationTarget.Global` — the toggle is process-wide, not per-workspace.
 
 **State commands (pin/unpin):**
 ```typescript
@@ -182,6 +199,14 @@ context.subscriptions.push(
 );
 ```
 
+`package.json` contributes a considerably broader per-bay command set than the four examples above, all
+registered the same way in `bayCommands.ts` — `resolve(arg)` then a single-line delegation to the matching
+`Bay` method (no branching, no extra validation): `bays.closeGroup`, `bays.copyPath`, `bays.openTimeline`,
+`bays.splitRight`, `bays.openChanges`, `bays.revealInFileExplorer`,
+`bays.moveToNewWindow`, `bays.duplicateFile`. These back the context-menu items built by `BayContextMenu`
+(see `src/providers/BayContextMenu.ts`) — the command module doesn't know about the menu, it just exposes
+one command id per `Bay` file action.
+
 **Command with UI (QuickPick):**
 ```typescript
 vscode.commands.registerCommand('bays.moveToGroup', async (arg: unknown) => {
@@ -223,7 +248,7 @@ vscode.commands.registerCommand('bays.moveToGroup', async (arg: unknown) => {
 vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) => {
   // ⚠️ Directly typed as string (known from webview)
   const bay = typeof bayId === 'string' 
-    ? stateService.fetchBayById(bayId) 
+    ? stateService.getBayById(bayId) 
     : undefined;
   
   if (bay) {
@@ -235,10 +260,10 @@ vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) =
 **Add multiple files with UI:**
 ```typescript
 vscode.commands.registerCommand('bays.addMultipleToCopilotChat', async () => {
-  const allBays = stateService.fetchAllBays();
+  const allBays = stateService.getAllBays();
   
   if (allBays.length === 0) {
-    vscode.window.showInformationMessage('No tabs open');
+    vscode.window.showInformationMessage('No bays open');
     return;
   }
   
@@ -246,6 +271,62 @@ vscode.commands.registerCommand('bays.addMultipleToCopilotChat', async () => {
   await copilotService.addMultipleFiles(allBays);
 });
 ```
+
+### Group commands (`groupCommands.ts`)
+
+Registered by `registerGroupCommands(context, stateService, groupActions)`, called with a `GroupActions`
+instance built in `extension.ts`. These commands exist because a workspace with a single editor group
+renders no `GroupHeaderRenderer` header at all — without a command there would be no way to rename,
+recolor or lock that group's only bay row.
+
+**Resolution is different from `resolve(arg)` in `bayCommands.ts`:** the arg is a **numeric** group id
+(not a Bay ID string), and when it's missing/invalid the command falls back to the active group instead
+of doing nothing:
+
+```typescript
+const resolve = (arg: unknown): BayGroup | undefined => {
+  if (typeof arg === 'number') { return stateService.getGroup(arg); }
+
+  const groups = stateService.getGroups();
+  return groups.find(g => g.isActive) ?? groups[0];
+};
+```
+
+**All three commands share a `run()` wrapper** that resolves the group, shows an info message if none is
+available, delegates to a `GroupActions` method, and — only if that method reports it actually changed
+something — calls `stateService.refreshGroupCustomizations()` to trigger a rebuild:
+
+```typescript
+const run = async (arg: unknown, action: (group: BayGroup) => Promise<boolean>) => {
+  const group = resolve(arg);
+  if (!group) {
+    void vscode.window.showInformationMessage('No editor group available');
+    return;
+  }
+  if (await action(group)) { stateService.refreshGroupCustomizations(); }
+};
+
+context.subscriptions.push(
+  vscode.commands.registerCommand('bays.renameGroup', (arg: unknown) =>
+    run(arg, group => groupActions.rename(group))),
+
+  vscode.commands.registerCommand('bays.setGroupColor', (arg: unknown) =>
+    run(arg, group => groupActions.pickColor(group))),
+
+  vscode.commands.registerCommand('bays.toggleGroupLock', (arg: unknown) =>
+    run(arg, group => groupActions.toggleLock(group))),
+);
+```
+
+- `bays.renameGroup` → `GroupActions.rename()` — `showInputBox` seeded with the current `customLabel`;
+  empty input restores the default `"Group N"` label; cancelling (`undefined`) is a no-op.
+- `bays.setGroupColor` → `GroupActions.pickColor()` — `showQuickPick` with an "Auto" entry (clears the
+  override, falls back to `defaultGroupColor(viewColumn)`) plus the 6 `GROUP_COLORS`.
+- `bays.toggleGroupLock` → `GroupActions.toggleLock()` — flips `isLocked`, always returns `true`.
+
+The actual persistence (`GroupCustomizationService.setLabel/setColor/setLocked`, `context.workspaceState`
+key `bays.groupCustomizations`) lives outside this module — `groupCommands.ts` only resolves the group,
+delegates, and triggers the refresh, matching the thin-wrapper pattern used everywhere else in `commands/`.
 
 ---
 
@@ -275,7 +356,7 @@ if (bay) {
 ```typescript
 const resolve = (arg: unknown) => {
   if (typeof arg === 'string') {  // Type guard
-    return stateService.fetchBayById(arg);
+    return stateService.getBayById(arg);
   }
   return undefined;  // Invalid arg type
 };
@@ -386,7 +467,7 @@ Command Execution:
   
   2. Command handler:
      const bay = resolve('file:///c:/project/src/extension.ts-1')
-     → stateService.fetchBayById('file:///c:/project/src/extension.ts-1')
+     → stateService.getBayById('file:///c:/project/src/extension.ts-1')
      → Bay instance
   
   3. Validation:
@@ -523,7 +604,7 @@ Command Execution:
   1. Command: 'bays.addMultipleToCopilotChat' (no args)
   
   2. Get all bays:
-     allBays = stateService.fetchAllBays()
+     allBays = stateService.getAllBays()
      → [bay1, bay2, bay3, ...]
   
   3. Delegation:
@@ -578,7 +659,7 @@ Command Execution:
   
   2. Resolve:
      bay = resolve('file:///deleted.ts-1')
-     → stateService.fetchBayById('file:///deleted.ts-1')
+     → stateService.getBayById('file:///deleted.ts-1')
      → undefined (bay was removed)
   
   3. Validation:
@@ -605,7 +686,7 @@ console.log('bays.openBay registered:', commands.includes('bays.openBay'));
 **Check Bay resolution:**
 ```typescript
 const bayId = 'file:///path-1';
-const bay = stateService.fetchBayById(bayId);
+const bay = stateService.getBayById(bayId);
 console.log('Bay resolved:', bay ? 'yes' : 'no');
 console.log('Bay details:', bay?.metadata.label);
 ```
@@ -637,11 +718,12 @@ await vscode.commands.executeCommand('setContext', 'bays.copilotAvailable', copi
 
 **This module MUST:**
 - Register commands in VS Code
-- Resolve Bay ID string → Bay instance
+- Resolve Bay ID string → Bay instance (`bayCommands.ts`, `copilotCommands.ts`), or numeric group id →
+  `BayGroup` with an active-group fallback (`groupCommands.ts`)
 - Validate arguments before delegation
 - Delegate to Bay methods or services
-- Handle global commands (saveAll, closeAll, config changes)
-- Show basic UI (QuickPick, InformationMessage)
+- Handle global commands (saveAll, closeAll, toggleCompactMode, toggleShowPath, config changes)
+- Show basic UI (QuickPick, InputBox, InformationMessage)
 
 ---
 

@@ -18,6 +18,7 @@ src/styles/
 ├── bay-file-states.css   # Estados de archivo (git, dirty, diagnostics)
 ├── bay-actions.css       # Botones de acción de BAYS NORMALES
 ├── variants.css          # Todo lo de VARIANTS (layout + iconos + acciones)
+├── context-menu.css      # Menú contextual propio (réplica del nativo)
 └── utilities.css         # Clases utilitarias
 ```
 
@@ -41,7 +42,7 @@ src/styles/
 ```html
 <div class="bay-block">
   <div class="bay [active] [pinned] [dirty] [compact]"
-       data-bayid="..."
+       data-bay-id="..."
        data-pinned="true|false"
        data-groupid="1">
     <span class="bay-icon">
@@ -59,7 +60,7 @@ src/styles/
   </div>
 
   <!-- Variants (si las hay) -->
-  <div class="bay variant [active] diff-working-tree" data-bayid="...">
+  <div class="bay variant [active] diff-working-tree" data-bay-id="...">
     ...
   </div>
 </div>
@@ -69,7 +70,7 @@ src/styles/
 
 ```html
 <div class="bay variant [active] [diff-working-tree|diff-staged|diff-snapshot|diff-commit|diff-edit|diff-conflict]"
-     data-bayid="...">
+     data-bay-id="...">
   <span class="bay-icon"><i class="codicon codicon-diff"></i></span>
   <div class="bay-text">
     <div class="bay-name">Working Tree</div>
@@ -86,7 +87,7 @@ src/styles/
 
 | Propiedad | Bay normal | Variant |
 |-----------|------------|---------|
-| **Altura** | 39px (29px compact) | 22px |
+| **Altura** | 39px (28px compact) | 22px |
 | **CSS class** | `.bay` | `.bay.variant` |
 | **Padding** | `0 8px` | `padding-left: 36px` |
 | **Icono (codicon)** | 16px | 12px |
@@ -133,6 +134,12 @@ src/styles/
 .bay.variant.diff-edit
 .bay.variant.diff-conflict
 ```
+
+---
+
+## Cabeceras de grupo (`group-header.css`)
+
+`GroupHeaderRenderer` emite `<div class="group-header" data-groupid data-color data-locked>` con un botón de colapso (`data-action="toggleGroup"`) y botones de rename/color/lock. El color del grupo se lee de `data-color` (blue/green/yellow/orange/red/purple) y mapea a tokens `--vscode-charts-*`, por lo que sigue el tema. Un grupo con `data-locked="true"` muestra el candado de forma persistente y oculta los cierres.
 
 ---
 

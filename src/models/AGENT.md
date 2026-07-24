@@ -57,16 +57,26 @@ Bay (class)
           ├─ customActions.ts
           └─ stateActions.ts
 
-helpers/ (pure utilities)
-  ├─ nativeTabHelper.ts (VS Code Tab API)
-  ├─ metadataEnricher.ts (enrichment)
-  └─ capabilitiesComputer.ts (capabilities + default state)
+BayHelpers.ts (single static-method class, ~280 LOC — pure utilities used by actions/)
+  ├─ native tab lookup/matching: findNativeTab(), nativeGroup(), matchesNative(),
+  │  activateByNativeTab(), focusGroup(), moveActiveEditorToGroup()
+  ├─ enrichMetadata() + categorizeFile()/categorizeNonFileTab() (enrichment)
+  ├─ computeCapabilities() / createDefaultState() / createEmptyCapabilities()
+  ├─ isMarkdownPreview() / isPreviewableFile()
+  └─ mapPreviewModeToViewMode() / mapViewModeToPreviewMode()
+
+services/core/helpers/ (native-tab → Bay conversion — NOT in models/)
+  ├─ tabConverter.ts  — convertToBay(), remapFileBayUri(), generateId(), generateVariantId(),
+  │                     generateIdFromNativeTab(), getDiagnosticSeverity(), findPreviewSource()
+  └─ tabClassifier.ts — classifyDiffType(), resolveSourceUri(), determineParentUri(), determineParentId()
 ```
 
 **Reason for the pattern:**
 - **Composition over inheritance** - BayActions is abstract, Bay implements
 - **Testable pure functions** - Each action can be tested in isolation
-- **Separation of concerns** - Specialized helpers, not a monolith
+- **Separation of concerns** - `models/` owns the data contract and per-bay actions;
+  raw-tab classification/conversion lives in `services/core/helpers/` since it needs
+  `GitSyncService` and other core-service collaborators
 - **Modularity** - Adding a new action = new file in actions/
 
 ### Action Pattern (Template)
@@ -75,7 +85,7 @@ helpers/ (pure utilities)
 // actions/myActions.ts
 import * as vscode from 'vscode';
 import type { BayMetadata, BayState } from '../Bay';
-import { findNativeTab } from '../helpers';
+import { BayHelpers } from '../BayHelpers';
 
 /**
  * Documentation comment explaining what this action does.
@@ -92,7 +102,7 @@ export async function myAction(
   }
   
   // 2. Find native tab if needed
-  const nativeTab = findNativeTab(metadata, state);
+  const nativeTab = BayHelpers.findNativeTab(metadata, state);
   if (!nativeTab) {
     throw new Error('Tab not found');
   }
@@ -141,56 +151,54 @@ async pin(): Promise<void> {
 ```
 
 **Alternatives used:**
-- `closeFn: () => Promise<void>` (closeOthers, moveToGroup)
-- `activateFn: () => Promise<void>` (pin, unpin, openTimeline)
+- `closeFn: () => Promise<void>` (moveToGroup only — closes the file bay before reopening it in the target group; webview bays skip this branch entirely since they have no URI to reopen)
+- `activateFn: () => Promise<void>` (pin, unpin, openTimeline, closeOthers)
 
-### Helpers: 3 Specialized Modules
+### Helpers: `BayHelpers.ts` (models/) + `tabConverter`/`tabClassifier` (services/core/helpers/)
 
-**1. nativeTabHelper.ts (~160 LOC)**
-- **Purpose:** Interact with VS Code native Tab API
-- **Functions:**
-  - `findNativeTab()` - Finds native tab by metadata/state
-  - `nativeGroup()` - Gets TabGroup by viewColumn
-  - `matchesNative()` - Checks if native tab matches metadata
-  - `activateByNativeTab()` - Activates tab without URI (webviews, diffs, unknown)
-  - `focusGroup()` - Focuses editor group
-  - `isMarkdownPreview()` - Detects Markdown previews
+There is no `helpers/` subfolder under `models/` — everything that used to be split across
+`nativeTabHelper.ts` / `metadataEnricher.ts` / `capabilitiesComputer.ts` now lives in a single
+static-method class, **`src/models/BayHelpers.ts`** (~280 LOC):
 
-**2. metadataEnricher.ts (~160 LOC)**
-- **Purpose:** Enrich metadata with computed properties
-- **Functions:**
-  - `enrichMetadata()` - Adds fileName, baseName, scheme, category, etc.
-  - `categorizeFile()` - Classifies files (config, test, doc, component, etc.)
-  - `categorizeNonFileTab()` - Classifies webviews/unknown tabs
-  - `mapPreviewModeToViewMode()` - Converts isPreview → viewMode
+- **Native Tab API:** `findNativeTab()`, `nativeGroup()`, `matchesNative()`, `activateByNativeTab()`,
+  `focusGroup()`, `moveActiveEditorToGroup()`, `isMarkdownPreview()`, `isPreviewableFile()`
+- **Enrichment:** `enrichMetadata()` (adds `fileName`/`baseName`/`dirPath`/`scheme`/`isRemote`/
+  `isUntitled`/`isBinary`/`category`), private `categorizeFile()`, private `categorizeNonFileTab()`
+- **Capabilities & default state:** `computeCapabilities()`, `createDefaultState()`, private
+  `createEmptyCapabilities()`
+- **View mode mapping:** `mapPreviewModeToViewMode()`, `mapViewModeToPreviewMode()`
 
-**3. capabilitiesComputer.ts (~105 LOC)**
-- **Purpose:** Compute Bay's capabilities
-- **Functions:**
-  - `computeCapabilities()` - Calculates which actions are available
-  - `createDefaultState()` - Initial state for new Bays
-  - `createEmptyCapabilities()` - Capabilities placeholder
+Converting a *native* `vscode.Tab` into a `Bay` is explicitly **not** a `models/` responsibility —
+that lives in **`src/services/core/helpers/tabConverter.ts`** (`convertToBay()`,
+`remapFileBayUri()`, `generateId()`, `generateVariantId()`, `generateIdFromNativeTab()`,
+`getDiagnosticSeverity()`, `findPreviewSource()`) and **`tabClassifier.ts`** (`classifyDiffType()`,
+`resolveSourceUri()`, `determineParentUri()`, `determineParentId()`), because that step needs
+`GitSyncService` and other `services/core/` collaborators that `models/` must not depend on.
+`tabConverter.ts` calls into `BayHelpers.enrichMetadata()` / `BayHelpers.computeCapabilities()` /
+`BayHelpers.createDefaultState()` to finish building the `Bay`.
 
 ### Metadata Enrichment Flow
 
 ```typescript
-// services/core/helpers/tabConverter.ts (initial conversion)
-const rawMetadata: BayMetadata = {
-  id: generateId(...),
-  label: tab.label,
-  uri: tab.input.uri,
+// services/core/helpers/tabConverter.ts (initial conversion — has git/diagnostics access)
+const baseMetadata: BayMetadata = {
+  id: generateId(label, uri, viewColumn, tabType, !!parentId, viewType),
+  sourceBayId: parentId,   // set for diff/snapshot/preview variants
+  uri,
   bayType: 'file',
-  fileExtension: path.extname(uri.fsPath),
-  // ... basic fields
+  fileExtension: fileType,
+  // ... basic fields extracted from the vscode.Tab
 };
 
-// models/helpers/metadataEnricher.ts (enrichment)
-const enriched = enrichMetadata(rawMetadata);
+// models/BayHelpers.ts (enrichment — pure, no VS Code services)
+const enriched = BayHelpers.enrichMetadata(baseMetadata);
 // Adds:
 //   fileName, baseName, dirPath, scheme, isRemote, isUntitled,
 //   category, isBinary, etc.
 
-// Final result: complete metadata for the Bay
+const capabilities = BayHelpers.computeCapabilities(enriched, stateWithDefaults);
+
+// Final result: complete metadata + capabilities for `new Bay(metadata, state)`
 ```
 
 ### Capabilities Computation
@@ -199,10 +207,10 @@ const enriched = enrichMetadata(rawMetadata);
 ```typescript
 type BayCapabilities = {
   canClose: boolean;         // Always true
-  canPin: boolean;           // If has URI and not diff
-  canRevealInExplorer: boolean;  // If scheme === 'file'
-  canTogglePreview: boolean;     // If .md/.svg/.html with URI
-  canHaveChildren: boolean;      // If file with URI
+  canPin: boolean;           // True unless already pinned or is a diff/variant (sourceBayId set) — no URI check, webviews CAN be pinned
+  canRevealInExplorer: boolean;  // Has a URI and scheme === 'file'
+  canTogglePreview: boolean;     // If .md/.svg/.html/.htm with URI
+  canHaveChildren: boolean;      // If bayType === 'file' with URI
 };
 ```
 
@@ -223,42 +231,42 @@ export async function unpin(...) {
 
 ### Activation Strategies (activationActions.ts)
 
-**3 strategies by BayType:**
+**2 strategies, branched on `bayType`/`sourceBayId` (not 3 — there is no BayType `'unknown'`,
+and there is no markdown-viewMode branch inside `activate()`):**
 
-**1. URI-based (file, notebook):**
+**1. Webview bays, and any variant (diff/snapshot/preview — `metadata.sourceBayId` set):**
 ```typescript
-// Preference: activateByNativeTab() if tab exists
-const nativeTab = findNativeTab(metadata, state);
-if (nativeTab && uriMatches) {
-  return await activateByNativeTab(metadata, state);
+// ALWAYS use BayHelpers.activateByNativeTab()
+if (metadata.bayType === 'webview' || metadata.sourceBayId) {
+  return await BayHelpers.activateByNativeTab(metadata, state);
 }
-
-// Fallback: showTextDocument()
-const doc = await vscode.workspace.openTextDocument(uri);
-await vscode.window.showTextDocument(doc, { viewColumn, preview: false });
-```
-
-**2. Non-URI (webview, unknown, diff):**
-```typescript
-// ALWAYS use activateByNativeTab()
-return await activateByNativeTab(metadata, state);
 
 // Internally:
 // 1. Focus group
 // 2. workbench.action.openEditorAtIndex(tabIndex)
-// 3. Fallback: specific command (known webviews)
+// 3. Fallback: keyword match against BayHelpers.WEBVIEW_COMMANDS (settings, keyboard
+//    shortcuts, welcome, release notes, interactive playground)
 ```
 
-**3. Markdown Preview Mode:**
+**2. URI-based (file, custom, notebook — anything else with a `metadata.uri`):**
 ```typescript
-if (state.viewMode === 'preview' && isMarkdownFile) {
-  await vscode.commands.executeCommand(
-    'markdown.showPreview',
-    metadata.uri
-  );
-  return;
+const nativeTab = BayHelpers.findNativeTab(metadata, state);
+
+// Preference: activate by index if a matching native tab exists — even for plain
+// files, this is used ahead of showTextDocument (more reliable, esp. with preview tabs)
+if (nativeTab && nativeTab.input instanceof vscode.TabInputText &&
+    nativeTab.input.uri.toString() === metadata.uri.toString()) {
+  return await BayHelpers.activateByNativeTab(metadata, state);
 }
+
+// Fallback: showTextDocument() — bay was closed or replaced
+const doc = await vscode.workspace.openTextDocument(metadata.uri);
+await vscode.window.showTextDocument(doc, { viewColumn: state.viewColumn, preview: false });
 ```
+
+**Markdown preview is not a mode switch inside `activate()`.** The rendered preview is a real
+*variant* bay (own row, own native tab, own `activate()` call via strategy 1 above) — see
+"Markdown Preview" under Known Special Cases.
 
 **Retry logic:**
 ```typescript
@@ -277,45 +285,49 @@ async function activateWithRetry(metadata, state, attempt) {
 }
 ```
 
-### Native Tab Matching (nativeTabHelper)
+### Native Tab Matching (`BayHelpers.matchesNative` / `BayHelpers.findNativeTab`)
 
 **Problem:** We need to find the VS Code native tab that corresponds to a Bay.
 
-**Strategies by type:**
+**Strategies by type (actual logic — order matters):**
 ```typescript
-function matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
-  // Webview: match by label (no URI available)
+static matchesNative(t: vscode.Tab, metadata: BayMetadata): boolean {
   if (t.input instanceof vscode.TabInputWebview) {
+    // Prefer the STABLE viewType — some webview panels (e.g. Claude Code) rewrite
+    // their title at runtime, so a label-only match would go stale.
+    if (metadata.viewType && t.input.viewType === metadata.viewType) { return true; }
     return t.label === metadata.label;
   }
-  
-  // Text: match by URI
-  if (t.input instanceof vscode.TabInputText) {
-    return t.input.uri.toString() === metadata.uri?.toString();
+  if (!t.input) {
+    return metadata.bayType === 'webview' && !metadata.uri && t.label === metadata.label;
   }
-  
-  // Diff: match by modified URI
   if (t.input instanceof vscode.TabInputTextDiff) {
-    return t.input.modified?.toString() === metadata.uri?.toString();
+    // Match on modified URI AND original URI so two diffs of the same file
+    // (e.g. working-tree vs a Copilot edit) don't resolve to each other.
+    if (!metadata.sourceBayId || metadata.uri?.toString() !== t.input.modified.toString()) { return false; }
+    return metadata.originalUri ? metadata.originalUri.toString() === t.input.original.toString() : true;
   }
-  
-  // Notebook: match by URI
-  if (t.input instanceof vscode.TabInputNotebook) {
-    return t.input.uri.toString() === metadata.uri?.toString();
+  // A variant can't resolve to its parent's plain-text tab (the diff's modified
+  // URI IS the file) — EXCEPT chat-editing-snapshot variants, whose own native
+  // tab is TabInputText with a distinct scheme, so the URI comparison below is
+  // already unambiguous.
+  if (metadata.sourceBayId && metadata.uri?.scheme !== 'chat-editing-snapshot-text-model') {
+    return false;
   }
-  
-  // Custom/Unknown: match by label (fallback)
-  return t.label === metadata.label;
+  const uri = metadata.uri;
+  if (!uri) { return false; }
+  if (t.input instanceof vscode.TabInputText)     { return t.input.uri.toString() === uri.toString(); }
+  if (t.input instanceof vscode.TabInputCustom)   { return t.input.uri.toString() === uri.toString(); }
+  if (t.input instanceof vscode.TabInputNotebook) { return t.input.uri.toString() === uri.toString(); }
+  return false;
 }
 ```
 
 **Search:**
 ```typescript
-export function findNativeTab(metadata: BayMetadata, state: BayState): vscode.Tab | undefined {
-  const group = nativeGroup(state.viewColumn);
-  if (!group) return undefined;
-  
-  return group.tabs.find(t => matchesNative(t, metadata));
+static findNativeTab(metadata: BayMetadata, state: BayState): vscode.Tab | undefined {
+  const group = BayHelpers.nativeGroup(state.viewColumn);
+  return group?.tabs.find(t => BayHelpers.matchesNative(t, metadata));
 }
 ```
 
@@ -323,6 +335,7 @@ export function findNativeTab(metadata: BayMetadata, state: BayState): vscode.Ta
 
 **Definition:**
 ```typescript
+// models/Bay.ts — no isEnabled predicate; gating goes through BayPermissions instead
 type CustomBayAction = {
   id: string;
   label: string;
@@ -330,13 +343,12 @@ type CustomBayAction = {
   tooltip: string;
   keybinding?: string;
   execute: (metadata: BayMetadata, state: BayState) => Promise<void>;
-  isEnabled?: (metadata: BayMetadata, state: BayState) => boolean;
 };
 ```
 
 **Usage:**
 ```typescript
-// Add custom action
+// Add custom action (addCustomAction dedupes by id — re-adding the same id replaces it)
 bay.addCustomAction({
   id: 'openInBrowser',
   label: 'Open in Browser',
@@ -346,12 +358,10 @@ bay.addCustomAction({
     if (!metadata.uri) return;
     await vscode.env.openExternal(metadata.uri);
   },
-  isEnabled: (metadata, state) => {
-    return metadata.fileExtension === '.html';
-  }
 });
 
-// Execute action
+// Execute action — blocked only if state.permissions.restrictedActions includes the id
+// (isActionRestricted(), from stateActions.ts); wraps execute() in start/finishOperation()
 await bay.executeCustomAction('openInBrowser');
 ```
 
@@ -371,7 +381,8 @@ metadata: {
 }
 
 capabilities: {
-  canPin: false,              // No URI
+  canPin: true,                // computeCapabilities doesn't check URI for canPin — true
+                                // as long as not already pinned and not a diff/variant
   canRevealInExplorer: false, // No file
   canTogglePreview: false,    // No content file
   canHaveChildren: false,     // Not file-based
@@ -380,11 +391,13 @@ capabilities: {
 
 **Activation:**
 ```typescript
-// ALWAYS by native index or specific command
+// ALWAYS by native index or specific command (BayHelpers.WEBVIEW_COMMANDS)
 const WEBVIEW_COMMANDS = {
-  'settings': 'workbench.action.openSettings2',
+  'settings': 'workbench.action.openSettings',
   'keyboard shortcuts': 'workbench.action.openGlobalKeybindings',
-  // ...
+  'welcome': 'workbench.action.showWelcomePage',
+  'release notes': 'update.showCurrentReleaseNotes',
+  'interactive playground': 'workbench.action.showInteractivePlayground',
 };
 
 // 1. Try by index
@@ -446,35 +459,25 @@ try {
 }
 ```
 
-### 4. Markdown Preview Mode Toggle
+### 4. Markdown Preview
 
-**State:**
-```typescript
-bay.state.viewMode: 'source' | 'preview'
-```
+**There is no `PreviewService` and no source↔preview toggle command.** The rendered preview is
+a real *variant* bay (`diffType: 'preview'`, `metadata.sourceBayId` pointing at the `.md` bay),
+rendered as an indented row under its parent — exactly like a diff/snapshot variant. `bay.state.viewMode`
+(`'source' | 'preview' | 'split'`) still exists on `BayState` but `activate()` never branches on it;
+each row (source file, preview variant) is just activated independently via its own native tab.
 
-**Activation by viewMode:**
-```typescript
-if (state.viewMode === 'preview' && isMarkdownFile) {
-  // Open preview view
-  await vscode.commands.executeCommand('markdown.showPreview', uri);
-} else {
-  // Open source view (normal editor)
-  await vscode.window.showTextDocument(doc, { viewColumn });
-}
-```
+**Creating the preview** goes through the file-action button system (`FileActionRegistry`), not a
+dedicated preview action on `Bay`. `src/constants/fileQuickActions/quickActions/markdown.ts`
+registers a `.md`/`.mdx`/`.markdown` quick action (`actionId: 'openMarkdownPreview'`) whose
+`execute` just runs `vscode.commands.executeCommand('markdown.showPreview', uri)` — VS Code opens
+a real preview webview tab, and the normal tab→Bay conversion in `tabConverter.ts` picks it up as
+a `'preview'`-typed variant on the next sync. `BaysHtmlBuilder` hides the "Open Preview" button
+once the parent bay already `hasVariant` with a preview, so there's no toggle-back button; closing
+the preview's native tab closes the variant row like any other bay.
 
-**Toggle:**
-```typescript
-// In WebviewProvider on fileAction:
-if (actionId === 'openMarkdownPreview') {
-  bay.state.viewMode = 'preview';
-  await previewService.showPreviewFor(bay);
-} else if (actionId === 'editMarkdownSource') {
-  bay.state.viewMode = 'source';
-  await previewService.hidePreview();
-}
-```
+**Variant inherits `viewMode` from its source** (`BayHierarchyService`, not `models/`): when a
+variant is attached to its parent, `variantBay.state.viewMode = sourceBay.state.viewMode`.
 
 ### 5. URI Scheme Variations
 
@@ -507,29 +510,42 @@ enrichMetadata() {
 }
 ```
 
-### 6. Diff Tabs (TabInputTextDiff)
+### 6. Diff Tabs (TabInputTextDiff) — NOT a separate BayType
+
+**Diffs are not `bayType: 'diff'`.** `BayType` only has 4 members (`'file' | 'webview' | 'custom' |
+'notebook'`) and a diff tab converts to a plain `bayType: 'file'` bay — it's identified as a
+variant purely by `metadata.sourceBayId` being set, with `metadata.diffType` recording which kind
+of diff it is:
 
 **Metadata:**
 ```typescript
 metadata: {
-  bayType: 'diff',
-  uri: modifiedUri,        // The one shown
-  originalUri: originalUri, // For reference
-  diffType: 'working-tree' | 'staged' | ...,
-  parentId: "file:///path/file.ts-1",  // Parent base file
+  bayType: 'file',           // NOT 'diff' — diffs are ordinary file bays
+  uri: modifiedUri,          // The one shown
+  originalUri: originalUri,  // For reference
+  diffType: 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit'
+          | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current'
+          | 'preview' | 'unknown',
+  sourceBayId: "file:///path/file.ts-1",  // Parent base-file bay id
+  sourceUri: parentFileUri,               // Parent's real file:// uri (git/timeline/snapshot
+                                           // URIs are normalized to file:// — see tabClassifier.resolveSourceUri)
 }
 
 capabilities: {
-  canPin: false,  // Diffs cannot be pinned
+  canPin: false,  // computeCapabilities: canPin = !isPinned && !sourceBayId — diffs never pin
 }
 ```
 
+**ID:** `` `diff:${modifiedUri}::${originalUri}-${viewColumn}` `` (`generateVariantId()` in
+`tabConverter.ts`) — deterministic and reconstructable purely from the native tab, so the
+open path and the later close/active-sync paths derive the same id.
+
 **Activation:**
 ```typescript
-// ALWAYS by index (not showTextDocument)
-return await activateByNativeTab(metadata, state);
+// ALWAYS by index (not showTextDocument) — same branch as webviews, keyed off sourceBayId
+return await BayHelpers.activateByNativeTab(metadata, state);
 
-// Internally uses openEditorAtIndex
+// Internally uses workbench.action.openEditorAtIndex
 ```
 
 ### 7. Same File Multiple Groups
@@ -595,15 +611,15 @@ Input (from convertToBay in services/core):
     group.viewColumn: 1
 
 Processing:
-  1. Basic metadata extraction (tabConverter)
+  1. Basic metadata extraction + id generation (services/core/helpers/tabConverter.ts)
      id: "file:///c:/src/extension.ts-1"
      label: "extension.ts"
      uri: Uri
      bayType: 'file'
      fileExtension: '.ts'
   
-  2. Metadata enrichment (metadataEnricher)
-     enrichMetadata() →
+  2. Metadata enrichment (models/BayHelpers.ts)
+     BayHelpers.enrichMetadata() →
        fileName: "extension.ts"
        baseName: "extension"
        dirPath: "c:/src"
@@ -613,16 +629,16 @@ Processing:
        isBinary: false
        category: "component"
   
-  3. Capabilities computation (capabilitiesComputer)
-     computeCapabilities() →
+  3. Capabilities computation (models/BayHelpers.ts)
+     BayHelpers.computeCapabilities() →
        canClose: true
        canPin: true
        canRevealInExplorer: true
-       canTogglePreview: false  // Not .md/.svg/.html
+       canTogglePreview: false  // Not .md/.svg/.html/.htm
        canHaveChildren: true
   
   4. State creation
-     createDefaultState() + VS Code state →
+     BayHelpers.createDefaultState() + VS Code state →
        isActive: true
        isDirty: false
        isPinned: false
@@ -630,7 +646,7 @@ Processing:
        groupId: 1
        viewColumn: 1
        viewMode: 'source'
-       hasChildren: false
+       hasVariant: false
        gitStatus: null  // Computed by GitSyncService
        diagnosticSeverity: null
        capabilities: <computed above>
@@ -646,9 +662,9 @@ User Action:
   Click pin button on "file.ts"
 
 Execution:
-  1. WebviewProvider.handleMessage({ type: 'pinTab', tabId: ... })
+  1. WebviewProvider.handleMessage({ type: 'pinBay', bayId: ... })
   
-  2. bay = stateService.fetchBayById(tabId)
+  2. bay = stateService.getBayById(bayId)
   
   3. await bay.pin()
      → BayActions.pin()
@@ -676,7 +692,8 @@ Result:
 ```yaml
 Bay:
   metadata:
-    id: "webview:settings-1"
+    id: "webview:settings-1"  # `${bayType}:${key}-${viewColumn}`, key = (viewType||label) sanitized —
+                               # NOT a hardcoded "webview:" string; here bayType happens to equal "webview"
     bayType: 'webview'
     viewType: 'settings'
     label: "Settings"
@@ -702,7 +719,7 @@ Execution (await bay.activate()):
   
   4. If step 3 fails:
      // Fallback: specific command
-     const cmd = WEBVIEW_COMMANDS['settings']  // 'workbench.action.openSettings2'
+     const cmd = WEBVIEW_COMMANDS['settings']  // 'workbench.action.openSettings'
      await vscode.commands.executeCommand(cmd)
 
 Result:
@@ -788,22 +805,20 @@ Setup:
       terminal.sendText(`node "${metadata.uri.fsPath}"`);
       terminal.show();
     },
-    isEnabled: (metadata, state) => {
-      return metadata.fileExtension === '.js' && !state.isDirty;
-    }
   })
+  // To block it conditionally, add its id to state.permissions.restrictedActions
+  // instead — CustomBayAction has no per-action isEnabled predicate.
 
 Execution:
   await bay.executeCustomAction('runScript')
   
-  1. Find action: state.customActions.find(a => a.id === 'runScript')
+  1. Find action: state.customActions?.find(a => a.id === 'runScript')
   
-  2. Check enabled: action.isEnabled(metadata, state)
-     → fileExtension === '.js' ✓
-     → !isDirty ✓
-     → true
+  2. Check restricted: isActionRestricted(state, 'runScript')
+     → state.permissions.restrictedActions?.includes('runScript') → false → not restricted
   
-  3. Execute: await action.execute(metadata, state)
+  3. Execute (wrapped in startOperation/finishOperation):
+     await action.execute(metadata, state)
      → Terminal opened
      → Command "node ..." sent
 
@@ -818,19 +833,19 @@ Result:
 **Logger patterns in models:**
 ```typescript
 // activationActions.ts
-Logger.log('[BayAction] Activating tab: ' + label + ', isPreview: ' + isPreview);
-Logger.log('[BayAction] Using native activation by index');
-Logger.log('[BayAction] Activation failed, retrying...');
+Logger.log(`[BayAction] Activating bay: ${label}, isPreview: ${isPreview}, viewMode: ${viewMode}, tabType: ${bayType}, nativeTabFound: ${!!nativeTab}, uri: ${uri}`);
+Logger.log('[BayAction] Using native activation by index for: ' + label);
+Logger.log('[BayAction] Activation failed (attempt N/M), retrying: ' + label);
 
-// nativeTabHelper.ts
-Logger.warn('[TabHelper] Native tab not found for activation: ' + label);
-Logger.error('[TabHelper] Failed to activate by index: ' + label, err);
+// BayHelpers.ts (native tab helpers)
+Logger.warn('[BayHelper] Native bay not found for activation: ' + label);
+Logger.error('[BayHelper] Failed to activate by index: ' + label, err);
 ```
 
 **Check metadata enrichment:**
 ```typescript
 const raw = { id, label, uri, bayType, fileExtension };
-const enriched = enrichMetadata(raw);
+const enriched = BayHelpers.enrichMetadata(raw);
 
 console.log('Enrichment:', {
   fileName: enriched.fileName,
@@ -842,9 +857,9 @@ console.log('Enrichment:', {
 
 **Check capabilities:**
 ```typescript
-const caps = computeCapabilities(metadata, state);
+const caps = BayHelpers.computeCapabilities(metadata, state);
 console.log('Capabilities:', {
-  canPin: caps.canPin,        // Should be true for files with URI
+  canPin: caps.canPin,        // True unless already pinned or a diff/variant (no URI check)
   canReveal: caps.canRevealInExplorer,  // Should be true for file:// scheme
   canTogglePreview: caps.canTogglePreview  // Should be true for .md
 });
@@ -852,11 +867,11 @@ console.log('Capabilities:', {
 
 **Check native tab matching:**
 ```typescript
-const group = nativeGroup(state.viewColumn);
+const group = BayHelpers.nativeGroup(state.viewColumn);
 console.log('Native tabs in group:', group?.tabs.map(t => ({
   label: t.label,
   uri: t.input instanceof vscode.TabInputText ? t.input.uri.toString() : 'no-uri',
-  matches: matchesNative(t, metadata)
+  matches: BayHelpers.matchesNative(t, metadata)
 })));
 ```
 
@@ -900,6 +915,6 @@ console.log('Native tabs in group:', group?.tabs.map(t => ({
 - Reduces memory, simplifies logic
 
 **Activation retry delay:**
-- Only 50ms (TIMINGS.ACTIVATION_RETRY_DELAY)
-- Maximum 2 attempts (TIMINGS.ACTIVATION_MAX_RETRIES)
-- Total overhead: ~100ms in edge cases (acceptable)
+- 50ms per retry (TIMINGS.ACTIVATION_RETRY_DELAY)
+- Up to 3 retries (TIMINGS.ACTIVATION_MAX_RETRIES = 3 → 4 total attempts: 1 initial + 3 retries)
+- Total overhead: ~150ms in worst-case edge cases (acceptable)

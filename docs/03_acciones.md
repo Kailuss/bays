@@ -26,14 +26,13 @@ async close(): Promise<void> {
 
 | Archivo | Acciones principales |
 |---------|---------------------|
-| `closeActions.ts` | `close`, `closeOthers`, `closeGroup`, `closeToDown` |
+| `closeActions.ts` | `close`, `closeOthers`, `closeGroup`, `closeToRight` |
 | `pinActions.ts` | `pin`, `unpin` |
 | `revealActions.ts` | `revealInExplorer`, `revealInFileExplorer`, `openTimeline` |
-| `copyActions.ts` | `copyRelativePath`, `copyAbsolutePath`, `copyContent` |
-| `fileActions.ts` | `openInTerminal`, `compareWithActive`, `duplicateFile` |
+| `copyActions.ts` | `copyRelativePath`, `copyPath`, `copyFileContents` |
+| `fileActions.ts` | `duplicateFile`, `compareWithActive`, `openChanges`, `splitRight`, `moveToNewWindow`, `moveToGroup` |
 | `activationActions.ts` | `activate` (con retry para preview tabs) |
-| `stateActions.ts` | `updateViewMode`, `addToCopilotContext` |
-| `customActions.ts` | `executeCustomAction`, `addCustomAction` |
+| `stateActions.ts` | `addToCopilotContext` |
 
 ### Reglas de las acciones
 1. **Siempre verificar `bay.metadata.uri`** antes de operaciones de archivo (webviews no tienen URI)
@@ -42,7 +41,7 @@ async close(): Promise<void> {
 
 ## Sistema de FileActions
 
-Acciones que aparecen contextualmente según el tipo de archivo. Definidas en `src/constants/fileActions/`.
+Acciones que aparecen contextualmente según el tipo de archivo. Definidas en `src/constants/fileQuickActions/` y registradas en `src/services/registry/FileActionRegistry.ts`.
 
 ```typescript
 // FileAction estática (coincide por nombre o extensión)

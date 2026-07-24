@@ -37,11 +37,12 @@ bay.state.isPinned = true;
 stateService.notifyChange(); // dispara rebuilda del HTML
 
 // ✅ CSS selector con escape (IDs tienen :, /, %)
-document.querySelector(`.bay[data-bayid="${CSS.escape(id)}"]`);
+document.querySelector(`.bay[data-bay-id="${CSS.escape(id)}"]`);
 
-// ✅ Logger — SOLO estos dos métodos
-Logger.error('[NombreModulo] Mensaje:', error);
+// ✅ Logger — Logger.log / Logger.warn / Logger.error (nunca console.log)
+Logger.log('[NombreModulo] Info');
 Logger.warn('[NombreModulo] Advertencia');
+Logger.error('[NombreModulo] Mensaje:', error);
 
 // ✅ I/O async siempre
 await vscode.workspace.fs.readFile(uri);
@@ -57,16 +58,20 @@ if (!bay.metadata.uri) return;
 | Tipos Bay, BayMetadata, BayState | `src/models/Bay.ts` |
 | Métodos de Bay (close, pin, etc.) | `src/models/BayActions.ts` |
 | Funciones puras de acciones | `src/models/actions/` |
-| Sincronización con VS Code | `src/services/core/BaySyncService.ts` |
+| Sincronización con VS Code | `src/services/core/BaySyncService.ts` + `core/bay/` |
 | Store en memoria de Bays | `src/services/core/BayStateService.ts` |
-| Relaciones parent-variant | `src/services/core/BayHierarchyService.ts` |
+| Relaciones padre-variant | `src/services/core/BayHierarchyService.ts` |
+| Conversión native tab → Bay | `src/services/core/helpers/tabConverter.ts` + `tabClassifier.ts` |
 | Iconos de archivos | `src/services/ui/BayIconManager.ts` |
 | Drag & drop | `src/services/ui/BayDragDropService.ts` |
+| Personalización de grupos | `src/services/ui/GroupCustomizationService.ts` + `providers/GroupActions.ts` |
 | Integración Git | `src/services/integration/GitSyncService.ts` |
 | Integración Copilot | `src/services/integration/CopilotService.ts` |
+| Títulos de Claude Code | `src/services/integration/ClaudeConversationService.ts` |
 | Generación HTML | `src/providers/BaysHtmlBuilder.ts` + `renderers/` |
+| Menú contextual | `src/providers/BayContextMenu.ts` + `src/webview/contextmenu.js` |
 | Mensajería webview | `src/providers/BaysWebviewProvider.ts` |
-| Comandos VS Code | `src/commands/bayCommands.ts` |
+| Comandos VS Code | `src/commands/bayCommands.ts`, `groupCommands.ts`, `copilotCommands.ts` |
 | Acciones por tipo de archivo | `src/constants/fileQuickActions/` |
 | JS cliente (webview) | `src/webview/webview.js` |
 

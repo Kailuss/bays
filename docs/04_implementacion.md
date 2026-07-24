@@ -28,15 +28,15 @@ BayActions recibe activateFn como callback (evita dependencia circular)
 
 **Regla**: `BaySyncService` es un coordinador delgado, no implementa lógica propia.
 
-## Helpers modulares en `models/`
+## Helpers de conversión en `services/core/helpers/`
 
 ```
-models/helpers/
-├── tabClassifier.ts     → Clasifica native tabs → BayType
-└── tabConverter.ts      → Convierte vscode.Tab → Bay (función pura)
-
-(Internamente en BaySyncService)
+services/core/helpers/
+├── tabClassifier.ts     → Clasifica native tabs → BayType / diffType
+└── tabConverter.ts      → Convierte vscode.Tab → Bay (función pura); también remapFileBayUri()
 ```
+
+Los helpers de modelo (enriquecimiento de metadata, capabilities, matching de native tabs) viven en `src/models/BayHelpers.ts` (un solo archivo), **no** en `models/helpers/`.
 
 `convertToBay()` es determinista: mismos inputs → mismo Bay. Excepto git status (async).
 
@@ -54,10 +54,10 @@ models/helpers/
 ```typescript
 // IDs contienen caracteres especiales (:, /, %)
 // ❌ Incorrecto en webview.js:
-document.querySelector(`.bay[data-bayid="${bayId}"]`);
+document.querySelector(`.bay[data-bay-id="${bayId}"]`);
 
 // ✅ Correcto:
-document.querySelector(`.bay[data-bayid="${CSS.escape(bayId)}"]`);
+document.querySelector(`.bay[data-bay-id="${CSS.escape(bayId)}"]`);
 ```
 
 ## Logger
@@ -74,14 +74,22 @@ Logger.warn('[NombreModulo] Advertencia');
 
 ```typescript
 // Canal completo: reconstruye HTML (estructural)
-stateService.notifyChange();      // → onDidChangeState → refresh()
+stateService.notifyChange();            // → onDidChangeState → refresh()
 
-// Canal silencioso: solo CSS (visual leve)
-stateService.notifyChangeSilent(); // → onDidChangeStateSilent → refreshSilent()
+// Canal silencioso: solo togglea .active (Bay activa)
+stateService.notifyActiveChange();      // → onDidChangeStateSilent → refreshSilent() → updateActiveBay
+
+// Cambio de estado de un Bay (git / diagnósticos)
+stateService.updateBayStateWithAnimation(bay); // → onDidChangeBayState → bayStateChanged
+
+// Cambio de solo la etiqueta (títulos Claude Code)
+stateService.notifyBayLabelChange(id);  // → onDidChangeBayLabel → updateBayLabel
 ```
 
-**Usar canal silencioso** para: cambio de tab activa, hover, cursor position.
-**Usar canal completo** para: añadir/eliminar/mover bays, pin/unpin, hasVariant.
+**Usar canal silencioso** para: cambio de Bay activa.
+**Usar canal completo** para: añadir/eliminar/mover bays, pin/unpin, cambios de grupo.
+
+> `updateBaySilent()` y `removeOrphanedTabs()` siguen en el código pero están **sin cablear** (código muerto): no los uses como referencia.
 
 ## Reglas de tamaño de archivos
 
