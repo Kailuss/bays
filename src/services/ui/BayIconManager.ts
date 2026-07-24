@@ -6,6 +6,16 @@ import * as fsp    from 'fs/promises';
 import { Logger }  from '../../utils/logger';
 import * as path   from 'path';
 import { resolveLanguageId } from '../../utils/languageRegistry';
+import { DEFAULT_FILE_ICON, buildFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
+
+/** Una fuente declarada en `fonts[]` del icon theme. */
+type ThemeFont = {
+  id     : string;
+  path   : string;   // ruta absoluta al fichero de fuente
+  format : string;   // woff2 | woff | truetype | opentype
+  weight : string;
+  style  : string;
+};
 
 /**
  * Resuelve y cachea iconos de archivo según el tema de iconos activo.
@@ -19,6 +29,8 @@ export class BayIconManager {
   private _iconThemePath     : string | undefined;
   private _iconThemeJson     : any;
   private _defaultFileIconId : string | undefined;
+  private _themeFonts        : ThemeFont[] = [];
+  private _fontFaceCss       : string | undefined;
   private _iconPathCache     : Map<string, string> = new Map();
   private _isPreloadingIcons : boolean = false;
   private _configListener    : vscode.Disposable | undefined;
@@ -151,6 +163,9 @@ export class BayIconManager {
       this._defaultFileIconId =
         typeof themeJson.file === 'string' ? themeJson.file : undefined;
 
+      this._themeFonts  = this.parseThemeFonts(themeJson, path.dirname(themePath));
+      this._fontFaceCss = undefined;   // se regenera perezosamente por tema
+
       const iconMap: Record<string, string> = {};
 
       // Mapear nombres de archivo → id de icono
@@ -188,6 +203,85 @@ export class BayIconManager {
       Logger.error('[Bays] Error building icon map:', error);
       this._iconMap = this._iconMap || {};
     }
+  }
+
+  /**
+   * Lee `fonts[]` del tema. Un tema basado en fuente (vs-seti, el tema por
+   * defecto de VS Code) define cada icono como un `fontCharacter` de esa fuente;
+   * sin declararla vía @font-face el webview pinta el codepoint crudo (cuadros).
+   * De cada fuente se toma el primer `src` con formato conocido.
+   */
+  private parseThemeFonts(themeJson: any, themeDir: string): ThemeFont[] {
+    const declared = themeJson?.fonts;
+    if (!Array.isArray(declared)) { return []; }
+
+    const fonts: ThemeFont[] = [];
+    for (const font of declared) {
+      const sources = Array.isArray(font?.src) ? font.src : [];
+      const source  = sources.find((s: any) => typeof s?.path === 'string');
+      if (!source) { continue; }
+
+      const relative = process.platform === 'win32'
+        ? String(source.path).replace(/\//g, path.sep)
+        : String(source.path);
+
+      fonts.push({
+        id     : typeof font.id === 'string' ? font.id : '',
+        path   : path.resolve(themeDir, relative),
+        format : typeof source.format === 'string' ? source.format : 'woff',
+        weight : typeof font.weight === 'string' ? font.weight : 'normal',
+        style  : typeof font.style === 'string' ? font.style : 'normal',
+      });
+    }
+    return fonts;
+  }
+
+  /** MIME apropiado para incrustar la fuente como `data:` URI. */
+  private fontMimeType(fontPath: string): string {
+    switch (path.extname(fontPath).toLowerCase()) {
+      case '.woff2' : return 'font/woff2';
+      case '.woff'  : return 'font/woff';
+      case '.ttf'   : return 'font/ttf';
+      case '.otf'   : return 'font/otf';
+      case '.eot'   : return 'application/vnd.ms-fontobject';
+      case '.svg'   : return 'image/svg+xml';
+      default       : return 'font/woff';
+    }
+  }
+
+  /**
+   * CSS `@font-face` de las fuentes del tema activo, con el fichero incrustado
+   * como `data:` URI. Se incrusta en vez de servirlo por `asWebviewUri` porque la
+   * fuente vive fuera de `localResourceRoots` (en el directorio de la extensión
+   * del tema, o dentro del propio VS Code), donde el webview no puede leerla.
+   *
+   * Cadena vacía si el tema es de tipo SVG (la mayoría) o no hay fuentes.
+   */
+  public async getFontFaceCss(): Promise<string> {
+    if (this._fontFaceCss !== undefined) { return this._fontFaceCss; }
+    if (this._themeFonts.length === 0) {
+      this._fontFaceCss = '';
+      return this._fontFaceCss;
+    }
+
+    const blocks: string[] = [];
+    for (const font of this._themeFonts) {
+      try {
+        const data = await fsp.readFile(font.path);
+        const uri  = `data:${this.fontMimeType(font.path)};base64,${data.toString('base64')}`;
+        blocks.push(
+          `@font-face{font-family:"${iconFontFamily(font.id)}";` +
+          `src:url("${uri}") format("${font.format}");` +
+          `font-weight:${font.weight};font-style:${font.style};}`
+        );
+      } catch (err) {
+        Logger.warn(`[Bays] Could not load icon theme font ${font.path}: ${err}`);
+      }
+    }
+
+    this._fontFaceCss = blocks.join('\n');
+    Logger.log(`[Bays] Icon theme fonts embedded: ${blocks.length}/${this._themeFonts.length}`);
+    return this._fontFaceCss;
   }
 
   /**
@@ -311,8 +405,10 @@ export class BayIconManager {
             if (fileIconKey) {
               iconId = fileIconKey;
             } else {
-              // Fallback final: icono de archivo genérico (font-based)
-              const fallbackIcon = 'font-icon:\\E023:#d4d7d6';
+              // Sin definición utilizable: el renderer dibuja su SVG genérico.
+              // Antes se devolvía el glyph \E023 de la fuente Seti, que fuera de
+              // ese tema (o sin @font-face) se pintaba como un cuadro vacío.
+              const fallbackIcon = DEFAULT_FILE_ICON;
               this._iconCache.set(cacheKey, fallbackIcon);
               return fallbackIcon;
             }
@@ -321,7 +417,7 @@ export class BayIconManager {
 
         if (!iconId || !themeJson.iconDefinitions) {
           // Fallback final si no hay iconId o definiciones
-          const fallbackIcon = 'font-icon:\\E023:#d4d7d6';
+          const fallbackIcon = DEFAULT_FILE_ICON;
           this._iconCache.set(cacheKey, fallbackIcon);
           return fallbackIcon;
         }
@@ -329,7 +425,7 @@ export class BayIconManager {
         const iconDef = themeJson.iconDefinitions[iconId];
         if (!iconDef) {
           // Fallback final si no se encuentra la definición del icono
-          const fallbackIcon = 'font-icon:\\E023:#d4d7d6';
+          const fallbackIcon = DEFAULT_FILE_ICON;
           this._iconCache.set(cacheKey, fallbackIcon);
           return fallbackIcon;
         }
@@ -338,15 +434,25 @@ export class BayIconManager {
         iconPath = iconDef.iconPath || iconDef.path;
 
         if (!iconPath && iconDef.fontCharacter) {
-          // Font-based theme (like vs-seti): return special marker to use font rendering
-          // The webview will handle this with CSS @font-face
-          const fontIconData = `font-icon:${iconDef.fontCharacter}:${iconDef.fontColor || '#cccccc'}`;
+          // Tema basado en fuente (vs-seti y similares). Se arrastra el fontId
+          // para que el renderer aplique la font-family correcta: un tema puede
+          // declarar varias fuentes y `fonts[0]` es la de por defecto cuando la
+          // definición no especifica ninguna.
+          const fontId = typeof iconDef.fontId === 'string'
+            ? iconDef.fontId
+            : (this._themeFonts[0]?.id ?? '');
+          const fontIconData = buildFontIconMarker(
+            iconDef.fontCharacter,
+            iconDef.fontColor || '#cccccc',
+            fontId,
+            typeof iconDef.fontSize === 'string' ? iconDef.fontSize : '',
+          );
           this._iconCache.set(cacheKey, fontIconData);
           return fontIconData;
         }
         if (!iconPath) {
           // iconDef exists but has neither fontCharacter nor iconPath — use generic file icon
-          const fallbackIcon = 'font-icon:\\E023:#d4d7d6';
+          const fallbackIcon = DEFAULT_FILE_ICON;
           this._iconCache.set(cacheKey, fallbackIcon);
           return fallbackIcon;
         }
@@ -518,6 +624,10 @@ export class BayIconManager {
     this._iconThemeJson      = undefined;
     this._iconThemePath      = undefined;
     this._defaultFileIconId  = undefined;
+    // También las fuentes: si no, al pasar a "None" o a un tema roto seguiría
+    // emitiéndose el @font-face del tema anterior.
+    this._themeFonts         = [];
+    this._fontFaceCss        = undefined;
   }
 
   /** Read an icon file from disk and return a base64 data URI. */

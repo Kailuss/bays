@@ -27,12 +27,12 @@ export class BaysHtmlBuilder {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    iconManager: BayIconManager,
+    private readonly iconManager: BayIconManager,
     context: vscode.ExtensionContext,
     private readonly fileActionRegistry?: FileActionRegistry,
     private readonly documentManager?: DocumentManager,
   ) {
-    this.iconRenderer = new IconRenderer(iconManager, context);
+    this.iconRenderer = new IconRenderer(this.iconManager, context);
     this.stylesBuilder = new StylesBuilder();
   }
 
@@ -64,7 +64,12 @@ export class BaysHtmlBuilder {
     const pendingIcons: PendingIcon[] = [];
     const baysHtml = this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode, pendingIcons);
 
-    const html = this.assembleHtml(webview, uris, nonce, baysHtml, options.initialLoad);
+    // Cadena vacía en los temas SVG (la mayoría). En los basados en fuente trae
+    // la fuente del tema incrustada; el manager la cachea, así que reconstruir
+    // el HTML no vuelve a leer el fichero de disco.
+    const fontFaceCss = await this.iconManager.getFontFaceCss();
+
+    const html = this.assembleHtml(webview, uris, nonce, baysHtml, fontFaceCss, options.initialLoad);
     return { html, pendingIcons };
   }
 
@@ -97,6 +102,7 @@ export class BaysHtmlBuilder {
     uris: WebviewResourceUris,
     nonce: string,
     baysHtml: string,
+    fontFaceCss: string,
     initialLoad = false,
   ): string {
     const csp = this.stylesBuilder.buildCSP(webview, nonce);
@@ -110,6 +116,7 @@ export class BaysHtmlBuilder {
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>${criticalCss}</style>
+${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
 <link href="${uris.codiconCss}" rel="stylesheet" />
 <link href="${uris.webviewCss}" rel="stylesheet" />
 </head>

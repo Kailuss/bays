@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { TabIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
+import { DEFAULT_FILE_ICON, parseFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
 import { Logger } from '../../utils/logger';
 import { IconData } from './types';
 
@@ -84,14 +85,22 @@ export class IconRenderer {
    * Parsea el string de icono a IconData.
    */
   private parseIconString(data: string): IconData {
-    // Marcador de icono basado en fuente: "font-icon:\E05F:#cccccc"
-    if (data.startsWith('font-icon:')) {
-      const parts = data.split(':');
-      const charStr = parts[1] || '';
-      const color = parts[2] || '#cccccc';
-      const hexCode = charStr.replace(/\\/g, '');
+    if (data === DEFAULT_FILE_ICON) {
+      return { type: 'fallback' };
+    }
 
-      return { type: 'font', hexCode, color };
+    // Marcador de icono basado en fuente: "font-icon:\E05F:#cccccc:seti:"
+    const font = parseFontIconMarker(data);
+    if (font) {
+      return {
+        type       : 'font',
+        hexCode    : font.hexCode,
+        color      : font.color,
+        // Sin fontId no hay @font-face al que apuntar: el glyph se pintaría con
+        // la fuente de la UI (un cuadro vacío). Mejor caer al SVG genérico.
+        fontFamily : font.fontId ? iconFontFamily(font.fontId) : undefined,
+        fontSize   : font.fontSize || undefined,
+      };
     }
 
     // Base64 data URI
@@ -108,8 +117,15 @@ export class IconRenderer {
    */
   private renderIconData(icon: IconData): string {
     switch (icon.type) {
-      case 'font':
-        return `<span class="seti-icon" style="color: ${icon.color}">&#x${icon.hexCode};</span>`;
+      case 'font': {
+        // Sin font-family el codepoint se pintaría con la fuente de la UI.
+        if (!icon.fontFamily) { return this.renderFallback(); }
+        // El `size` que declara el tema es relativo a SU contenedor (seti usa
+        // 150%); aquí la caja del icono es fija (16px vía .seti-icon), así que
+        // solo se aplica el fontSize de la definición concreta si lo trae.
+        const size = icon.fontSize ? `font-size: ${icon.fontSize};` : '';
+        return `<span class="seti-icon" style="font-family: '${icon.fontFamily}'; color: ${icon.color};${size}">&#x${icon.hexCode};</span>`;
+      }
 
       case 'base64':
         return `<img src="${icon.data}" alt="" />`;
@@ -119,6 +135,9 @@ export class IconRenderer {
 
       case 'svg':
         return icon.content;
+
+      case 'fallback':
+        return this.renderFallback();
 
       default:
         return this.renderFallback();

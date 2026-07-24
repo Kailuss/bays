@@ -23,8 +23,14 @@
 
 /* Note: File icons are provided by VS Code's icon theme API */
 
+/* Glyph de un icon theme basado en fuente (vs-seti y similares).
+   La `font-family` se inyecta inline por icono: depende del @font-face que
+   BaysHtmlBuilder emite para el tema activo. Peso y estilo se fijan a normal
+   para que la fuente no se sintetice en negrita/cursiva al heredar del contexto. */
 .seti-icon {
   font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
   line-height: 1;
   display: inline-block;
   vertical-align: middle;

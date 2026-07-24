@@ -8,9 +8,6 @@ import { BayGroup } from '../../models/BayGroup';
 
 //= OPCIONES DE RENDERIZADO
 
-/** Icono de archivo genérico de fallback (Seti \E023 en gris) */
-export const FALLBACK_FILE_ICON = 'font-icon:\\E023:#d4d7d6';
-
 /** Opciones para construir el HTML del webview */
 export type BuildHtmlOptions = {
   webview: vscode.Webview;
@@ -35,11 +32,20 @@ export type RenderBayOptions = {
 
 //= ICONOS
 
-/** Marcador para iconos basados en fuente (vs-seti) */
+/** Marcador para iconos basados en fuente (vs-seti y similares) */
 export type FontIconMarker = {
   type: 'font';
   hexCode: string;
   color: string;
+  /** font-family declarada por @font-face para la fuente del tema activo */
+  fontFamily?: string;
+  /** `fontSize` de la definición del tema, si la declara (p.ej. "125%") */
+  fontSize?: string;
+};
+
+/** El tema no ofrece icono utilizable: se dibuja el SVG genérico del renderer */
+export type FallbackIcon = {
+  type: 'fallback';
 };
 
 /** Icono en formato base64 */
@@ -62,7 +68,7 @@ export type SvgIcon = {
 };
 
 /** Unión de todos los tipos de icono */
-export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon;
+export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon | FallbackIcon;
 
 /** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
 export type PendingIcon = {

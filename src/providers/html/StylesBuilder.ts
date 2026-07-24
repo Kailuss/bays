@@ -1,9 +1,9 @@
 /**
- * Constructor de estilos CSS para el webview.
- * Genera CSS crítico inline y gestiona la carga de fuentes.
+ * Constructor de estilos CSS para el webview: CSS crítico inline y CSP.
  *
- * Solo genera los estilos que requieren la URI del webview (fuente seti),
- * el resto de los estilos vive en los archivos CSS estáticos en src/styles/.
+ * El resto de estilos vive en los archivos estáticos de src/styles/. El
+ * @font-face de los temas de iconos basados en fuente lo genera BayIconManager
+ * (necesita leer el fichero de fuente del tema) y lo inserta BaysHtmlBuilder.
  */
 
 import * as vscode from 'vscode';
@@ -28,7 +28,7 @@ export class StylesBuilder {
     return `
   default-src 'none';
   style-src ${webview.cspSource} 'unsafe-inline';
-  font-src ${webview.cspSource};
+  font-src ${webview.cspSource} data:;
   img-src ${webview.cspSource} data:;
   script-src 'nonce-${nonce}';
 `.trim();
