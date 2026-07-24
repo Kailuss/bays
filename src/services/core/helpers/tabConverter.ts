@@ -7,7 +7,7 @@ import type { GitSyncService                 } from '../../integration/GitSyncSe
 import { formatFilePathWithParts             } from '../../../utils/pathFormatters';
 import { resolveLanguageId                   } from '../../../utils/languageRegistry';
 import { Logger                              } from '../../../utils/logger';
-import { classifyDiffType, determineParentId } from './tabClassifier';
+import { classifyDiffType, determineParentId, determineParentUri, resolveSourceUri } from './tabClassifier';
 
 type TabInputData = {
   uri?         : vscode.Uri;
@@ -140,6 +140,7 @@ export function convertToBay(
   const viewColumn = VSTab.group.viewColumn;
 
   let parentId  : string | undefined;
+  let parentUri : vscode.Uri | undefined;
   let diffType  : import('../../../models/Bay').DiffType | undefined;
   let diffStats : import('../../../models/Bay').DiffStats | undefined;
 
@@ -149,7 +150,9 @@ export function convertToBay(
   // (p.ej. "mainThreadWebview-markdown.preview") → comparar por inclusión.
   if (tabType === 'webview' && viewType?.includes('markdown.preview')) {
     diffType = 'preview';
-    parentId = findPreviewSourceTabId(VSTab);
+    const previewSource = findPreviewSource(VSTab);
+    parentId = previewSource?.id;
+    parentUri = previewSource?.uri;
     Logger.log(`[TabConverter] Markdown preview as variant: ${label} → parent: ${parentId ?? 'none (orphan)'}`);
   }
 
@@ -167,13 +170,14 @@ export function convertToBay(
       }
     }
 
-    parentId = determineParentId(diffType, uri, viewColumn, originalUri, modifiedUri);
+    parentId  = determineParentId(diffType, uri, viewColumn, originalUri, modifiedUri);
+    parentUri = determineParentUri(diffType, uri, originalUri, modifiedUri);
   }
   else if (tabType === 'file' && uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     diffType = 'snapshot';
     // El parent es el archivo real (convertir path del snapshot a file:// URI)
-    const parentUri = vscode.Uri.file(uri.path);
-    parentId = `${parentUri.toString()}-${viewColumn}`;
+    parentUri = resolveSourceUri(uri);
+    parentId  = `${parentUri.toString()}-${viewColumn}`;
   }
 
   // Variant (diff/snapshot) bays get a DETERMINISTIC id so the close/active-sync
@@ -192,6 +196,7 @@ export function convertToBay(
   const baseMetadata: BayMetadata = {
     id,
     sourceBayId: parentId,
+    sourceUri  : parentUri,
     diffType,
     uri,
     originalUri,
@@ -370,7 +375,7 @@ export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
  * Preview to the Side) se acepta un match global solo si es inequívoco.
  * Devuelve undefined si no hay source abierta (la variante quedará huérfana).
  */
-function findPreviewSourceTabId(previewTab: vscode.Tab): string | undefined {
+function findPreviewSource(previewTab: vscode.Tab): { id: string; uri: vscode.Uri } | undefined {
   const label = previewTab.label;
 
   const matches = (tab: vscode.Tab): boolean => {
@@ -380,12 +385,14 @@ function findPreviewSourceTabId(previewTab: vscode.Tab): string | undefined {
     return label === fileName || label.endsWith(' ' + fileName);
   };
 
+  const describe = (tab: vscode.Tab) => {
+    const input = tab.input as vscode.TabInputText;
+    return { id: `${input.uri.toString()}-${tab.group.viewColumn}`, uri: input.uri };
+  };
+
   // Prefer the preview's own group
   for (const tab of previewTab.group.tabs) {
-    if (matches(tab)) {
-      const input = tab.input as vscode.TabInputText;
-      return `${input.uri.toString()}-${tab.group.viewColumn}`;
-    }
+    if (matches(tab)) { return describe(tab); }
   }
 
   // Fall back to a global match only when unambiguous
@@ -396,8 +403,7 @@ function findPreviewSourceTabId(previewTab: vscode.Tab): string | undefined {
     }
   }
   if (candidates.length === 1) {
-    const input = candidates[0].input as vscode.TabInputText;
-    return `${input.uri.toString()}-${candidates[0].group.viewColumn}`;
+    return describe(candidates[0]);
   }
   return undefined;
 }

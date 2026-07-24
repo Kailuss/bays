@@ -7,6 +7,8 @@ import type { BayMetadata, BayState, BayCapabilities, BayViewMode as BayViewMode
 //· --- CONSTANTES ---
 const MARKDOWN_PREVIEW_PREFIX = 'Preview ';
 const MARKDOWN_PREVIEW_VIEWTYPE = 'markdown.preview';
+/** Esquema de los snapshots de chat: variantes cuya tab nativa es TabInputText. */
+const SNAPSHOT_TEXT_SCHEME = 'chat-editing-snapshot-text-model';
 const PREVIEWABLE_EXTENSIONS = [
   '.md', '.mdx', '.markdown', // Markdown
   '.html', '.htm',            // HTML
@@ -103,7 +105,12 @@ export class BayHelpers {
       if (!metadata.sourceBayId || metadata.uri?.toString() !== t.input.modified.toString()) { return false; }
       return metadata.originalUri ? metadata.originalUri.toString() === t.input.original.toString() : true;
     }
-    if (metadata.sourceBayId) { return false; }
+    // Una variante NO puede resolverse a la tab de texto de su parent (la URI
+    // modificada de un diff ES el archivo). Excepción: los snapshots de chat son
+    // variantes cuya propia tab es TabInputText, con esquema propio — ahí la
+    // comparación de URIs ya es inequívoca y bloquearla dejaba la fila muerta
+    // (ni se activa ni se cierra).
+    if (metadata.sourceBayId && metadata.uri?.scheme !== SNAPSHOT_TEXT_SCHEME) { return false; }
     const uri = metadata.uri;
     if (!uri) { return false; }
     if (t.input instanceof vscode.TabInputText) { return t.input.uri.toString() === uri.toString(); }

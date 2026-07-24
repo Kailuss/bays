@@ -102,6 +102,7 @@ export type BayMetadata = {
   //: IDENTITY
   id            : string;        // Unique identifier (uri-based for file tabs, label-based for webview tabs).
   sourceBayId?  : string;        // ID of parent bay (for diff tabs that belong to a file bay).
+  sourceUri?    : vscode.Uri;    // URI of the parent's real file (diff/git/timeline URIs normalized to file://).
   bayType       : BayType;       // What kind of VS Code bay input this wraps.
   diffType?     : DiffType;      // Type of diff (for child tabs only)
   

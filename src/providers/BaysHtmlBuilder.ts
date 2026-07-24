@@ -210,7 +210,7 @@ export class BaysHtmlBuilder {
     // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
     for (const child of variantBays) {
       if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
-        const orphanHtml = this.renderOrphanVariantBay(child, showPath, copilotReady, compactMode, pendingIcons);
+        const orphanHtml = this.renderOrphanVariantBay(child);
         rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-variant="true" data-groupid="${child.state.groupId}">${orphanHtml}</div>`);
       }
     }
@@ -233,18 +233,22 @@ export class BaysHtmlBuilder {
   }
 
   /**
-   * Renders an orphan variant bay (diff whose parent file is not open).
-   * Shown with full info since there's no parent context.
+   * Renders an orphan variant bay (diff/preview whose parent is not in this list:
+   * source file closed, or living in another editor group).
+   *
+   * Sigue siendo una VARIANTE: misma fila compacta, icono y color de diff. Antes
+   * se dibujaba con `renderBay()` y quedaba idéntica a una bay normal, así que
+   * una variante recién abierta aparentaba ser un parent. Lo único que cambia es
+   * que se muestra el label nativo (incluye el archivo) y no se indenta, porque
+   * no hay parent encima del que colgar.
    */
-  private renderOrphanVariantBay(
-    bay: Bay,
-    showPath: boolean,
-    copilotReady: boolean,
-    compactMode: boolean,
-    pendingIcons: PendingIcon[],
-  ): string {
-    // Render like a normal bay but with diff icon prefix
-    return this.renderBay(bay, showPath, copilotReady, compactMode, pendingIcons);
+  private renderOrphanVariantBay(bay: Bay): string {
+    return VariantRowRenderer.render({
+      bay,
+      parentId: this.esc(bay.metadata.sourceBayId ?? ''),
+      esc: this.esc,
+      orphan: true,
+    });
   }
 
   private renderBay(

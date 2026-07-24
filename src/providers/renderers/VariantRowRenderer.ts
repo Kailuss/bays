@@ -5,28 +5,38 @@ type VariantRowRenderOptions = {
   bay: Bay;
   parentId: string;
   esc: (value: string) => string;
+  /** El parent no está en la lista (no abierto, o vive en otro grupo). */
+  orphan?: boolean;
 };
 
 export class VariantRowRenderer {
   static render(options: VariantRowRenderOptions): string {
-    const { bay, parentId, esc } = options;
+    const { bay, parentId, esc, orphan = false } = options;
     const activeClass = bay.state.isActive ? ' active' : '';
 
     const diffInfo = getDiffTypeDisplay(bay.metadata.diffType, bay.metadata.label);
     const diffTypeClass = diffInfo?.cssClass ? ` ${diffInfo.cssClass}` : '';
+    const orphanClass = orphan ? ' orphan' : '';
 
     const iconHtml = diffInfo
       ? `<span class="codicon codicon-${diffInfo.icon}"></span>`
       : '<span class="codicon codicon-diff"></span>';
-    const labelHtml = diffInfo ? esc(diffInfo.label) : 'Diff';
+
+    // Bajo su parent basta el tipo ("Working Tree"); suelta, la fila necesita el
+    // label nativo para saber de qué archivo habla.
+    const labelHtml = orphan
+      ? esc(bay.metadata.label)
+      : (diffInfo ? esc(diffInfo.label) : 'Diff');
 
     const statsHtml = this.renderStats(bay.state.diffStats);
 
+    // Sin parent no hay jerarquía que preservar → cierre normal.
+    const closeAction = orphan ? 'closeBay' : 'closeVariant';
     const closeBtn = bay.state.capabilities.canClose
-      ? `<button data-action="closeVariant" data-bay-id="${esc(bay.metadata.id)}" data-parent-id="${esc(parentId)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
+      ? `<button data-action="${closeAction}" data-bay-id="${esc(bay.metadata.id)}" data-parent-id="${esc(parentId)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
       : '';
 
-    return `<div class="bay variant${activeClass}${diffTypeClass}" data-bay-id="${esc(bay.metadata.id)}" data-parentid="${parentId}">
+    return `<div class="bay variant${activeClass}${diffTypeClass}${orphanClass}" data-bay-id="${esc(bay.metadata.id)}" data-parentid="${parentId}" title="${esc(bay.metadata.tooltipText || bay.metadata.label)}">
       <span class="bay-icon">${iconHtml}</span>
       <span class="variant-label">${labelHtml}</span>
       ${statsHtml}

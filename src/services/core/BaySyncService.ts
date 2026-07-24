@@ -170,12 +170,14 @@ export class BaySyncService {
       // Ensure parent exists (delegate to BayHeadService)
       const parent = await this.bayHeadService.ensureParentExistsForSync(bay, nativeTab, allBays);
 
-      if (!parent) {
-        Logger.warn(`[BaySync] Failed to ensure parent for variant, skipping: ${bay.metadata.label}`);
-        continue;
+      if (parent) {
+        Logger.log(`[BaySync] Parent confirmed for variant: ${bay.metadata.label} → ${parent.metadata.label}`);
+      } else {
+        // Igual que en BayEventService: sin parent se renderiza como huérfana,
+        // nunca se descarta (descartarla la borraba del panel por completo).
+        Logger.warn(`[BaySync] Failed to ensure parent for variant: ${bay.metadata.label} (rendered as orphan)`);
       }
 
-      Logger.log(`[BaySync] Parent confirmed for variant: ${bay.metadata.label} → ${parent.metadata.label}`);
       allBays.push(bay);
     }
 

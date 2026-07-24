@@ -112,19 +112,20 @@ export class BayEventService {
       if (st.metadata.sourceBayId && st.metadata.diffType !== 'preview') {
         const parent = await this.bayHeadService.ensureParentExists(st, bay);
 
-        if (!parent) {
-          Logger.warn(`[BayEvent] Failed to ensure parent exists for variant: ${st.metadata.label}`);
-          // No añadir la variant si no pudimos garantizar el parent
-          continue;
+        if (parent) {
+          Logger.log(`[BayEvent] Parent confirmed for variant: ${st.metadata.label} → ${parent.metadata.label}`);
+        } else {
+          // Sin parent la variante sigue siendo una variante: se añade igualmente
+          // y el renderer la dibuja como fila huérfana. Descartarla la hacía
+          // desaparecer del panel hasta el siguiente resync.
+          Logger.warn(`[BayEvent] Failed to ensure parent exists for variant: ${st.metadata.label} (rendered as orphan)`);
         }
-
-        Logger.log(`[BayEvent] Parent confirmed for variant: ${st.metadata.label} → ${parent.metadata.label}`);
       }
 
       // Añadir la bay/variant al estado
       this.stateService.addBay(st);
 
-      // Si es variant, registrar en hierarchy ahora que SABEMOS que el parent existe
+      // Si es variant, registrar en hierarchy (no-op si el parent no existe)
       if (st.metadata.sourceBayId) {
         this.hierarchyService.linkVariantToParentBay(st.metadata.id, st.metadata.sourceBayId);
         Logger.log(`[BayEvent] Variant registered in hierarchy: ${st.metadata.label}`);
