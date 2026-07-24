@@ -53,7 +53,6 @@ export function classifyDiffType(
     const originalScheme = originalUri?.scheme;
     const modifiedScheme = modifiedUri?.scheme;
     const originalQuery = originalUri?.query || '';
-    const modifiedQuery = modifiedUri?.query || '';
 
     if (originalScheme === 'git' && (originalQuery.includes('ref=') || commitHashPattern.test(originalQuery))) {
       return 'commit';

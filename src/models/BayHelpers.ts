@@ -225,27 +225,8 @@ export class BayHelpers {
   static createDefaultState(): Partial<BayState> {
     return {
       viewMode: 'source',
-      actionContext: {
-        viewMode: 'source',
-        editMode: 'editable',
-        compareMode: false,
-        debugMode: false,
-      },
-      operationState: {
-        isProcessing: false,
-        canCancel: false,
-      },
       capabilities: BayHelpers.createEmptyCapabilities(),
-      permissions: {
-        canRename: true,
-        canDelete: true,
-        canMove: true,
-        canShare: true,
-        canExport: true,
-        restrictedActions: [],
-      },
       hasVariant: false,
-      isVariant: false,
       variantCount: 0,
       isLoading: false,
       hasError: false,
@@ -261,8 +242,6 @@ export class BayHelpers {
         copilot: { inContext: false },
         git: { hasUncommittedChanges: false },
       },
-      customActions: undefined,
-      shortcuts: undefined,
     };
   }
 

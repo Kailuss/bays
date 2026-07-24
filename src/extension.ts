@@ -30,6 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Core services
     const stateService       = new BayStateService();
+    context.subscriptions.push(stateService);
 
     // Group name/colour/lock, persisted per workspace. Debe inyectarse ANTES de
     // que syncService haga su primer sync: `setGroups` reconstruye los grupos
@@ -56,7 +57,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const provider = new BaysWebviewProvider(
       context.extensionUri,
       stateService,
-      syncService,
       copilotService,
       iconManager,
       context,
@@ -79,16 +79,11 @@ export async function activate(context: vscode.ExtensionContext) {
       }),
     );
 
-    //· Copilot availability context key (gates the "Add Files to Copilot Chat…"
-    //  toolbar button). Re-evaluated when extensions change so installing or
-    //  disabling Copilot Chat mid-session updates the UI without a reload.
-    const syncCopilotContext = () =>
-      void vscode.commands.executeCommand('setContext', 'bays.copilotAvailable', copilotService.isAvailable());
-    syncCopilotContext();
+    //· Rebuild when the extension set changes: the Copilot button del webview
+    //  se re-evalúa en cada build (copilotReady), y puede haberse instalado una
+    //  extensión cuyo icono de webview renderizamos.
     context.subscriptions.push(
       vscode.extensions.onDidChange(() => {
-        syncCopilotContext();
-        // An extension whose webview icon we render may have just been installed.
         void preloadWebviewExtensionIcons().then(() => provider.refresh());
       }),
     );
@@ -111,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
     themeService.activate(context);
 
     //· Preload icons for all open bays in background
-    iconManager.preloadIconsInBackground(context);
+    void iconManager.preloadIconsInBackground(context);
 
     //· Preload extension-owned webview icons (Claude Code, …) then repaint so the
     //  real brand logo replaces the placeholder codicon. Non-blocking.
@@ -144,7 +139,9 @@ export async function activate(context: vscode.ExtensionContext) {
         enriching = false;
       }
     };
-    stateService.onDidChangeState(() => void enrichClaudeTitles());
+    context.subscriptions.push(
+      stateService.onDidChangeState(() => void enrichClaudeTitles()),
+    );
     claudeConversation.watch(() => void enrichClaudeTitles());
     void enrichClaudeTitles();
 
@@ -158,10 +155,14 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     //· Refresh on theme change
-    themeService.onDidChangeTheme(() => provider.refresh());
+    context.subscriptions.push(
+      themeService.onDidChangeTheme(() => provider.refresh()),
+    );
 
     //· Refresh when icons are reloaded (e.g., theme change)
-    iconManager.onDidInitialize(() => provider.refresh());
+    context.subscriptions.push(
+      iconManager.onDidInitialize(() => provider.refresh()),
+    );
 
     Logger.log('Bays activated successfully');
   } catch (error) {

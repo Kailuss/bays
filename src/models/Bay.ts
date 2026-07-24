@@ -3,10 +3,6 @@ import { BayActions } from './BayActions';
 
 /**
  * Tab representation in Bays sidebar.
- * Delegates to DocumentModel for complex document metadata (diffs, snapshots).
- *
- * @see DocumentModel
- * @see DocumentManager
  */
 export class Bay extends BayActions {
   constructor(
@@ -38,33 +34,6 @@ export type DiffStats = {
   conflictSections?: number; // Number of conflict sections
 };
 
-/** Dynamic action context (view/edit state). */
-export type ActionContext = {
-  viewMode?: BayViewMode;                       // How the bay is visualized
-  editMode?: EditMode;                          // Edit capability state
-  splitOrientation?: 'horizontal' | 'vertical'; // Split view orientation
-  compareMode?: boolean;                        // In diff/compare mode
-  debugMode?: boolean;                          // In debug mode
-}
-
-/** Async operation state. */
-export type OperationState = {
-  isProcessing: boolean;           // Operation in progress
-  currentOperation?: string;       // Operation name (close, save, etc)
-  canCancel: boolean;              // Can be cancelled
-  progress?: number;               // Progress 0-100 (if applicable)
-}
-
-/** Granular file operation permissions. */
-export type BayPermissions = {
-  canRename: boolean;              // Can rename file
-  canDelete: boolean;              // Can delete file
-  canMove: boolean;                // Can move to other location
-  canShare: boolean;               // Can share (copy link, etc)
-  canExport: boolean;              // Can export to other format
-  restrictedActions?: string[];    // IDs of blocked actions
-}
-
 /** External service integration state. */
 export type BayIntegrations = {
   copilot?: {
@@ -79,23 +48,6 @@ export type BayIntegrations = {
   };
 }
 
-/** User/extension-defined action. */
-export type CustomBayAction = {
-  id: string;
-  label: string;
-  icon: string;
-  tooltip: string;
-  keybinding?: string;
-  execute: (metadata: BayMetadata, state: BayState) => Promise<void>;
-}
-
-/** Custom keybindings for actions. */
-export type BayShortcuts = {
-  quickPin?: string;               // Quick pin/unpin
-  quickClose?: string;             // Quick close
-  quickDuplicate?: string;         // Quick duplicate
-  quickReveal?: string;            // Quick reveal in explorer
-}
 
 /** Immutable metadata - computed once at creation. */
 export type BayMetadata = {
@@ -105,9 +57,6 @@ export type BayMetadata = {
   sourceUri?    : vscode.Uri;    // URI of the parent's real file (diff/git/timeline URIs normalized to file://).
   bayType       : BayType;       // What kind of VS Code bay input this wraps.
   diffType?     : DiffType;      // Type of diff (for child tabs only)
-  
-  //: DOCUMENT LINK (NEW)
-  documentId?   : string;        // ID of associated DocumentModel (for complex document metadata)
 
   //: FILE INFORMATION
   uri?          : vscode.Uri;    // File URI. Only present for file / custom / notebook tabs.
@@ -177,17 +126,11 @@ export type BayState = {
   //: DIFF INFORMATION (for child tabs)
   diffStats?         : DiffStats;            // Diff statistics (lines added/removed, etc.)
 
-  //: ACTION CONTEXT (NEW)
-  actionContext      : ActionContext;        // Dynamic action context
-  operationState     : OperationState;       // Async operations state
-
-  //: CAPABILITIES & PERMISSIONS
+  //: CAPABILITIES
   capabilities       : BayCapabilities;      // What actions can be performed
-  permissions        : BayPermissions;       // Granular permissions
 
   //: HIERARCHY
   hasVariant         : boolean;              // Has child tabs (diffs, previews)
-  isVariant          : boolean;              // Is a child bay of another
   variantCount       : number;               // Number of child tabs (for badge display)
 
   //: UI STATE
@@ -213,7 +156,4 @@ export type BayState = {
   isProtected        : boolean;              // Requires confirmation to close
   //: INTEGRATIONS
   integrations       : BayIntegrations;      // External service states
-  //: CUSTOMIZATION
-  customActions?     : CustomBayAction[];    // User-defined actions
-  shortcuts?         : BayShortcuts;         // Custom keybindings
 }

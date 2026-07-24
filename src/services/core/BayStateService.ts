@@ -3,7 +3,6 @@ import { Bay } from '../../models/Bay';
 import { BayGroup, createTabGroup } from '../../models/BayGroup';
 import { Logger }       from '../../utils/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
-import type { DocumentManager } from './DocumentManager';
 import type { GroupCustomizationService } from '../ui/GroupCustomizationService';
 
 /**
@@ -28,9 +27,6 @@ export class BayStateService {
 
   // Hierarchy service (injected to avoid circular dependency)
   private hierarchyService?: BayHierarchyService;
-
-  // Document manager (injected to avoid circular dependency)
-  private documentManager?: DocumentManager;
 
   // Group customizations (name/color/lock) — injected from extension.ts, which
   // owns the ExtensionContext the service persists to.
@@ -119,14 +115,6 @@ export class BayStateService {
   }
 
   /**
-   * Inyecta el document manager para gestión centralizada de documentos.
-   * Llamado desde BaySyncService después de crear DocumentManager.
-   */
-  setDocumentManager(manager: DocumentManager): void {
-    this.documentManager = manager;
-  }
-
-  /**
    * Inyecta el servicio de personalización de grupos y lo aplica a los grupos
    * ya presentes (la inyección ocurre antes del primer sync, pero también puede
    * llegar después si el orden de arranque cambia).
@@ -188,28 +176,6 @@ export class BayStateService {
       }
     }
 
-    // Create/update document if this is a parent bay with URI
-    if (this.documentManager && bay.metadata.uri && !bay.metadata.sourceBayId) {
-      const document = this.documentManager.getOrCreateDocument(
-        bay.metadata.uri,
-        bay.metadata.languageId || 'plaintext',
-        bay.metadata.label,
-        bay.metadata.fileExtension || ''
-      );
-      this.documentManager.associateVariant(document.documentId, bay.metadata.id);
-    }
-
-    // Associate child bay with document if parent exists
-    if (this.documentManager && bay.metadata.sourceBayId && bay.metadata.uri) {
-      const parentBay = this.bays.get(bay.metadata.sourceBayId);
-      if (parentBay?.metadata.uri) {
-        const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
-        if (document) {
-          this.documentManager.associateVariant(document.documentId, bay.metadata.id);
-        }
-      }
-    }
-
     if (!this._isBulkLoading) { this._onDidChangeState.fire(); }
   }
 
@@ -254,7 +220,7 @@ export class BayStateService {
    * Re-key a bay after its backing file was renamed or moved. The bay id embeds the
    * URI (`${uri}-${viewColumn}`), so a rename changes the id: the bay must move under
    * the new key both in the map and in its group array — kept at the SAME position so
-   * manual drag order survives — and its document association must point at the new URI.
+   * manual drag order survives.
    *
    * `newBay` must be freshly converted from the post-rename native tab so every derived
    * field (label, path parts, language, git status) is already correct.
@@ -280,9 +246,9 @@ export class BayStateService {
     const group = this.groups.get(oldBay.state.groupId);
     const idx = group ? group.bays.findIndex(b => b.metadata.id === oldId) : -1;
 
-    // removeBayInternal drops the map key, filters it out of the group, dissociates the
-    // old document and fires onDidChangeState. It does NOT cascade to children — this
-    // path only handles bays that have none.
+    // removeBayInternal drops the map key, filters it out of the group and fires
+    // onDidChangeState. It does NOT cascade to children — this path only handles
+    // bays that have none.
     this.removeBayInternal(oldId);
 
     // Insert the fresh bay at the captured slot (preserves manual drag order).
@@ -291,17 +257,6 @@ export class BayStateService {
     if (group) {
       if (idx >= 0 && idx <= group.bays.length) { group.bays.splice(idx, 0, newBay); }
       else { group.bays.push(newBay); }
-    }
-
-    // Associate the fresh bay with a document for the NEW uri (mirrors addBay).
-    if (this.documentManager && newBay.metadata.uri && !newBay.metadata.sourceBayId) {
-      const document = this.documentManager.getOrCreateDocument(
-        newBay.metadata.uri,
-        newBay.metadata.languageId || 'plaintext',
-        newBay.metadata.label,
-        newBay.metadata.fileExtension || ''
-      );
-      this.documentManager.associateVariant(document.documentId, newId);
     }
 
     this._onDidChangeState.fire();
@@ -317,26 +272,6 @@ export class BayStateService {
       const group = this.groups.get(bay.state.groupId);
 
       if (group) { group.bays = group.bays.filter(t => t.metadata.id !== id); }
-
-      // Cleanup document associations
-      if (this.documentManager) {
-        if (bay.metadata.sourceBayId) {
-
-          // Desasociar child bay del documento
-          const parentBay = this.bays.get(bay.metadata.sourceBayId);
-          if (parentBay?.metadata.uri) {
-            const document = this.documentManager.getDocumentByUri(parentBay.metadata.uri);
-            if (document) { this.documentManager.dissociateVariant(document.documentId, id); }
-          }
-
-        } else if (bay.metadata.uri) {
-
-          // Desasociar parent bay del documento
-          const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
-          if (document) { this.documentManager.dissociateVariant(document.documentId, id); }
-
-        }
-      }
 
       this.bays.delete(id);
       this._onDidChangeState.fire();
@@ -356,20 +291,6 @@ export class BayStateService {
     }
 
     this._onDidChangeState.fire();
-  }
-
-  // Update a bay without triggering tree refresh (for silent state updates like isActive).
-  updateBaySilent(bay: Bay): void {
-    this.bays.set(bay.metadata.id, bay);
-
-    const group = this.groups.get(bay.state.groupId);
-    if (group) {
-      const index = group.bays.findIndex(t => t.metadata.id === bay.metadata.id);
-      if (index !== -1) {
-        group.bays[index] = bay;
-      }
-    }
-    this._onDidChangeStateSilent.fire();
   }
 
   // Update a bay's diagnostic/git state and notify for animation.
@@ -435,12 +356,6 @@ export class BayStateService {
 
   //- Group management
 
-  addGroup(group: BayGroup): void {
-    this.groupCustomization?.apply(group);
-    this.groups.set(group.id, group);
-    this._onDidChangeState.fire();
-  }
-
   /**
    * Reemplaza el conjunto de grupos SIN disparar eventos.
    * Usado por syncAll/resyncAll: poda grupos obsoletos (columnas renumeradas o
@@ -454,24 +369,12 @@ export class BayStateService {
     }
   }
 
-  removeGroup(id: number): void {
-    this.groups.delete(id);
-    this._onDidChangeState.fire();
-  }
-
   getGroup(id: number): BayGroup | undefined {
     return this.groups.get(id);
   }
 
   getGroups(): BayGroup[] {
     return Array.from(this.groups.values());
-  }
-
-  setActiveGroup(id: number): void {
-    this.groups.forEach(group => {
-      group.isActive = group.id === id;
-    });
-    this._onDidChangeState.fire();
   }
 
   //- Search
@@ -547,18 +450,10 @@ export class BayStateService {
     this.reorderAfterPinChange(bayId);
   }
 
-  //- Utilities
-
-  clear(): void {
-    this.bays.clear();
-    this.groups.clear();
-    this._onDidChangeState.fire();
-  }
-
-  getStats(): { bays: number; groups: number } {
-    return {
-      bays: this.bays.size,
-      groups: this.groups.size,
-    };
+  dispose(): void {
+    this._onDidChangeState.dispose();
+    this._onDidChangeStateSilent.dispose();
+    this._onDidChangeBayState.dispose();
+    this._onDidChangeBayLabel.dispose();
   }
 }

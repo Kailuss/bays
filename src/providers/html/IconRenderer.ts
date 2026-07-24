@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { TabIconManager } from '../../services/ui/BayIconManager';
+import { BayIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
 import { resolveWebviewExtensionIcon } from '../../utils/webviewExtensionIcons';
@@ -14,7 +14,7 @@ import { IconData } from './types';
 
 export class IconRenderer {
   constructor(
-    private readonly iconManager: TabIconManager,
+    private readonly iconManager: BayIconManager,
     private readonly context: vscode.ExtensionContext,
   ) {}
 
@@ -25,7 +25,7 @@ export class IconRenderer {
    * después (ver BaysHtmlBuilder.pendingIcons / provider.patchIcons).
    */
   renderImmediate(bay: Bay): { html: string; pending: { fileName: string; languageId?: string } | null } {
-    const { bayType: tabType, viewType, label, fileExtension: fileType } = bay.metadata;
+    const { bayType: tabType, viewType, label } = bay.metadata;
 
     if (tabType === 'webview') {
       // Prefer the owning extension's real logo (Claude Code, …) when available;
@@ -37,7 +37,7 @@ export class IconRenderer {
 
     const fileName = this.resolveFileName(bay);
     if (!fileName) {
-      return { html: this.renderFallback(fileType), pending: null };
+      return { html: this.renderFallback(), pending: null };
     }
 
     const cached = this.iconManager.getCachedIcon(fileName);
@@ -47,7 +47,7 @@ export class IconRenderer {
 
     // Cache miss → placeholder ahora, resolución diferida en paralelo
     return {
-      html: this.renderFallback(fileType),
+      html: this.renderFallback(),
       pending: { fileName, languageId: bay.metadata.languageId },
     };
   }
@@ -76,7 +76,7 @@ export class IconRenderer {
    * Resuelve el nombre del archivo desde la bay.
    */
   private resolveFileName(bay: Bay): string | null {
-    const { bayType: tabType, uri, label, sourceBayId: parentId } = bay.metadata;
+    const { uri, label, sourceBayId: parentId } = bay.metadata;
 
     // Variants have parentId set
     if (parentId && uri) {
@@ -135,15 +135,7 @@ export class IconRenderer {
       case 'base64':
         return `<img src="${icon.data}" alt="" />`;
 
-      case 'codicon':
-        return this.renderCodicon(icon.name, icon.color);
-
-      case 'svg':
-        return icon.content;
-
       case 'fallback':
-        return this.renderFallback();
-
       default:
         return this.renderFallback();
     }
@@ -161,7 +153,7 @@ export class IconRenderer {
   /**
    * Renderiza el icono de fallback (archivo genérico).
    */
-  private renderFallback(_fileType?: string): string {
+  private renderFallback(): string {
     return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M13.85 4.44l-3.29-3.3A.5.5 0 0010.21 1H3.5A1.5 1.5 0 002 2.5v11A1.5 1.5 0 003.5 15h9a1.5 1.5 0 001.5-1.5V4.79a.5.5 0 00-.15-.35zM10.5 2.12L12.88 4.5H11a.5.5 0 01-.5-.5V2.12zM12.5 14h-9a.5.5 0 01-.5-.5v-11a.5.5 0 01.5-.5h6v2a1.5 1.5 0 001.5 1.5h2v8a.5.5 0 01-.5.5z" fill="currentColor"/>
     </svg>`;

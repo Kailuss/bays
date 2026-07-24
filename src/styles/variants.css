@@ -215,24 +215,3 @@
   height: 11px;
   object-fit: contain;
 }
-
-/* STATE INDICATORS */
-.bay.variant .state-indicator-error,
-.bay.variant .state-indicator-warning,
-.bay.variant .state-indicator-conflict {
-  font-size: 12px;
-  margin-right: 4px;
-  flex-shrink: 0;
-}
-
-.bay.variant .state-indicator-error {
-  color: var(--vscode-editorError-foreground, #f48771);
-}
-
-.bay.variant .state-indicator-warning {
-  color: var(--vscode-editorWarning-foreground, #cca700);
-}
-
-.bay.variant .state-indicator-conflict {
-  color: var(--vscode-gitDecoration-conflictingResourceForeground, #e51400);
-}

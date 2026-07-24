@@ -1,107 +1,116 @@
-// Drag & Drop script for the bays webview.
-// Served as a static resource via webview.asWebviewUri().
-// Only loaded when drag & drop is enabled in settings.
+// Drag & Drop del webview de bays.
+// Solo se inicializa (initDragDrop) cuando enableDragDrop está activo en
+// settings — el host lo publica en <body data-enable-dragdrop>.
 //
 // Unit de arrastre: .bay-block (contiene la bay parent + sus child bays).
 // Un cloneNode(true) del bloque captura todo el contenido de una vez,
 // sin necesidad de gestionar clones hijos por separado.
 
-console.log('[dragdrop.js] Script loaded');
+import { vscode } from './vscodeApi';
+import type { DropBayMessage } from '../shared/protocol';
 
 const DRAG_THRESHOLD = 5;   // Pixels antes de iniciar el drag
+
+type GroupRegion = { groupId: string; top: number; bottom: number; headerEl: HTMLElement };
+type SiblingSlot = { el: HTMLElement; origTop: number; height: number };
 
 let isDragging         = false;
 let startY             = 0;
 let startMouseY        = 0;
-let sourceEl           = null;  // .bay-block original que se arrastra
-let cloneEl            = null;  // clon flotante del bloque completo
-let siblings           = [];    // .bay-block reordenables (excluye pinned y el arrastrado)
-let originalOrder      = [];    // rect.top y altura de cada sibling al iniciar
+let sourceEl: HTMLElement | null = null;  // .bay-block original que se arrastra
+let cloneEl: HTMLElement | null  = null;  // clon flotante del bloque completo
+let siblings: HTMLElement[] = [];         // .bay-block reordenables (excluye pinned y el arrastrado)
+let originalOrder: SiblingSlot[] = [];    // rect.top y altura de cada sibling al iniciar
 let currentInsertIndex = -1;    // índice de inserción actual (en siblings)
 let sourceIndex        = -1;    // índice original del bloque arrastrado
-let tabGroupId         = null;  // grupo de origen (string, del dataset)
+let tabGroupId: string | undefined = undefined; // grupo de origen (string, del dataset)
 let blockHeight        = 0;     // Alto total del bloque (parent + children automático)
 
 // Cross-group: regiones verticales de cada grupo y grupo bajo el cursor.
-let groupRegions       = [];    // [{ groupId, top, bottom, headerEl }] al iniciar el drag
-let targetGroupId      = null;  // grupo actualmente bajo el cursor (string)
-let highlightedGroupId = null;  // grupo con resaltado de destino activo
+let groupRegions: GroupRegion[] = [];          // al iniciar el drag
+let targetGroupId: string | null = null;       // grupo actualmente bajo el cursor
+let highlightedGroupId: string | null = null;  // grupo con resaltado de destino activo
 let lockedSource       = false; // el grupo de origen está bloqueado (no sale nada de él)
 
-// --- Mousedown: preparar un posible drag ---
-document.addEventListener('mousedown', e => {
-  console.log('[dragdrop] Mousedown:', e.target);
-  if (e.button !== 0) { return; }
-  // Ignore a new mousedown while a previous drop is still animating/tearing down:
-  // its ~160ms deferred teardown would otherwise clobber the fresh drag's state.
-  if (isDragging) { return; }
-  const block = e.target.closest('.bay-block');
-  if (!block) { console.log('[dragdrop] No bay-block found'); return; }
-  if (e.target.closest('button')) { console.log('[dragdrop] Button clicked, ignoring'); return; }
+export function initDragDrop(): void {
+  // --- Mousedown: preparar un posible drag ---
+  document.addEventListener('mousedown', e => {
+    if (e.button !== 0) { return; }
+    // Ignore a new mousedown while a previous drop is still animating/tearing down:
+    // its ~160ms deferred teardown would otherwise clobber the fresh drag's state.
+    if (isDragging) { return; }
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target) { return; }
+    const block = target.closest<HTMLElement>('.bay-block');
+    if (!block) { return; }
+    if (target.closest('button')) { return; }
 
-  // Los child bays no actúan como handle — sólo la fila padre inicia el drag
-  const clickedTab = e.target.closest('.bay');
-  if (clickedTab && clickedTab.classList.contains('variant')) { return; }
+    // Los child bays no actúan como handle — sólo la fila padre inicia el drag
+    const clickedTab = target.closest('.bay');
+    if (clickedTab && clickedTab.classList.contains('variant')) { return; }
 
-  // Orphan variant blocks (a diff/preview whose parent file isn't open) render as
-  // a normal .bay-block but the host rejects reordering them, so dragging would
-  // just animate and snap back. Mark them data-variant and refuse to start a drag.
-  if (block.dataset.variant === 'true') { return; }
+    // Orphan variant blocks (a diff/preview whose parent file isn't open) render as
+    // a normal .bay-block but the host rejects reordering them, so dragging would
+    // just animate and snap back. Mark them data-variant and refuse to start a drag.
+    if (block.dataset.variant === 'true') { return; }
 
-  if (block.dataset.pinned === 'true') { return; }
+    if (block.dataset.pinned === 'true') { return; }
 
-  sourceEl    = block;
-  startMouseY = e.clientY;
-  startY      = block.getBoundingClientRect().top;
-  tabGroupId  = block.dataset.groupid;
-});
+    sourceEl    = block;
+    startMouseY = e.clientY;
+    startY      = block.getBoundingClientRect().top;
+    tabGroupId  = block.dataset.groupid;
+  });
 
-// --- Mousemove: iniciar o continuar el drag ---
-document.addEventListener('mousemove', e => {
-  if (!sourceEl) { return; }
+  // --- Mousemove: iniciar o continuar el drag ---
+  document.addEventListener('mousemove', e => {
+    if (!sourceEl) { return; }
 
-  if (!isDragging) {
-    if (Math.abs(e.clientY - startMouseY) < DRAG_THRESHOLD) { return; }
-    beginDrag();
-  }
+    if (!isDragging) {
+      if (Math.abs(e.clientY - startMouseY) < DRAG_THRESHOLD) { return; }
+      beginDrag();
+    }
+    if (!cloneEl) { return; }
 
-  const dy = e.clientY - startMouseY;
-  cloneEl.style.transform = 'translateY(' + dy + 'px)';
+    const dy = e.clientY - startMouseY;
+    cloneEl.style.transform = 'translateY(' + dy + 'px)';
 
-  // Centro del bloque clonado para determinar posición de inserción
-  const cloneCenter = startY + (blockHeight / 2) + dy;
-  const overGroup   = groupAt(cloneCenter);
+    // Centro del bloque clonado para determinar posición de inserción
+    const cloneCenter = startY + (blockHeight / 2) + dy;
+    const overGroup   = groupAt(cloneCenter);
 
-  if (lockedSource || overGroup === null || overGroup === tabGroupId) {
-    // Sobre el grupo de origen (o sin grupos, o grupo bloqueado): reordenar in
-    // situ. El host rechaza sacar bays de un grupo bloqueado, así que ni
-    // resaltamos el destino: el arrastre sólo animaría para volver a su sitio.
-    clearTargetGroupHighlight();
-    updateSiblingPositions(cloneCenter);
-    targetGroupId = tabGroupId;
-  } else {
-    // Sobre otro grupo: cancelar el desplazamiento local y resaltar el destino.
-    clearSiblingShifts();
-    setTargetGroupHighlight(overGroup);
-    targetGroupId = overGroup;
-  }
-});
+    if (lockedSource || overGroup === null || overGroup === tabGroupId) {
+      // Sobre el grupo de origen (o sin grupos, o grupo bloqueado): reordenar in
+      // situ. El host rechaza sacar bays de un grupo bloqueado, así que ni
+      // resaltamos el destino: el arrastre sólo animaría para volver a su sitio.
+      clearTargetGroupHighlight();
+      updateSiblingPositions(cloneCenter);
+      targetGroupId = tabGroupId ?? null;
+    } else {
+      // Sobre otro grupo: cancelar el desplazamiento local y resaltar el destino.
+      clearSiblingShifts();
+      setTargetGroupHighlight(overGroup);
+      targetGroupId = overGroup;
+    }
+  });
 
-// --- Mouseup: terminar el drag ---
-document.addEventListener('mouseup', () => {
-  if (!sourceEl) { return; }
-  if (!isDragging) { sourceEl = null; return; }
-  commitDrop();
-});
+  // --- Mouseup: terminar el drag ---
+  document.addEventListener('mouseup', () => {
+    if (!sourceEl) { return; }
+    if (!isDragging) { sourceEl = null; return; }
+    commitDrop();
+  });
 
-// --- Cancelar si se sale de la ventana ---
-document.addEventListener('mouseleave', () => {
-  if (isDragging) { cancelDrag(); }
-});
+  // --- Cancelar si se sale de la ventana ---
+  document.addEventListener('mouseleave', () => {
+    if (isDragging) { cancelDrag(); }
+  });
+}
 
 // ------------ helpers ------------
 
-function beginDrag() {
+function beginDrag(): void {
+  if (!sourceEl) { return; }
   isDragging = true;
   document.body.classList.add('drag-active');
 
@@ -114,13 +123,13 @@ function beginDrag() {
   // Regiones verticales de cada grupo (para detectar arrastre entre grupos).
   // Sin cabeceras (un solo grupo visible) queda vacío ⇒ sólo reordenación local.
   groupRegions  = buildGroupRegions();
-  targetGroupId = tabGroupId;
+  targetGroupId = tabGroupId ?? null;
 
-  const srcHeader = document.querySelector('.group-header[data-groupid="' + tabGroupId + '"]');
+  const srcHeader = document.querySelector<HTMLElement>('.group-header[data-groupid="' + tabGroupId + '"]');
   lockedSource    = !!srcHeader && srcHeader.dataset.locked === 'true';
 
   // Todos los bloques arrastrables del mismo grupo (excluir pinned)
-  const allBlocks      = Array.from(document.querySelectorAll('.bay-block[data-groupid="' + tabGroupId + '"]'));
+  const allBlocks      = Array.from(document.querySelectorAll<HTMLElement>('.bay-block[data-groupid="' + tabGroupId + '"]'));
   const draggable      = allBlocks.filter(b => b.dataset.pinned !== 'true');
   sourceIndex          = draggable.indexOf(sourceEl);
   currentInsertIndex   = sourceIndex;
@@ -133,7 +142,7 @@ function beginDrag() {
   });
 
   // Clonar el bloque entero (parent + children) en una sola operación
-  cloneEl = sourceEl.cloneNode(true);
+  cloneEl = sourceEl.cloneNode(true) as HTMLElement;
   cloneEl.classList.add('drag-clone');
   cloneEl.style.top    = rect.top    + 'px';
   cloneEl.style.left   = rect.left   + 'px';
@@ -145,7 +154,7 @@ function beginDrag() {
   siblings.forEach(b => b.classList.add('drag-shifting'));
 }
 
-function updateSiblingPositions(cloneCenter) {
+function updateSiblingPositions(cloneCenter: number): void {
   let newIndex = siblings.length; // por defecto: al final
 
   for (let i = 0; i < originalOrder.length; i++) {
@@ -170,7 +179,9 @@ function updateSiblingPositions(cloneCenter) {
   }
 }
 
-function commitDrop() {
+function commitDrop(): void {
+  if (!sourceEl || !cloneEl) { teardown(); return; }
+
   // --- Movimiento entre grupos ---
   // El host cierra la bay y la reabre en el grupo destino; eso dispara los
   // eventos nativos de tabs y provoca un rebuild completo. No hacemos un
@@ -179,12 +190,12 @@ function commitDrop() {
   if (targetGroupId !== tabGroupId) {
     vscode.postMessage({
       type          : 'dropBay',
-      sourceBayId   : sourceEl.dataset.bayId,
+      sourceBayId   : sourceEl.dataset.bayId ?? '',
       targetBayId   : null,
       insertPosition: null,
-      sourceGroupId : parseInt(tabGroupId, 10),
-      targetGroupId : parseInt(targetGroupId, 10),
-    });
+      sourceGroupId : parseInt(tabGroupId ?? '', 10),
+      targetGroupId : parseInt(targetGroupId ?? '', 10),
+    } satisfies DropBayMessage);
 
     const region  = groupRegions.find(r => r.groupId === targetGroupId);
     const destTop = region ? region.headerEl.getBoundingClientRect().bottom : startY;
@@ -196,7 +207,7 @@ function commitDrop() {
   }
 
   if (currentInsertIndex !== sourceIndex) {
-    let targetTabId, insertPosition, refEl, insertAfter;
+    let targetTabId: string | undefined, insertPosition: 'before' | 'after', refEl: HTMLElement, insertAfter: boolean;
     if (currentInsertIndex < originalOrder.length) {
       refEl          = originalOrder[currentInsertIndex].el;
       targetTabId    = refEl.dataset.bayId;
@@ -213,12 +224,12 @@ function commitDrop() {
     // visual lo confirma el propio cliente al terminar la animación.
     vscode.postMessage({
       type           : 'dropBay',
-      sourceBayId    : sourceEl.dataset.bayId,
-      targetBayId    : targetTabId,
+      sourceBayId    : sourceEl.dataset.bayId ?? '',
+      targetBayId    : targetTabId ?? null,
       insertPosition : insertPosition,
-      sourceGroupId  : parseInt(tabGroupId, 10),
-      targetGroupId  : parseInt(tabGroupId, 10),
-    });
+      sourceGroupId  : parseInt(tabGroupId ?? '', 10),
+      targetGroupId  : parseInt(tabGroupId ?? '', 10),
+    } satisfies DropBayMessage);
 
     // Animar el clon hasta su slot como puente visual
     const finalDy = (currentInsertIndex - sourceIndex) * blockHeight;
@@ -243,7 +254,7 @@ function commitDrop() {
 
 // Mueve físicamente el bloque arrastrado a su nueva posición en el DOM,
 // de modo que el orden sea correcto sin reconstruir todo el HTML.
-function commitDomMove(src, ref, after) {
+function commitDomMove(src: HTMLElement, ref: HTMLElement, after: boolean): void {
   if (!src || !ref || src === ref || !ref.parentNode) { return; }
   if (after) {
     ref.parentNode.insertBefore(src, ref.nextSibling);
@@ -256,12 +267,12 @@ function commitDomMove(src, ref, after) {
 
 // Calcula la banda vertical [top, bottom) que ocupa cada grupo, delimitada por
 // las cabeceras. Con una sola cabecera (o ninguna) no hay destino alternativo.
-function buildGroupRegions() {
-  const headers = Array.from(document.querySelectorAll('.group-header'));
+function buildGroupRegions(): GroupRegion[] {
+  const headers = Array.from(document.querySelectorAll<HTMLElement>('.group-header'));
   if (headers.length === 0) { return []; }
 
-  const regions = headers.map(h => ({
-    groupId : h.dataset.groupid,
+  const regions: GroupRegion[] = headers.map(h => ({
+    groupId : h.dataset.groupid ?? '',
     top     : h.getBoundingClientRect().top,
     bottom  : Number.POSITIVE_INFINITY,
     headerEl: h,
@@ -273,7 +284,7 @@ function buildGroupRegions() {
 }
 
 // Devuelve el groupId (string) cuya banda contiene la coordenada y, o null.
-function groupAt(y) {
+function groupAt(y: number): string | null {
   for (const r of groupRegions) {
     if (y >= r.top && y < r.bottom) { return r.groupId; }
   }
@@ -282,17 +293,17 @@ function groupAt(y) {
 
 // Deshace el desplazamiento de los siblings del grupo de origen (al salir hacia
 // otro grupo, el hueco de reordenación local debe cerrarse).
-function clearSiblingShifts() {
+function clearSiblingShifts(): void {
   if (currentInsertIndex === sourceIndex) { return; }
   originalOrder.forEach(s => { s.el.style.transform = ''; });
   currentInsertIndex = sourceIndex;
 }
 
-function setTargetGroupHighlight(groupId) {
+function setTargetGroupHighlight(groupId: string): void {
   if (highlightedGroupId === groupId) { return; }
   clearTargetGroupHighlight();
 
-  const header = document.querySelector('.group-header[data-groupid="' + groupId + '"]');
+  const header = document.querySelector<HTMLElement>('.group-header[data-groupid="' + groupId + '"]');
   if (header) { header.classList.add('drag-over'); }
   document
     .querySelectorAll('.bay-block[data-groupid="' + groupId + '"]')
@@ -300,7 +311,7 @@ function setTargetGroupHighlight(groupId) {
   highlightedGroupId = groupId;
 }
 
-function clearTargetGroupHighlight() {
+function clearTargetGroupHighlight(): void {
   if (highlightedGroupId === null) { return; }
   document
     .querySelectorAll('.group-header.drag-over')
@@ -311,9 +322,9 @@ function clearTargetGroupHighlight() {
   highlightedGroupId = null;
 }
 
-function cancelDrag() { teardown(); }
+function cancelDrag(): void { teardown(); }
 
-function teardown() {
+function teardown(): void {
   document.querySelectorAll('.drag-clone').forEach(el => el.remove());
   cloneEl = null;
 

@@ -18,8 +18,6 @@ async function activateWithRetry(
   state: BayState,
   attempt: number
 ): Promise<void> {
-  const maxAttempts = 2;
-
   try {
     // NOTE: no markdown-preview special case here. The rendered preview is a
     // real VARIANT bay with its own row/tab — clicking the .md bay activates

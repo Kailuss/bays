@@ -13,21 +13,12 @@ export type BuildHtmlOptions = {
   webview: vscode.Webview;
   groups: BayGroup[];
   getBaysInGroup: (groupId: number) => Bay[];
-  workspaceName: string;
   compactMode: boolean;
   showPath: boolean;
   copilotReady: boolean;
   enableDragDrop?: boolean;
   enableHoverActions?: boolean;
   initialLoad?: boolean;
-};
-
-/** Opciones para renderizar una bay individual */
-export type RenderBayOptions = {
-  bay: Bay;
-  showPath: boolean;
-  copilotReady: boolean;
-  enableDragDrop?: boolean;
 };
 
 //= ICONOS
@@ -54,21 +45,8 @@ export type Base64Icon = {
   data: string;
 };
 
-/** Icono codicon de VS Code */
-export type CodiconIcon = {
-  type: 'codicon';
-  name: string;
-  color?: string;
-};
-
-/** Icono SVG inline */
-export type SvgIcon = {
-  type: 'svg';
-  content: string;
-};
-
 /** Unión de todos los tipos de icono */
-export type IconData = FontIconMarker | Base64Icon | CodiconIcon | SvgIcon | FallbackIcon;
+export type IconData = FontIconMarker | Base64Icon | FallbackIcon;
 
 /** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
 export type PendingIcon = {
@@ -89,10 +67,8 @@ export type BuildHtmlResult = {
 export type WebviewResourceUris = {
   codiconCss: vscode.Uri;
   webviewCss: vscode.Uri;
+  /** Bundle único del cliente (dist/webview/main.js, generado por esbuild). */
   webviewScript: vscode.Uri;
-  contextMenuScript: vscode.Uri;
-  pathTruncationScript: vscode.Uri;
-  dragDropScript: vscode.Uri | null;
 };
 
 //= ESTADO DE BAY

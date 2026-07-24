@@ -71,15 +71,6 @@ export class BayIconManager {
   }
 
   /**
-   * Espera a que la inicialización esté completa.
-   */
-  public async waitForInit(): Promise<void> {
-    if (this._initPromise) {
-      await this._initPromise;
-    }
-  }
-
-  /**
    * Construye una tabla (mapa) que permite encontrar el icono correcto
    * para un nombre o extensión según el tema activo. No carga los iconos
    * en base64 aquí; solo analiza el JSON del tema.
@@ -647,6 +638,3 @@ export class BayIconManager {
     }
   }
 }
-
-// Export for backward compatibility
-export { BayIconManager as TabIconManager };

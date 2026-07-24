@@ -14,10 +14,10 @@
 		"noUnusedParameters": true,  /* Report errors on unused parameters. */
 	},
 	"exclude": [
-		"TabIconManager.ts",
 		"node_modules",
 		"dist",
 		"out",
-		"docs"
+		"docs",
+		"src/webview"
 	]
 }

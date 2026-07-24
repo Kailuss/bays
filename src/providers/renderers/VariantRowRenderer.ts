@@ -3,17 +3,18 @@ import { getDiffTypeDisplay } from '../../constants/diffTypes';
 
 type VariantRowRenderOptions = {
   bay: Bay;
-  parentId: string;
   esc: (value: string) => string;
   /** El parent no está en la lista (no abierto, o vive en otro grupo). */
   orphan?: boolean;
   /** false en grupos bloqueados: la variante tampoco muestra su X. */
   allowClose?: boolean;
+  /** false con enableHoverActions desactivado: sin X, igual que las bays normales. */
+  hover?: boolean;
 };
 
 export class VariantRowRenderer {
   static render(options: VariantRowRenderOptions): string {
-    const { bay, parentId, esc, orphan = false, allowClose = true } = options;
+    const { bay, esc, orphan = false, allowClose = true, hover = true } = options;
     const activeClass = bay.state.isActive ? ' active' : '';
 
     const diffInfo = getDiffTypeDisplay(bay.metadata.diffType, bay.metadata.label);
@@ -34,11 +35,11 @@ export class VariantRowRenderer {
 
     // Sin parent no hay jerarquía que preservar → cierre normal.
     const closeAction = orphan ? 'closeBay' : 'closeVariant';
-    const closeBtn = allowClose && bay.state.capabilities.canClose
-      ? `<button data-action="${closeAction}" data-bay-id="${esc(bay.metadata.id)}" data-parent-id="${esc(parentId)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
+    const closeBtn = hover && allowClose && bay.state.capabilities.canClose
+      ? `<button data-action="${closeAction}" data-bay-id="${esc(bay.metadata.id)}" title="Close variant"><span class="codicon codicon-close"></span></button>`
       : '';
 
-    return `<div class="bay variant${activeClass}${diffTypeClass}${orphanClass}" data-bay-id="${esc(bay.metadata.id)}" data-parentid="${parentId}" title="${esc(bay.metadata.tooltipText || bay.metadata.label)}">
+    return `<div class="bay variant${activeClass}${diffTypeClass}${orphanClass}" data-bay-id="${esc(bay.metadata.id)}" title="${esc(bay.metadata.tooltipText || bay.metadata.label)}">
       <span class="bay-icon">${iconHtml}</span>
       <span class="variant-label">${labelHtml}</span>
       ${statsHtml}

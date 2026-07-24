@@ -1,28 +1,11 @@
 import { Bay } from '../models/Bay';
 import { BayStateService } from '../services/core/BayStateService';
 import { CopilotService } from '../services/integration/CopilotService';
+import type { MenuItem } from '../shared/protocol';
 
-/**
- * Un item del menú contextual, tal y como viaja al webview.
- *
- * Serializable a propósito: cruza `postMessage`, así que nada de funciones ni
- * de instancias. La acción va como `id` y vuelve por el mismo canal.
- */
-export type MenuItem =
-  | { type: 'separator' }
-  | {
-      type?: 'item';
-      /** Identificador estable que devuelve el webview al elegir el item. */
-      id: string;
-      label: string;
-      /** Nombre de codicon, sin el prefijo `codicon-`. */
-      icon?: string;
-      keybinding?: string;
-      /** `false` lo dibuja atenuado y no seleccionable. */
-      enabled?: boolean;
-      tooltip?: string;
-      submenu?: MenuItem[];
-    };
+// El modelo del menú vive en el protocolo compartido (cruza postMessage y el
+// cliente lo consume con los MISMOS tipos). Re-exportado por conveniencia.
+export type { MenuItem } from '../shared/protocol';
 
 /**
  * Menú contextual de las bays.
@@ -70,7 +53,7 @@ export class BayContextMenu {
     if (hasUri) {
       items.push(
         { type: 'separator' },
-        { id: 'revealInExplorerView', label: 'Reveal in Explorer View',  icon: 'files'          },
+        { id: 'revealInExplorer',     label: 'Reveal in Explorer View',  icon: 'files'          },
         { id: 'revealInFileExplorer', label: 'Reveal in File Explorer',  icon: 'folder-opened'  },
         { id: 'openTimeline',         label: 'Open Timeline',            icon: 'history'        },
         { type: 'separator' },
@@ -101,11 +84,11 @@ export class BayContextMenu {
     switch (actionId) {
       case 'close'                : await bay.close();                 break;
       case 'closeOthers'          : await bay.closeOthers();           break;
-      case 'closeToRight'         : await bay.closeToDown();           break;
+      case 'closeToRight'         : await bay.closeToRight();          break;
       case 'closeGroup'           : await bay.closeGroup();            break;
       case 'pin'                  : await bay.pin();   this.stateService.reorderOnPin(bay.metadata.id);   break;
       case 'unpin'                : await bay.unpin(); this.stateService.reorderOnUnpin(bay.metadata.id); break;
-      case 'revealInExplorerView' : await bay.revealInExplorerView();  break;
+      case 'revealInExplorer'     : await bay.revealInExplorer();      break;
       case 'revealInFileExplorer' : await bay.revealInFileExplorer();  break;
       case 'openTimeline'         : await bay.openTimeline();          break;
       case 'copyRelativePath'     : await bay.copyRelativePath();      break;
@@ -116,7 +99,7 @@ export class BayContextMenu {
       case 'openChanges'          : await bay.openChanges();           break;
       case 'splitRight'           : await bay.splitRight();            break;
       case 'moveToNewWindow'      : await bay.moveToNewWindow();       break;
-      case 'addToChat'            : await this.copilotService.addFileToChat(bay.metadata.uri); break;
+      case 'addToChat'            : await this.copilotService.addFileToChat(bay); break;
     }
   }
 }

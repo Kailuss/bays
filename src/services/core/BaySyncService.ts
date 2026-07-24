@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { BayStateService } from './BayStateService';
 import { GitSyncService } from '../integration/GitSyncService';
 import { BayHierarchyService } from './BayHierarchyService';
-import { DocumentManager } from './DocumentManager';
 import { BayEventService } from './bay/BayEventService';
 import { BayHeadService } from './bay/BayHeadService';
 import { ActiveStateService } from './bay/ActiveStateService';
@@ -33,22 +32,21 @@ import { Logger } from '../../utils/logger';
 export class BaySyncService {
   private gitSyncService: GitSyncService;
   private hierarchyService: BayHierarchyService;
-  private documentManager: DocumentManager;
-  
+
   // Specialized services (post-refactoring)
   private bayEventService: BayEventService;
   private bayHeadService: BayHeadService;
   private activeStateService: ActiveStateService;
 
+  // Coalescing de onDidChangeDiagnostics (evento de alta frecuencia)
+  private static readonly DIAGNOSTICS_DEBOUNCE_MS = 100;
+  private pendingDiagnosticUris = new Map<string, vscode.Uri>();
+  private diagnosticsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(private stateService: BayStateService) {
     this.gitSyncService = new GitSyncService(this.stateService);
     this.hierarchyService = new BayHierarchyService(this.stateService);
-    this.documentManager = new DocumentManager({
-      autoCleanup: true,
-      cleanupInterval: 300000, // 5 minutes
-      inactivityThreshold: 600000, // 10 minutes
-    });
-    
+
     // Initialize specialized services
     this.bayHeadService = new BayHeadService(
       this.stateService,
@@ -64,17 +62,12 @@ export class BaySyncService {
       this.hierarchyService,
       this.bayHeadService,
       this.activeStateService,
-      () => this.resyncAll() // Full resync on structural group changes
+      () => this.resyncAll(),           // Full resync on structural group changes
+      (task) => this.enqueue(task)      // Shared serialization queue for all sync work
     );
     
     // Inject services into state service to avoid circular dependencies
     this.stateService.setHierarchyService(this.hierarchyService);
-    this.stateService.setDocumentManager(this.documentManager);
-  }
-  
-  /** Get access to the document manager for external use */
-  getDocumentManager(): DocumentManager {
-    return this.documentManager;
   }
 
   /** 
@@ -88,19 +81,34 @@ export class BaySyncService {
    */
   activate(context: vscode.ExtensionContext): void {
     Logger.log('[BaySync] Activating BaySyncService');
-    
-    // Initial full sync
-    this.syncAll();
+
+    // Initial full sync, THROUGH the queue: the listeners registered right after
+    // also enqueue their work, so nothing mutates state while syncAll's awaits
+    // are in flight (before, an early tab/group event could interleave with the
+    // initial sync and be clobbered by its trailing replaceBays).
+    void this.enqueue(() => this.syncAll());
 
     // Delegate event listener registration to BayEventService
     this.bayEventService.activate();
 
-    // Register diagnostic listener (handled directly by BaySyncService)
+    // Register diagnostic listener (handled directly by BaySyncService).
+    // onDidChangeDiagnostics es de alta frecuencia (dispara por cada pasada de
+    // cada linter); se coalescen las URIs en una ventana corta y se procesa el
+    // lote una sola vez, en vez de git+severity+postMessage por evento.
     context.subscriptions.push(
       vscode.languages.onDidChangeDiagnostics((event) => {
         for (const uri of event.uris) {
-          this.updateTabDiagnostics(uri);
+          this.pendingDiagnosticUris.set(uri.toString(), uri);
         }
+        if (this.diagnosticsFlushTimer) { return; }
+        this.diagnosticsFlushTimer = setTimeout(() => {
+          this.diagnosticsFlushTimer = null;
+          const uris = [...this.pendingDiagnosticUris.values()];
+          this.pendingDiagnosticUris.clear();
+          for (const uri of uris) {
+            this.updateTabDiagnostics(uri);
+          }
+        }, BaySyncService.DIAGNOSTICS_DEBOUNCE_MS);
       })
     );
 
@@ -198,14 +206,28 @@ export class BaySyncService {
    * estado desde la API nativa preservando el estado local que un resync
    * destruiría: el orden manual (drag & drop) por grupo.
    *
-   * Serializado con una promesa-cola: dos eventos de grupo rápidos no solapan
-   * resyncs (el segundo espera al primero).
+   * Serializado con la cola compartida: dos eventos de grupo rápidos no solapan
+   * resyncs (el segundo espera al primero), y tampoco se solapan con
+   * handleTabChanges ni con el syncAll inicial.
    */
-  private resyncInFlight: Promise<void> = Promise.resolve();
+  private syncQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Serializa TODO el trabajo de sincronización (syncAll inicial, resyncs
+   * estructurales y los handlers de eventos de tabs) en una única cola de
+   * promesas: dos tareas nunca mutan el estado a la vez. Un fallo se loggea
+   * y no rompe la cadena.
+   */
+  enqueue(task: () => Promise<void>): Promise<void> {
+    const run = this.syncQueue.then(task);
+    this.syncQueue = run.catch(err => {
+      Logger.error('[BaySync] Queued sync task failed', err);
+    });
+    return run;
+  }
 
   resyncAll(): Promise<void> {
-    this.resyncInFlight = this.resyncInFlight.then(() => this.doResync());
-    return this.resyncInFlight;
+    return this.enqueue(() => this.doResync());
   }
 
   private async doResync(): Promise<void> {
@@ -245,54 +267,6 @@ export class BaySyncService {
   }
 
   /**
-   * Actualiza el estado activo de las tabs cuando cambia el editor activo.
-   * Delega a ActiveStateService para la sincronización real.
-   * 
-   * También sincroniza la posición del cursor si la bay activa pertenece
-   * a una familia parent-child.
-   */
-  private updateActiveTab(activeUri: vscode.Uri): void {
-    // Delegate to syncActiveState which reads bay.isActive from the native API
-    // This correctly handles the same file open in multiple groups
-    const { hasChanges } = this.activeStateService.syncActiveState();
-    if (hasChanges) {
-      this.stateService.notifyChange();
-    }
-
-    // Sync cursor position when activating a bay from the parent-child family
-    const activeEditor = vscode.window.activeTextEditor;
-    if (activeEditor && activeEditor.document.uri.toString() === activeUri.toString()) {
-      const bay = this.stateService.findBayByUri(activeUri);
-      if (bay && (bay.metadata.sourceBayId || bay.state.hasVariant)) {
-        // This bay is part of a parent-child family, sync cursor position
-        const selection = activeEditor.selection;
-        const line = selection.active.line + 1;
-        const column = selection.active.character + 1;
-        this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
-      }
-    }
-  }
-
-  /**
-   * Maneja cambios en la posición del cursor (selección).
-   * Delega a HierarchyService para sincronización entre parent y variants.
-   */
-  private handleCursorChange(event: vscode.TextEditorSelectionChangeEvent): void {
-    const uri = event.textEditor.document.uri;
-    const selection = event.selections[0];
-    
-    if (!selection) { return; }
-
-    const line = selection.active.line + 1;
-    const column = selection.active.character + 1;
-
-    const bay = this.stateService.findBayByUri(uri);
-    if (!bay) { return; }
-
-    this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
-  }
-
-  /**
    * Actualiza los diagnósticos y git status de una pestaña específica cuando cambian.
    */
   private updateTabDiagnostics(uri: vscode.Uri): void {
@@ -321,8 +295,11 @@ export class BaySyncService {
    */
   dispose(): void {
     Logger.log('[BaySync] Disposing BaySyncService');
+    if (this.diagnosticsFlushTimer) {
+      clearTimeout(this.diagnosticsFlushTimer);
+      this.diagnosticsFlushTimer = null;
+    }
     this.bayEventService.dispose();
     this.gitSyncService.dispose();
-    this.documentManager.dispose();
   }
 }

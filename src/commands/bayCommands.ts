@@ -33,8 +33,7 @@ export function registerBayCommands(
 
     vscode.commands.registerCommand('bays.closeToRight', async (arg: unknown) => {
       const bay = resolve(arg);
-      // TODO: Aquí se cierra hacia abajo (no derecha) segun el orden de las bays en la extension. Hay que cambiar el comando.
-      if (bay) { await bay.closeToDown(); }
+      if (bay) { await bay.closeToRight(); }
     }),
 
     vscode.commands.registerCommand('bays.closeAll', async () => {
@@ -144,11 +143,6 @@ export function registerBayCommands(
     vscode.commands.registerCommand('bays.revealInFileExplorer', async (arg: unknown) => {
       const bay = resolve(arg);
       if (bay) { await bay.revealInFileExplorer(); }
-    }),
-
-    vscode.commands.registerCommand('bays.revealInExplorerView', async (arg: unknown) => {
-      const bay = resolve(arg);
-      if (bay) { await bay.revealInExplorerView(); }
     }),
 
     vscode.commands.registerCommand('bays.moveToNewWindow', async (arg: unknown) => {

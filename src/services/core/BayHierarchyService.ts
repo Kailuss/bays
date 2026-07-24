@@ -1,9 +1,6 @@
-import * as vscode from 'vscode';
-import { updateEditorCursor } from './BayEditorUtils';
 import { syncCursorPosition as syncCursorPositionUtil } from './BayCursorSyncUtils';
-import type { Bay, DiffStats } from '../../models/Bay';
+import type { Bay } from '../../models/Bay';
 import type { BayStateService } from './BayStateService';
-import type { DocumentManager } from './DocumentManager';
 import { Logger } from '../../utils/logger';
 
 /**
@@ -11,28 +8,22 @@ import { Logger } from '../../utils/logger';
  *
  * Responsibilities:
  * - Register/unregister children under parents
- * - Keep hasChildren and childrenCount synchronized
+ * - Keep hasVariant and variantCount synchronized
  * - Inherit state from parent to child (only viewMode for Markdown)
  * - Recalculate counters when necessary
- * - Delegate document metadata to DocumentManager
  *
  * IMPORTANT:
  * - Markdown children inherit ONLY viewMode from parent
  * - gitStatus, diagnosticSeverity and state icons are NOT inherited
  * - Children have NO bay-actions (only close button)
  * - When a child is active, parent maintains active appearance
- * - DocumentManager is the source of truth for document metadata
  *
- * @see docs/ANALISIS_PARENT_CHILD.md
- * @see docs/PLAN_OPTIMIZACION_TABSYNC.md
  * @see services/core/AGENT.md
- * @see DocumentManager for document metadata management
  */
 export class BayHierarchyService {
   // --- Constructor y dependencias ---
   constructor(
-    private stateService: BayStateService,
-    private documentManager?: DocumentManager
+    private stateService: BayStateService
   ) {}
 
   // --- MÉTODOS PÚBLICOS DE JERARQUÍA ---
@@ -112,17 +103,6 @@ export class BayHierarchyService {
   }
 
   /**
-   * Checks if a bay has variants.
-   *
-   * @param bayId Bay ID
-   * @returns true if has variants, false otherwise
-   */
-  hasVariants(bayId: string): boolean {
-    return this.stateService.getAllBays()
-      .some(bay => bay.metadata.sourceBayId === bayId);
-  }
-
-  /**
    * Recalculates children count for all parents.
    * Useful after full synchronization or when inconsistencies exist.
    */
@@ -151,26 +131,6 @@ export class BayHierarchyService {
     }
   }
 
-  /**
-   * Obtiene el árbol jerárquico de bays (parents con sus hijos).
-   * Útil para renderizado y navegación.
-   *
-   * @param groupId Optional: filter by group
-   * @returns Bay tree
-   */
-  getBayTree(groupId?: number): BayTreeNode[] {
-    const allBays = groupId 
-      ? this.stateService.getBaysByGroupId(groupId)
-      : this.stateService.getAllBays();
-
-    const parents = allBays.filter((bay: Bay) => !bay.metadata.sourceBayId);
-
-    return parents.map((parent: Bay) => ({
-      bay: parent,
-      children: this.buildChildrenTree(parent.metadata.id, allBays),
-    }));
-  }
-
   // --- HERENCIA Y SINCRONIZACIÓN DE ESTADO ---
 
   /**
@@ -180,8 +140,7 @@ export class BayHierarchyService {
    * - Only Markdown children inherit viewMode
    * - gitStatus, diagnosticSeverity and icons are NOT inherited
    * - This is by design to keep children simple
-   * - Diff stats are delegated to DocumentManager if available
-   * 
+   *
    * @param variantBay Child bay that inherits
    * @param sourceBay Parent bay to inherit from
    */
@@ -192,9 +151,9 @@ export class BayHierarchyService {
       Logger.log(`[BayHierarchy] Child inherited viewMode: ${variantBay.metadata.label} ← ${sourceBay.state.viewMode}`);
     }
 
-    // Calculate diff stats for the child (pass parent for DocumentManager lookup)
+    // Calculate diff stats for the child
     if (variantBay.metadata.diffType) {
-      this.calculateDiffStatsWithParent(variantBay, sourceBay);
+      this.calculateDiffStats(variantBay);
     }
   }
 
@@ -221,14 +180,12 @@ export class BayHierarchyService {
   /**
    * Calculates diff statistics for a child bay based on its type.
    *
-   * If DocumentManager is available, attempts to get stats from there.
-   * For working-tree and staged: attempts to get lines from VS Code diff.
-   * For snapshots: uses timestamp information.
-   * 
+   * For working-tree/staged/edit: placeholder or label-derived stats.
+   * For snapshots and commits: timestamp information.
+   *
    * @param childBay Child bay to calculate stats
-   * @param parentBay Parent bay (to get baseUri)
    */
-  private calculateDiffStatsWithParent(childBay: Bay, parentBay: Bay): void {
+  private calculateDiffStats(childBay: Bay): void {
     if (!childBay.metadata.diffType) { return; }
 
     const diffType = childBay.metadata.diffType;
@@ -236,51 +193,11 @@ export class BayHierarchyService {
     // If already has diffStats (e.g. extracted in tabConverter), don't overwrite
     if (childBay.state.diffStats) { return; }
 
-    // Attempt to get stats from DocumentManager if available
-    if (this.documentManager && parentBay.metadata.uri) {
-      const stats = this.getStatsFromDocumentManager(parentBay.metadata.uri, childBay);
-      if (stats) {
-        childBay.state.diffStats = stats;
-        return;
-      }
-    }
-
-    // Fallback: calculate stats locally
     this.calculateLocalDiffStats(childBay, diffType);
   }
 
   /**
-   * Attempts to get stats from DocumentManager.
-   * 
-   * @param baseUri Base URI of the parent document
-   * @param childBay Child bay
-   * @returns DiffStats or undefined
-   */
-  private getStatsFromDocumentManager(baseUri: vscode.Uri, childBay: Bay): DiffStats | undefined {
-    if (!this.documentManager) {
-      return undefined;
-    }
-
-    // Get document by URI
-    const document = this.documentManager.getDocumentByUri(baseUri);
-    if (!document) {
-      return undefined;
-    }
-
-    // Get all versions for this diff type
-    const versions = this.documentManager.getVersionsByType(
-      document.documentId,
-      childBay.metadata.diffType!
-    );
-
-    // Find version matching this bay
-    const matchingVersion = versions.find((v: any) => v.relatedBayId === childBay.metadata.id);
-
-    return matchingVersion?.stats;
-  }
-
-  /**
-   * Calculates stats locally when DocumentManager is not available.
+   * Calculates stats from locally available information.
    *
    * @param childBay Child bay
    * @param diffType Diff type
@@ -319,48 +236,4 @@ export class BayHierarchyService {
       };
     }
   }
-
-  /**
-   * Gets document statistics from DocumentManager.
-   *
-   * @param bayId Parent bay ID
-   * @returns Aggregated statistics or undefined
-   */
-  getDocumentStats(bayId: string): ReturnType<NonNullable<typeof this.documentManager>['getDocumentStats']> | undefined {
-    const bay = this.stateService.getBayById(bayId);
-    if (!bay?.metadata.uri || !this.documentManager) {
-      return undefined;
-    }
-
-    const document = this.documentManager.getDocumentByUri(bay.metadata.uri);
-    if (!document) {
-      return undefined;
-    }
-
-    return this.documentManager.getDocumentStats(document.documentId);
-  }
-
-  /**
-   * Recursively builds the children tree.
-   *
-   * @param parentId Parent ID
-   * @param allBays All available bays
-   * @returns Array of child nodes
-   */
-  private buildChildrenTree(parentId: string, allBays: Bay[]): BayTreeNode[] {
-    const children = allBays.filter((bay: Bay) => bay.metadata.sourceBayId === parentId);
-
-    return children.map((child: Bay) => ({
-      bay: child,
-      children: this.buildChildrenTree(child.metadata.id, allBays),
-    }));
-  }
 }
-
-/**
- * Node in the hierarchical bay tree.
- */
-export type BayTreeNode = {
-  bay: Bay;
-  children: BayTreeNode[];
-};

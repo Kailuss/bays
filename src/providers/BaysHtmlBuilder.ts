@@ -9,8 +9,8 @@
  */
 
 import * as vscode from 'vscode';
+import { randomBytes } from 'crypto';
 import { BayIconManager } from '../services/ui/BayIconManager';
-import type { DocumentManager } from '../services/core/DocumentManager';
 import { Bay } from '../models/Bay';
 import { BayGroup, BayGroupColor } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
@@ -46,7 +46,6 @@ export class BaysHtmlBuilder {
     private readonly iconManager: BayIconManager,
     context: vscode.ExtensionContext,
     private readonly fileActionRegistry?: FileActionRegistry,
-    private readonly documentManager?: DocumentManager,
   ) {
     this.iconRenderer = new IconRenderer(this.iconManager, context);
     this.stylesBuilder = new StylesBuilder();
@@ -75,7 +74,7 @@ export class BaysHtmlBuilder {
 
     this._enableHoverActions = enableHoverActions;
 
-    const uris = this.resolveResourceUris(webview, enableDragDrop);
+    const uris = this.resolveResourceUris(webview);
     const nonce = this.generateNonce();
     const pendingIcons: PendingIcon[] = [];
     const baysHtml = this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode, pendingIcons);
@@ -85,7 +84,7 @@ export class BaysHtmlBuilder {
     // el HTML no vuelve a leer el fichero de disco.
     const fontFaceCss = await this.iconManager.getFontFaceCss();
 
-    const html = this.assembleHtml(webview, uris, nonce, baysHtml, fontFaceCss, options.initialLoad);
+    const html = this.assembleHtml(webview, uris, nonce, baysHtml, fontFaceCss, enableDragDrop, options.initialLoad);
     return { html, pendingIcons };
   }
 
@@ -98,17 +97,14 @@ export class BaysHtmlBuilder {
 
   //= RESOLUCIÓN DE RECURSOS
 
-  private resolveResourceUris(webview: vscode.Webview, enableDragDrop: boolean): WebviewResourceUris {
+  private resolveResourceUris(webview: vscode.Webview): WebviewResourceUris {
     const asUri = (segments: string[]) =>
       webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, ...segments));
 
     return {
       codiconCss: asUri(['dist', 'codicons', 'codicon.css']),
       webviewCss: asUri(['dist', 'styles', 'webview.css']),
-      webviewScript: asUri(['dist', 'webview', 'webview.js']),
-      contextMenuScript: asUri(['dist', 'webview', 'contextmenu.js']),
-      pathTruncationScript: asUri(['dist', 'webview', 'pathTruncation.js']),
-      dragDropScript: enableDragDrop ? asUri(['dist', 'webview', 'dragdrop.js']) : null,
+      webviewScript: asUri(['dist', 'webview', 'main.js']),
     };
   }
 
@@ -120,30 +116,27 @@ export class BaysHtmlBuilder {
     nonce: string,
     baysHtml: string,
     fontFaceCss: string,
+    enableDragDrop: boolean,
     initialLoad = false,
   ): string {
     const csp = this.stylesBuilder.buildCSP(webview, nonce);
-    const criticalCss = this.stylesBuilder.buildCriticalCSS();
     const bodyClass = initialLoad ? '' : 'loaded';
 
+    // La config viaja al cliente como data-attribute del body (main.ts la lee
+    // en el arranque); el bundle es único y decide en runtime qué inicializa.
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
-<style>${criticalCss}</style>
 ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
 <link href="${uris.codiconCss}" rel="stylesheet" />
 <link href="${uris.webviewCss}" rel="stylesheet" />
 </head>
-<body class="${bodyClass}">
+<body class="${bodyClass}" data-enable-dragdrop="${enableDragDrop}">
   ${baysHtml || '<div class="empty">No open bays</div>'}
-  <!-- contextmenu.js va primero: webview.js usa BaysContextMenu -->
-  <script nonce="${nonce}" src="${uris.contextMenuScript}"></script>
   <script nonce="${nonce}" src="${uris.webviewScript}"></script>
-  <script nonce="${nonce}" src="${uris.pathTruncationScript}"></script>
-  ${uris.dragDropScript ? `<script nonce="${nonce}" src="${uris.dragDropScript}"></script>` : ''}
 </body>
 </html>`;
   }
@@ -234,7 +227,7 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}"${colorAttr}>`;
       block += this.renderBay(parent, context, hasPreviewVariant);
       for (const child of children) {
-        block += this.renderVariantBay(child, parent, context.locked);
+        block += this.renderVariantBay(child, context.locked);
       }
       block += `</div>`;
       rendered.push(block);
@@ -256,14 +249,13 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
    */
   private renderVariantBay(
     bay: Bay,
-    parent: Bay,
     locked: boolean,
   ): string {
     return VariantRowRenderer.render({
       bay,
-      parentId: this.esc(parent.metadata.id),
       esc: this.esc,
       allowClose: !locked,
+      hover: this._enableHoverActions,
     });
   }
 
@@ -280,10 +272,10 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
   private renderOrphanVariantBay(bay: Bay, locked: boolean): string {
     return VariantRowRenderer.render({
       bay,
-      parentId: this.esc(bay.metadata.sourceBayId ?? ''),
       esc: this.esc,
       orphan: true,
       allowClose: !locked,
+      hover: this._enableHoverActions,
     });
   }
 
@@ -363,13 +355,10 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
       .replace(/'/g, '&#039;');
   }
 
+  // CSPRNG: la CSP confía en el nonce para script-src, así que no puede salir
+  // de Math.random() (predecible).
   private generateNonce(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let nonce = '';
-    for (let i = 0; i < 32; i++) {
-      nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return nonce;
+    return randomBytes(24).toString('base64');
   }
 }
 

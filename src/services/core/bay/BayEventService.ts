@@ -27,7 +27,15 @@ export class BayEventService {
     private hierarchyService: BayHierarchyService,
     private bayHeadService: BayHeadService,
     private activeStateService: ActiveStateService,
-    private resyncAll?: () => Promise<void>
+    /** Full resync on structural group changes (queued by BaySyncService). */
+    private resyncAll: () => Promise<void>,
+    /**
+     * Cola de serialización compartida de BaySyncService. Todo handler que mute
+     * el estado pasa por aquí: VS Code NO espera a los listeners async, así que
+     * sin la cola dos eventos de tabs podían procesarse a la vez (el await de
+     * ensureParentExists abría la ventana de reentrada).
+     */
+    private enqueue: (task: () => Promise<void>) => Promise<void>
   ) {}
 
   /**
@@ -50,8 +58,8 @@ export class BayEventService {
     );
 
     this.disposables.push(
-      vscode.window.tabGroups.onDidChangeTabs(async (event) => {
-        await this.handleTabChanges(event);
+      vscode.window.tabGroups.onDidChangeTabs((event) => {
+        void this.enqueue(() => this.handleTabChanges(event));
       })
     );
 
@@ -61,16 +69,20 @@ export class BayEventService {
     // bay would keep its stale URI/label/path/git forever. Handle the rename (and the
     // matching delete cleanup) explicitly against the filesystem events.
     this.disposables.push(
-      vscode.workspace.onDidRenameFiles((event) => this.handleFilesRenamed(event))
+      vscode.workspace.onDidRenameFiles((event) => {
+        void this.enqueue(async () => this.handleFilesRenamed(event));
+      })
     );
 
     this.disposables.push(
-      vscode.workspace.onDidDeleteFiles((event) => this.handleFilesDeleted(event))
+      vscode.workspace.onDidDeleteFiles((event) => {
+        void this.enqueue(async () => this.handleFilesDeleted(event));
+      })
     );
 
     this.disposables.push(
       vscode.window.tabGroups.onDidChangeTabGroups((event) => {
-        this.handleGroupChanges(event);
+        void this.enqueue(async () => this.handleGroupChanges(event));
       })
     );
 
@@ -97,7 +109,7 @@ export class BayEventService {
         const line = selection.active.line + 1;
         const column = selection.active.character + 1;
 
-        this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
+        void this.hierarchyService.syncCursorPosition(bay.metadata.id, line, column);
       })
     );
 
@@ -157,7 +169,8 @@ export class BayEventService {
       // Verificar si es un cierre intencional (ya procesado).
       // NO llamar clearIntentionalClose aquí: el mismo parent puede recibir
       // múltiples eventos de cierre si varios variants cierran a la vez.
-      // El timeout de 2000ms en handleCloseVariant limpia los marcadores.
+      // handleCloseVariant (BaysWebviewProvider) limpia los marcadores al
+      // terminar su polling (y siempre, vía try/finally).
       if (this.stateService.isIntentionalClose(id)) {
         Logger.log(`[BayEvent] Ignoring intentional close (already processed): ${id}`);
         continue;
@@ -280,7 +293,7 @@ export class BayEventService {
     // (and diff URIs the targeted path can't reconstruct) → reconcile from native truth.
     if (affected.some(a => a.bay.metadata.sourceBayId || a.bay.state.hasVariant)) {
       Logger.log('[BayEvent] Rename touches a variant/parent — full resync');
-      void this.resyncAll?.();
+      void this.resyncAll();
       return;
     }
 
@@ -290,7 +303,7 @@ export class BayEventService {
         // Only fails on an id collision (rename overwrote another open file) — that
         // genuinely needs native reconciliation, so hand off to a full resync.
         Logger.warn(`[BayEvent] Rekey rejected for ${bay.metadata.label} — full resync`);
-        void this.resyncAll?.();
+        void this.resyncAll();
         return;
       }
       Logger.log(`[BayEvent] Rekeyed bay after rename: ${bay.metadata.label} → ${newUri.fsPath}`);
@@ -352,7 +365,7 @@ export class BayEventService {
     // patching is hopeless — rebuild the state from the native API. resyncAll
     // preserves local-only state (manual drag&drop order) and notifies once.
     if (event.opened.length > 0 || event.closed.length > 0) {
-      void this.resyncAll?.();
+      void this.resyncAll();
       return;
     }
 

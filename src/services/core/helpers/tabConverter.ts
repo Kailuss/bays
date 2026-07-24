@@ -190,7 +190,7 @@ export function convertToBay(
   } else if (uri && uri.scheme === 'chat-editing-snapshot-text-model') {
     id = generateVariantId(uri, undefined, viewColumn);
   } else {
-    id = generateId(label, uri, viewColumn, tabType, !!parentId, viewType);
+    id = generateId(label, uri, viewColumn, tabType, viewType);
   }
 
   const baseMetadata: BayMetadata = {
@@ -247,14 +247,9 @@ export function convertToBay(
     // VISUALIZATION MODE
     viewMode,
 
-    actionContext  : stateWithDefaults.actionContext!,
-    operationState : stateWithDefaults.operationState!,
-
     capabilities,
-    permissions    : stateWithDefaults.permissions!,
 
     hasVariant    : false,
-    isVariant        : !!parentId, // Variants have parentId set
     variantCount  : 0,
 
     isLoading      : false,
@@ -274,9 +269,6 @@ export function convertToBay(
     integrations   : stateWithDefaults.integrations!,
 
     diffStats,
-
-    customActions  : stateWithDefaults.customActions,
-    shortcuts      : stateWithDefaults.shortcuts,
   };
 
   return new Bay(metadata, state);
@@ -336,25 +328,17 @@ export function remapFileBayUri(
 
 /**
  * Genera un ID único y estable para una bay.
- * Archivos: URI + viewColumn. Webviews: label sanitizado. Diffs: prefijo "diff:".
+ * Archivos: URI + viewColumn. Webviews: viewType sanitizado.
+ * (Los diffs no pasan por aquí: usan generateVariantId.)
  */
-let diffIdCounter = 0;
-
 export function generateId(
   label      : string,
   uri        : vscode.Uri | undefined,
   viewColumn : vscode.ViewColumn,
   tabType    : BayType,
-  isDiff?    : boolean,
   viewType?  : string,
 ): string {
   if (uri) {
-    if (isDiff) {
-      const timestamp        = Date.now();
-      const counter          = diffIdCounter++;
-      const safeLabelSegment = label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-      return `diff:${uri.toString()}-${safeLabelSegment}-${timestamp}-${counter}-${viewColumn}`;
-    }
     return `${uri.toString()}-${viewColumn}`;
   }
   // Uriless tabs (webviews): key off the STABLE viewType, not the mutable label.
@@ -367,12 +351,11 @@ export function generateId(
 }
 
 /**
- * Deterministic, reconstructable id for a diff/variant tab. Unlike generateId's
- * `isDiff` branch (which embeds Date.now()+counter and therefore can never be
- * reproduced from a native tab), this derives solely from the modified/original
- * URIs and viewColumn — all available on the native tab — so the open path and
- * the close/active-sync paths agree on the same id. Including the original URI
- * also disambiguates two different diffs of the same file in one group.
+ * Deterministic, reconstructable id for a diff/variant tab. Derives solely from
+ * the modified/original URIs and viewColumn — all available on the native tab —
+ * so the open path and the close/active-sync paths agree on the same id.
+ * Including the original URI also disambiguates two different diffs of the same
+ * file in one group.
  */
 export function generateVariantId(
   modifiedUri : vscode.Uri,
@@ -422,7 +405,7 @@ export function generateIdFromNativeTab(VSTab: vscode.Tab): string | null {
   }
   // Pass viewType so webview ids stay stable across the panel's runtime title
   // changes — mirrors convertToBay exactly (see generateId).
-  return generateId(label, uri, VSTab.group.viewColumn, tabType, undefined, viewType);
+  return generateId(label, uri, VSTab.group.viewColumn, tabType, viewType);
 }
 
 /**

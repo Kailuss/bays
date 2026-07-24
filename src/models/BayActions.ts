@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { BayMetadata, BayState, ActionContext, BayIntegrations, CustomBayAction } from './Bay';
+import type { BayMetadata, BayState } from './Bay';
 import * as actions from './actions';
 
 /**
@@ -26,8 +26,8 @@ export abstract class BayActions {
     return actions.closeGroup(this.metadata, this.state);
   }
 
-  async closeToDown(): Promise<void> {
-    return actions.closeToDown(this.metadata, this.state);
+  async closeToRight(): Promise<void> {
+    return actions.closeToRight(this.metadata, this.state);
   }
 
   //- PIN ACTIONS
@@ -44,10 +44,6 @@ export abstract class BayActions {
 
   async revealInExplorer(): Promise<void> {
     return actions.revealInExplorer(this.metadata, this.state);
-  }
-
-  async revealInExplorerView(): Promise<void> {
-    return actions.revealInExplorerView(this.metadata, this.state);
   }
 
   async revealInFileExplorer(): Promise<void> {
@@ -106,49 +102,7 @@ export abstract class BayActions {
 
   //- STATE MANAGEMENT ACTIONS
 
-  startOperation(operationName: string, canCancel: boolean = false): void {
-    actions.startOperation(this.state, operationName, canCancel);
-  }
-
-  updateOperationProgress(progress: number): void {
-    actions.updateOperationProgress(this.state, progress);
-  }
-
-  finishOperation(): void {
-    actions.finishOperation(this.state);
-  }
-
-  updateActionContext(context: Partial<ActionContext>): void {
-    actions.updateActionContext(this.state, context);
-  }
-
-  isActionRestricted(actionId: string): boolean {
-    return actions.isActionRestricted(this.state, actionId);
-  }
-
   addToCopilotContext(): void {
     actions.addToCopilotContext(this.state);
-  }
-
-  removeFromCopilotContext(): void {
-    actions.removeFromCopilotContext(this.state);
-  }
-
-  updateGitIntegration(gitInfo: Partial<BayIntegrations['git']>): void {
-    actions.updateGitIntegration(this.state, gitInfo);
-  }
-
-  //- CUSTOM ACTIONS
-
-  addCustomAction(action: CustomBayAction): void {
-    actions.addCustomAction(this.state, action);
-  }
-
-  async executeCustomAction(actionId: string): Promise<void> {
-    return actions.executeCustomAction(this.metadata, this.state, actionId);
-  }
-
-  removeCustomAction(actionId: string): void {
-    actions.removeCustomAction(this.state, actionId);
   }
 }

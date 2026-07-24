@@ -177,35 +177,3 @@ export function getDiffTypeDisplay(
   
   return info;
 }
-
-/**
- * Genera HTML del icono codicon para un tipo de diff.
- */
-export function getDiffTypeIconHtml(diffType: DiffType | undefined): string {
-  const info = getDiffTypeDisplay(diffType);
-  if (!info) {
-    return '';
-  }
-  return `<span class="codicon codicon-${info.icon}" title="${info.tooltip || info.label}"></span>`;
-}
-
-/**
- * Genera HTML completo del badge de tipo (icono + label).
- */
-export function getDiffTypeBadgeHtml(
-  diffType: DiffType | undefined,
-  compareFileName?: string,
-): string {
-  const info = getDiffTypeDisplay(diffType, compareFileName);
-  if (!info) {
-    return '';
-  }
-  
-  const cssClass = info.cssClass ? ` ${info.cssClass}` : '';
-  const tooltip = info.tooltip || info.label;
-  
-  return `<span class="diff-type-badge${cssClass}" title="${tooltip}">
-    <span class="codicon codicon-${info.icon}"></span>
-    <span class="diff-type-label">${info.label}</span>
-  </span>`;
-}

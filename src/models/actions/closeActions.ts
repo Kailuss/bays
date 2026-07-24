@@ -34,7 +34,11 @@ export async function closeGroup(_metadata: BayMetadata, state: BayState): Promi
   await vscode.window.tabGroups.close(group);
 }
 
-export async function closeToDown(
+/**
+ * Cierra las bays que siguen a esta en el orden de la lista (el equivalente
+ * vertical de "Close to the Right" de la tab bar nativa).
+ */
+export async function closeToRight(
   metadata: BayMetadata,
   state: BayState
 ): Promise<void> {

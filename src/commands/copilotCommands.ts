@@ -14,7 +14,7 @@ export function registerCopilotCommands(
     vscode.commands.registerCommand('bays.addToCopilotChat', async (bayId: string) => {
       const bay = typeof bayId === 'string' ? stateService.getBayById(bayId) : undefined;
       if (bay) {
-        await copilotService.addFileToChat(bay.metadata.uri);
+        await copilotService.addFileToChat(bay);
       }
     }),
 

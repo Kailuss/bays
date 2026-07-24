@@ -18,15 +18,6 @@ export async function revealInExplorer(
   }
 }
 
-export async function revealInExplorerView(
-  metadata: BayMetadata,
-  _state: BayState
-): Promise<void> {
-  if (metadata.uri) {
-    await vscode.commands.executeCommand('revealInExplorer', metadata.uri);
-  }
-}
-
 export async function revealInFileExplorer(
   metadata: BayMetadata,
   _state: BayState

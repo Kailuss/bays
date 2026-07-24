@@ -63,11 +63,3 @@
   margin-left: 4px;
   opacity: 0.7;
 }
-
-/* Preview ownership indicator */
-.bay-name .preview-badge {
-  font-size: 12px;
-  margin-left: 4px;
-  opacity: 0.7;
-  color: #ffa500; /* orange for visibility */
-}

@@ -56,21 +56,15 @@ function bundleCss(mainCssPath, outputPath) {
 		bundledCss = mainContent;
 	}
 	
-	// Replace the #{ROOT_PATH}# placeholder used in source CSS files.
-	// In CSS, #{ROOT_PATH}# represents the root folder for webview assets (e.g. fonts, icons),
-	// and is typically used in URLs like url("#{ROOT_PATH}#/fonts/...") so the same CSS works
-	// regardless of where the compiled file is emitted. At build time our bundled CSS is
-	// written to dist/styles/, while shared assets live one level up (e.g. dist/fonts or
-	// dist/codicons), so we replace #{ROOT_PATH}# with '..' to generate correct relative URLs.
-	bundledCss = bundledCss.replace(/#{ROOT_PATH}#/g, '..');
-	
 	fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 	fs.writeFileSync(outputPath, bundledCss);
 	console.log(`[build] CSS bundled: ${outputPath}`);
 }
 
 /**
- * Copia los recursos necesarios para el webview a dist/
+ * Copia los recursos estáticos del webview a dist/ (CSS y codicons).
+ * El JS del cliente ya NO se copia: es TypeScript bundleado por esbuild
+ * (src/webview/main.ts → dist/webview/main.js, ver webviewCtx en main()).
  */
 function copyWebviewResources() {
 	// Combinar y copiar estilos CSS (resolviendo @imports)
@@ -78,13 +72,6 @@ function copyWebviewResources() {
 	const distCssPath = path.join(__dirname, 'dist', 'styles', 'webview.css');
 	if (fs.existsSync(mainCssPath)) {
 		bundleCss(mainCssPath, distCssPath);
-	}
-
-	// Copiar scripts del webview
-	const webviewDir = path.join(__dirname, 'src', 'webview');
-	const distWebviewDir = path.join(__dirname, 'dist', 'webview');
-	if (fs.existsSync(webviewDir)) {
-		copyDir(webviewDir, distWebviewDir);
 	}
 
 	// Copiar codicons (necesarios para iconos en el webview)
@@ -119,11 +106,37 @@ const esbuildProblemMatcherPlugin = {
 	},
 };
 
+/**
+ * Problem matcher del bundle del webview: solo reporta errores (los assets
+ * los copia ya el matcher del host).
+ * @type {import('esbuild').Plugin}
+ */
+const webviewProblemMatcherPlugin = {
+	name: 'webview-problem-matcher',
+
+	setup(build) {
+		build.onEnd((result) => {
+			result.errors.forEach(({ text, location }) => {
+				console.error(`✘ [ERROR] ${text}`);
+				console.error(`    ${location.file}:${location.line}:${location.column}:`);
+			});
+			if (result.errors.length === 0) {
+				console.log('[build] Webview bundle: dist/webview/main.js');
+			}
+		});
+	},
+};
+
 async function main() {
+	// Limpiar restos de builds anteriores del webview (los antiguos *.js
+	// copiados verbatim quedarían empaquetados si no se borran).
+	fs.rmSync(path.join(__dirname, 'dist', 'webview'), { recursive: true, force: true });
+
 	// Copiar recursos del webview antes de compilar
 	copyWebviewResources();
 
-	const ctx = await esbuild.context({
+	// Extension host (Node, CJS)
+	const hostCtx = await esbuild.context({
 		entryPoints: [
 			'src/extension.ts'
 		],
@@ -141,11 +154,35 @@ async function main() {
 			esbuildProblemMatcherPlugin,
 		],
 	});
+
+	// Cliente del webview (navegador, IIFE). Un único bundle: el grafo de
+	// imports de main.ts define el orden, sin depender de <script> tags.
+	const webviewCtx = await esbuild.context({
+		entryPoints: [
+			'src/webview/main.ts'
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		target: 'es2022',
+		outfile: 'dist/webview/main.js',
+		logLevel: 'silent',
+		plugins: [
+			webviewProblemMatcherPlugin,
+		],
+	});
+
 	if (watch) {
-		await ctx.watch();
+		await hostCtx.watch();
+		await webviewCtx.watch();
 	} else {
-		await ctx.rebuild();
-		await ctx.dispose();
+		await hostCtx.rebuild();
+		await webviewCtx.rebuild();
+		await hostCtx.dispose();
+		await webviewCtx.dispose();
 	}
 }
 
