@@ -34,9 +34,14 @@
 }
 
 /* Compact mode text adjustment */
+/* justify-content se hereda de .bay-text, donde vale `center` para centrar
+   VERTICALMENTE la pila nombre+ruta. Al pasar a `row` ese mismo `center` pasa a
+   centrar en HORIZONTAL y el texto flotaba en medio de la fila: en compacto hay
+   que anclarlo a la izquierda, como en el modo normal. */
 .bay.compact .bay-text {
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
 }
 
