@@ -1,15 +1,18 @@
 import * as assert from 'assert';
-
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from 'vscode';
-// import * as myExtension from '../../extension';
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+suite('Extension activation', () => {
+	test('the extension is present and activates', async () => {
+		const ext = vscode.extensions.getExtension('Kailuss.bays');
+		assert.ok(ext, 'extension Kailuss.bays not found in the test host');
+		await ext.activate();
+		assert.strictEqual(ext.isActive, true);
+	});
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+	test('contributed commands are registered after activation', async () => {
+		const all = await vscode.commands.getCommands(true);
+		for (const cmd of ['bays.openBay', 'bays.closeBay', 'bays.refresh', 'bays.pinBay', 'bays.closeToRight']) {
+			assert.ok(all.includes(cmd), `command ${cmd} is not registered`);
+		}
 	});
 });
