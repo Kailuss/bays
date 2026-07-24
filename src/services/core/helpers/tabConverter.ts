@@ -5,6 +5,7 @@ import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers                          } from '../../../models/BayHelpers';
 import type { GitSyncService                 } from '../../integration/GitSyncService';
 import { formatFilePathWithParts             } from '../../../utils/pathFormatters';
+import { resolveLanguageId                   } from '../../../utils/languageRegistry';
 import { Logger                              } from '../../../utils/logger';
 import { classifyDiffType, determineParentId } from './tabClassifier';
 
@@ -201,6 +202,10 @@ export function convertToBay(
     fileExtension : fileType,
     bayType       : tabType,
     viewType,
+    // Se deriva del nombre de archivo (registro de lenguajes contribuidos) en vez
+    // de leer `document.languageId`: las tabs restauradas no tienen documento
+    // cargado al arrancar y abrirlo despertaría todas las extensiones de lenguaje.
+    languageId    : uri ? resolveLanguageId(path.basename(uri.fsPath)) : undefined,
   };
 
   const metadata = BayHelpers.enrichMetadata(baseMetadata);

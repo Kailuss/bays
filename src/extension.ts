@@ -9,6 +9,7 @@ import { ThemeService            } from './services/ui/ThemeService';
 import { CopilotService          } from './services/integration/CopilotService';
 import { registerBayCommands     } from './commands/bayCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
+import { activateLanguageRegistry } from './utils/languageRegistry';
 import { Logger                  } from './utils/logger';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -16,6 +17,12 @@ export async function activate(context: vscode.ExtensionContext) {
   Logger.log('Activating Bays…');
 
   try {
+    // Mapa nombre-de-archivo → languageId a partir de `contributes.languages`.
+    // Debe existir ANTES de convertir tabs o resolver iconos: los temas que
+    // indexan por lenguaje (p.ej. .sh vía `languageIds.shellscript`) dependen
+    // de él para no caer al icono por defecto.
+    activateLanguageRegistry(context);
+
     // Core services
     const stateService       = new BayStateService();
     const syncService        = new BaySyncService(stateService);

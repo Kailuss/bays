@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import * as fsp    from 'fs/promises';
 import { Logger }  from '../../utils/logger';
 import * as path   from 'path';
+import { resolveLanguageId } from '../../utils/languageRegistry';
 
 /**
  * Resuelve y cachea iconos de archivo según el tema de iconos activo.
@@ -17,6 +18,7 @@ export class BayIconManager {
   private _iconThemeId       : string | undefined;
   private _iconThemePath     : string | undefined;
   private _iconThemeJson     : any;
+  private _defaultFileIconId : string | undefined;
   private _iconPathCache     : Map<string, string> = new Map();
   private _isPreloadingIcons : boolean = false;
   private _configListener    : vscode.Disposable | undefined;
@@ -143,6 +145,12 @@ export class BayIconManager {
       this._iconThemePath = themePath;
       this._iconThemeJson = themeJson;
 
+      // El id del icono de archivo por defecto lo declara el propio tema en su
+      // clave `file`; no siempre se llama `_file`. Guardarlo evita adivinarlo
+      // buscando claves que "contengan file" en iconDefinitions.
+      this._defaultFileIconId =
+        typeof themeJson.file === 'string' ? themeJson.file : undefined;
+
       const iconMap: Record<string, string> = {};
 
       // Mapear nombres de archivo → id de icono
@@ -237,6 +245,12 @@ export class BayIconManager {
       // preloaded entry would never be read back (cold reads on every paint).
       const cacheKey = fileNameLower;
 
+      // Un icono ya resuelto (base64 o font-icon) se devuelve tal cual: sin esto
+      // un hit en _iconPathCache seguía releyendo y re-codificando el SVG en cada
+      // pintado.
+      const cachedIcon = this._iconCache.get(cacheKey);
+      if (cachedIcon) { return cachedIcon; }
+
       // Check path cache
       let iconPath = this._iconPathCache.get(cacheKey);
 
@@ -250,10 +264,22 @@ export class BayIconManager {
           iconId = this._iconMap[`ext:${compoundExt}`];
         } else if (extName && this._iconMap[`ext:${extName}`]) {
           iconId = this._iconMap[`ext:${extName}`];
-        } else if (languageId && this._iconMap[`lang:${languageId.toLowerCase()}`]) {
-          iconId = this._iconMap[`lang:${languageId.toLowerCase()}`];
         }
-        
+
+        // Resolución por lenguaje. Muchos temas mapean tipos de archivo MUY
+        // comunes solo aquí y no en `fileExtensions` — bearded-icons, por
+        // ejemplo, no declara `ext:sh` y resuelve los scripts vía
+        // `languageIds.shellscript`. El languageId explícito (documento ya
+        // abierto) manda; si no hay, se deriva del nombre con el registro de
+        // lenguajes contribuidos, que funciona también para tabs restauradas
+        // cuyo documento aún no está cargado.
+        if (!iconId) {
+          const effectiveLanguageId = languageId ?? resolveLanguageId(fileName);
+          if (effectiveLanguageId) {
+            iconId = this._iconMap[`lang:${effectiveLanguageId.toLowerCase()}`];
+          }
+        }
+
         // Archivos especiales: *ignore (gitignore, npmignore, dockerignore, vscodeignore)
         if (!iconId && fileNameLower.endsWith('ignore')) {
           // Buscar patrón genérico "ignore" en diferentes formas
@@ -263,35 +289,18 @@ export class BayIconManager {
           iconId = gitignoreId || ignoreLangId || ignoreExtId;
         }
 
-        // Try inferring language from extension
-        if (!iconId) {
-          let inferredLanguageId = languageId;
-          if (!inferredLanguageId) {
-            const extensionToLanguageMap: Record<string, string> = {
-              js:   'javascript',
-              ts:   'typescript',
-              jsx:  'javascriptreact',
-              tsx:  'typescriptreact',
-              json: 'json',
-              md:   'markdown',
-              py:   'python',
-              html: 'html',
-              css:  'css',
-            };
-
-            inferredLanguageId = extensionToLanguageMap[extName];
-          }
-
-          if (inferredLanguageId && this._iconMap[`lang:${inferredLanguageId.toLowerCase()}`]) {
-            iconId = this._iconMap[`lang:${inferredLanguageId.toLowerCase()}`];
-          } else if (['js', 'ts', 'jsx', 'tsx'].includes(extName)) {
-            iconId = this.getJavaScriptTypeScriptIconId(fileNameLower, extName);
-          }
+        // Último recurso para la familia JS/TS, que algunos temas indexan por
+        // lenguaje con nombres no estándar.
+        if (!iconId && ['js', 'ts', 'jsx', 'tsx'].includes(extName)) {
+          iconId = this.getJavaScriptTypeScriptIconId(fileNameLower, extName);
         }
 
         // Fallback al icono de archivo por defecto
         if (!iconId) {
-          if (themeJson.iconDefinitions?.['_file']) {
+          const declaredDefault = this._defaultFileIconId;
+          if (declaredDefault && themeJson.iconDefinitions?.[declaredDefault]) {
+            iconId = declaredDefault;
+          } else if (themeJson.iconDefinitions?.['_file']) {
             iconId = '_file';
           } else if (themeJson.iconDefinitions?.['file']) {
             iconId = 'file';
@@ -448,6 +457,13 @@ export class BayIconManager {
 
               const cacheKey = fileName.toLowerCase();
               if (!this._iconCache.has(cacheKey) || forceRefresh) {
+                // getFileIconAsBase64 devuelve el valor cacheado si existe, así
+                // que un force refresh debe invalidar ambas cachés primero o no
+                // recargaría nada.
+                if (forceRefresh) {
+                  this._iconCache.delete(cacheKey);
+                  this._iconPathCache.delete(cacheKey);
+                }
                 // getFileIconAsBase64 already caches under the same key; the
                 // explicit set is a harmless belt-and-suspenders.
                 const iconBase64 = await this.getFileIconAsBase64(fileName, context, languageId);
@@ -497,10 +513,11 @@ export class BayIconManager {
    * icons against its stale path instead of rendering the neutral fallback.
    */
   private clearThemeState(themeId: string): void {
-    this._iconMap       = {};
-    this._iconThemeId   = themeId;
-    this._iconThemeJson = undefined;
-    this._iconThemePath = undefined;
+    this._iconMap            = {};
+    this._iconThemeId        = themeId;
+    this._iconThemeJson      = undefined;
+    this._iconThemePath      = undefined;
+    this._defaultFileIconId  = undefined;
   }
 
   /** Read an icon file from disk and return a base64 data URI. */
