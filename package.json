@@ -199,7 +199,13 @@
       {
         "command"  :"bays.toggleCompactMode",
         "title"    :"Toggle Compact Mode",
-        "icon"     :"$(list-flat)",
+        "icon"     :"$(collapse-all)",
+        "category" :"Bays"
+      },
+      {
+        "command"  :"bays.toggleShowPath",
+        "title"    :"Toggle View Path",
+        "icon"     :"$(list-selection)",
         "category" :"Bays"
       },
       {
@@ -219,6 +225,13 @@
         "title"    :"Toggle Group Lock",
         "icon"     :"$(lock)",
         "category" :"Bays"
+      }
+    ],
+    "submenus": [
+      {
+        "id"   : "bays.viewOptions",
+        "label": "View Options",
+        "icon" : "$(settings)"
       }
     ],
     "menus": {
@@ -247,29 +260,24 @@
       ],
       "view/title": [
         {
-          "command": "bays.refresh",
-          "when": "view == bays",
+          "command": "bays.saveAll",
+          "when": "view == bays && bays.hasUnsavedBays",
           "group": "navigation@1"
         },
         {
-          "command": "bays.reorder",
+          "submenu": "bays.viewOptions",
           "when": "view == bays",
           "group": "navigation@2"
-        },
+        }
+      ],
+      "bays.viewOptions": [
         {
           "command": "bays.toggleCompactMode",
-          "when": "view == bays",
-          "group": "navigation@3"
+          "group": "1_toggles@1"
         },
         {
-          "command": "bays.saveAll",
-          "when": "view == bays",
-          "group": "navigation@4"
-        },
-        {
-          "command": "bays.addMultipleToCopilotChat",
-          "when": "view == bays && bays.copilotAvailable",
-          "group": "navigation@5"
+          "command": "bays.toggleShowPath",
+          "group": "1_toggles@2"
         }
       ]
     },

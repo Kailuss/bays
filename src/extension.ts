@@ -90,6 +90,19 @@ export async function activate(context: vscode.ExtensionContext) {
       }),
     );
 
+    //· Unsaved-changes context key (gates the always-visible "Save All" toolbar
+    //  button). Read from native tabs so it also covers custom editors/notebooks,
+    //  and re-evaluated on every tab change — dirty toggles arrive in the event's
+    //  `changed` array, closing the last dirty tab in `closed`.
+    const hasUnsavedBays = () =>
+      vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.isDirty));
+    const syncUnsavedContext = () =>
+      void vscode.commands.executeCommand('setContext', 'bays.hasUnsavedBays', hasUnsavedBays());
+    syncUnsavedContext();
+    context.subscriptions.push(
+      vscode.window.tabGroups.onDidChangeTabs(syncUnsavedContext),
+    );
+
     //· Activate services
     syncService.activate(context);
     themeService.activate(context);

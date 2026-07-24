@@ -55,6 +55,12 @@ export function registerBayCommands(
       await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
     }),
 
+    vscode.commands.registerCommand('bays.toggleShowPath', async () => {
+      const cfg = vscode.workspace.getConfiguration('bays');
+      const current = cfg.get<boolean>('showFilePath', true);
+      await cfg.update('showFilePath', !current, vscode.ConfigurationTarget.Global);
+    }),
+
     vscode.commands.registerCommand('bays.pinBay', async (arg: unknown) => {
       const bay = resolve(arg);
       if (bay) { await bay.pin(); stateService.reorderOnPin(bay.metadata.id); }
