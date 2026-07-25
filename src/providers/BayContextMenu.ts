@@ -82,7 +82,7 @@ export class BayContextMenu {
   /** Ejecuta el item elegido en el webview. Ignora los ids desconocidos. */
   async execute(actionId: string, bay: Bay): Promise<void> {
     switch (actionId) {
-      case 'close'                : await bay.close();                 break;
+      case 'close'                : await (this.stateService.getHierarchyService()?.closeBayWithVariants(bay) ?? bay.close()); break;
       case 'closeOthers'          : await bay.closeOthers();           break;
       case 'closeToRight'         : await bay.closeToRight();          break;
       case 'closeGroup'           : await bay.closeGroup();            break;

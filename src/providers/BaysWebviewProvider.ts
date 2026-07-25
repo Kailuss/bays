@@ -292,7 +292,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private async handleCloseBay(bayId: string): Promise<void> {
     const bay = this.findBay(bayId);
     if (bay) {
-      await bay.close();
+      await (this.stateService.getHierarchyService()?.closeBayWithVariants(bay) ?? bay.close());
     }
   }
 
