@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { generateId, generateVariantId } from '../services/core/helpers/tabConverter';
-import { classifyDiffType } from '../services/core/helpers/tabClassifier';
+import { classifyDiffType, resolveSourceUri, determineParentId } from '../services/core/helpers/tabClassifier';
 
 // La generación de IDs es el contrato más delicado del proyecto: el mismo id
 // tiene que poder RECONSTRUIRSE desde la tab nativa (open, close y active-sync
@@ -81,5 +81,36 @@ suite('classifyDiffType', () => {
 
 	test('timeline snapshot', () => {
 		assert.strictEqual(classifyDiffType('app.ts (Local History)'), 'snapshot');
+	});
+
+	// Los diffs del chat de Claude Code usan FileSystemProviders temporales
+	// (_claude_fs_* / _claude_vscode_fs_*) cuyo path es la ruta real del archivo.
+	// Sin esta detección caían en 'unknown' y el parentId apuntaba a una URI de
+	// provider → la variante quedaba huérfana (regla: nunca sin parent).
+	test('Claude Code chat edit: detected by provider scheme', () => {
+		const original = vscode.Uri.file('/p/src/app.ts');
+		const modified = vscode.Uri.from({ scheme: '_claude_vscode_fs_right', path: '/p/src/app.ts' });
+		assert.strictEqual(classifyDiffType('✻ [Claude Code] app.ts', original, modified), 'edit');
+	});
+
+	test('Claude Code chat edit: detected by label even with plain URIs', () => {
+		assert.strictEqual(classifyDiffType('✻ [Claude Code] app.ts'), 'edit');
+	});
+});
+
+suite('resolveSourceUri', () => {
+	test('Claude Code provider schemes normalize to the real file URI', () => {
+		const provider = vscode.Uri.from({ scheme: '_claude_fs_right', path: '/c:/p/src/app.ts' });
+		assert.strictEqual(resolveSourceUri(provider).toString(), vscode.Uri.file('/c:/p/src/app.ts').toString());
+	});
+
+	test('parentId of a Claude Code diff matches the real file bay id', () => {
+		const original = vscode.Uri.file('/p/src/app.ts');
+		const modified = vscode.Uri.from({ scheme: '_claude_vscode_fs_right', path: '/p/src/app.ts' });
+		const diffType = classifyDiffType('✻ [Claude Code] app.ts', original, modified);
+		assert.strictEqual(
+			determineParentId(diffType, modified, vscode.ViewColumn.One, original, modified),
+			`${vscode.Uri.file('/p/src/app.ts').toString()}-1`,
+		);
 	});
 });

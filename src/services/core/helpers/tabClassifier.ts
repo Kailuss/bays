@@ -12,6 +12,17 @@ export function classifyDiffType(
 ): DiffType {
   const lower = label.toLowerCase();
 
+  // Claude Code chat edits: el lado derecho del diff viene SIEMPRE de su
+  // FileSystemProvider temporal (esquemas _claude_fs_right /
+  // _claude_vscode_fs_right; el izquierdo puede ser _claude_*_left si el doc
+  // estaba dirty). Detectar por esquema, no solo por el label "✻ [Claude Code]",
+  // que puede cambiar entre versiones.
+  if (originalUri?.scheme.startsWith('_claude_') ||
+      modifiedUri?.scheme.startsWith('_claude_') ||
+      label.includes('[Claude Code]')) {
+    return 'edit';
+  }
+
   if (lower.includes('working tree') || lower === 'working tree') {
     return 'working-tree';
   }
@@ -110,7 +121,10 @@ export function resolveSourceUri(uri: vscode.Uri): vscode.Uri {
   if (uri.scheme === 'chat-editing-snapshot-text-model' ||
       uri.scheme === 'git' ||
       uri.scheme === 'timeline' ||
-      uri.scheme.startsWith('vscode-timeline')) {
+      uri.scheme.startsWith('vscode-timeline') ||
+      // Providers temporales de Claude Code (_claude_fs_left/right,
+      // _claude_vscode_fs_*): su path ES la ruta del archivo real.
+      uri.scheme.startsWith('_claude_')) {
     return vscode.Uri.file(uri.path);
   }
   return uri;

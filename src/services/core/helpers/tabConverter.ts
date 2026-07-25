@@ -275,6 +275,31 @@ export function convertToBay(
 }
 
 /**
+ * Degrada una variante huérfana a bay normal. REGLA DE JERARQUÍA: una variante
+ * nunca vive sola — si su parent no se puede resolver NI crear (p.ej. un edit
+ * de Claude Code sobre un archivo movido/renombrado cuya ruta ya no existe),
+ * la tab se representa como bay raíz, nunca como fila-variante suelta.
+ *
+ * Conserva el id (debe seguir siendo reconstruible desde la tab nativa para
+ * open/close/active-sync) y originalUri (matchesNative de los diffs compara
+ * ambos lados); solo pierde su condición de variante.
+ */
+export function demoteOrphanVariant(variant: Bay): Bay {
+  const metadata: BayMetadata = {
+    ...variant.metadata,
+    sourceBayId : undefined,
+    sourceUri   : undefined,
+    diffType    : undefined,
+  };
+  const state: BayState = {
+    ...variant.state,
+    diffStats    : undefined,
+    capabilities : BayHelpers.computeCapabilities(metadata, variant.state),
+  };
+  return new Bay(metadata, state);
+}
+
+/**
  * Rebuilds a plain file/custom/notebook bay for a NEW uri after a rename/move.
  *
  * Deterministic on purpose: it derives everything from `newUri` (mirroring the file
