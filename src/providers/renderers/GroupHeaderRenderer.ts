@@ -11,7 +11,7 @@ export class GroupHeaderRenderer {
     const lockTitle = group.isLocked ? 'Unlock Group' : 'Lock Group';
 
     return `<div class="group-header" data-groupid="${group.id}" data-color="${group.color}" data-locked="${group.isLocked}">
-      <button class="group-toggle" data-action="toggleGroup" data-groupid="${group.id}" title="Collapse/Expand"><span class="codicon codicon-chevron-down"></span></button>
+      <button class="group-toggle" data-action="toggleGroup" data-groupid="${group.id}" title="Collapse/Expand"><span class="codicon codicon-folder-opened-compact"></span></button>
       <span class="group-label">${label}</span>
       <span class="group-actions">
         <button class="group-btn" data-action="renameGroup" data-groupid="${group.id}" title="Rename Group"><span class="codicon codicon-edit"></span></button>

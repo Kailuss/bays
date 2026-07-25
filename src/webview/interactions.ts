@@ -20,8 +20,8 @@ function setGroupCollapsed(header: HTMLElement, collapsed: boolean): void {
 
   const icon = header.querySelector('[data-action="toggleGroup"] .codicon');
   if (icon) {
-    icon.classList.toggle('codicon-chevron-down',  !collapsed);
-    icon.classList.toggle('codicon-chevron-right', collapsed);
+    icon.classList.toggle('codicon-folder-opened-compact', !collapsed);
+    icon.classList.toggle('codicon-folder-compact',        collapsed);
   }
 
   let sibling = header.nextElementSibling;
