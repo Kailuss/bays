@@ -24,7 +24,7 @@ function copyDir(src, dest) {
 /**
  * Combina todos los archivos CSS en uno solo, resolviendo los @import
  */
-function bundleCss(mainCssPath, outputPath) {
+func tion bundleCss(mainCssPath, outputPath) {
 	const cssDir = path.dirname(mainCssPath);
 	let mainContent = fs.readFileSync(mainCssPath, 'utf8');
 	
