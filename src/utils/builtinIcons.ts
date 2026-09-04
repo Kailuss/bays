@@ -1,3 +1,9 @@
+/**
+ * Label prefix of the built-in extension detail page (`Extension: GitLens`).
+ * Shared with webviewExtensionIcons, which parses the display name out of it.
+ */
+export const EXTENSION_PAGE_PREFIX = 'Extension: ';
+
 /** Codicon names for built-in webview / unknown-input tabs, keyed by viewType. */
 const BUILTIN_ICON_MAP: Record<string, string> = {
 
@@ -28,7 +34,7 @@ const BUILTIN_ICON_MAP: Record<string, string> = {
 
 /** Label prefixes for built-in tabs whose title is dynamic. */
 const BUILTIN_PREFIX_MAP: [string, string][] = [
-  ['Extension:',     'extensions' ],
+  [EXTENSION_PAGE_PREFIX, 'extensions' ],
   ['Walkthrough:',   'star-empty' ],
   ['Release Notes:', 'info'       ],
   ['Preview ',       'open-preview'],

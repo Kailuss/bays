@@ -10,10 +10,14 @@ import * as vscode from 'vscode';
 import { BayIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
-import { resolveWebviewExtensionIcon } from '../../platform/webviewExtensionIcons';
+import {
+  lookupWebviewExtensionIcon,
+  resolveWebviewExtensionIconAsync,
+} from '../../platform/webviewExtensionIcons';
 import { codiconHtml, iconMarkerToHtml, placeholderIconHtml } from '../../utils/iconHtml';
 import { IconKeyRegistry } from './IconKeyRegistry';
 import { Logger } from '../../platform/logger';
+import type { PendingIconRequest } from './types';
 
 /** Color de los codicons de las tabs sin icono de tema (gris claro). */
 const BUILTIN_ICON_COLOR = '#d4d7d6';
@@ -39,18 +43,24 @@ export class IconRenderer {
   resolveImmediate(bay: Bay): {
     marker?: string;
     html?: string;
-    pending: { fileName: string; languageId?: string } | null;
+    pending: PendingIconRequest | null;
   } {
-    const { bayType: tabType, viewType, label } = bay.metadata;
+    const { bayType: tabType, viewType, label, uri, originalUri } = bay.metadata;
 
-    if (tabType === 'webview') {
-      // Prefer the owning extension's real logo (Claude Code, …) when available;
-      // fall back to a built-in codicon for everything else.
-      const extIcon = resolveWebviewExtensionIcon(viewType);
-      if (extIcon) { return { html: extIcon, pending: null }; }
+    // Los webviews de otras extensiones y las tabs empotradas sin URI (Settings,
+    // «Extension: …»; `originalUri` descarta el diff defensivo sin uri) llevan el
+    // logo REAL de la extensión dueña. El lookup contesta solo desde caché: con
+    // una dueña candidata cuyo icono aún no se ha leído del disco se pinta el
+    // codicon ahora y se difiere la lectura, que es la misma mecánica que un
+    // fallo de caché del tema.
+    if (tabType === 'webview' || (!uri && !originalUri)) {
+      const lookup = lookupWebviewExtensionIcon(viewType, label);
+      if (lookup.state === 'loaded') {
+        return { html: lookup.dataUri, pending: null };
+      }
       return {
-        html: codiconHtml(resolveBuiltInCodicon(label, viewType), BUILTIN_ICON_COLOR),
-        pending: null,
+        html    : codiconHtml(resolveBuiltInCodicon(label, viewType), BUILTIN_ICON_COLOR),
+        pending : lookup.state === 'deferrable' ? { kind: 'webview', viewType, label } : null,
       };
     }
 
@@ -66,26 +76,41 @@ export class IconRenderer {
 
     return {
       marker : IconKeyRegistry.PLACEHOLDER,
-      pending: { fileName, languageId: bay.metadata.languageId },
+      pending: { kind: 'file', fileName, languageId: bay.metadata.languageId },
     };
   }
 
   /**
-   * Resolución asíncrona de un icono por nombre de archivo, para el parche
-   * diferido tras el primer pintado. Devuelve el HTML del icono ya resuelto.
+   * Resolución asíncrona de lo que falló la caché, para el parche diferido tras
+   * el primer pintado. Devuelve el HTML del icono ya resuelto.
    */
-  async renderByFileName(fileName: string, languageId?: string): Promise<string> {
+  async resolvePending(request: PendingIconRequest): Promise<string> {
+    if (request.kind === 'webview') {
+      try {
+        const dataUri = await resolveWebviewExtensionIconAsync(request.viewType, request.label);
+        if (dataUri) { return dataUri; }
+      } catch (error) {
+        Logger.error(`[Bays] Deferred extension icon failed for ${request.label}`, error);
+      }
+      return codiconHtml(
+        resolveBuiltInCodicon(request.label, request.viewType),
+        BUILTIN_ICON_COLOR,
+      );
+    }
+
     try {
-      const cached = this.iconManager.getCachedIcon(fileName);
+      const cached = this.iconManager.getCachedIcon(request.fileName);
       if (cached) {
         return iconMarkerToHtml(cached);
       }
-      const data = await this.iconManager.getFileIconAsBase64(fileName, this.context, languageId);
+      const data = await this.iconManager.getFileIconAsBase64(
+        request.fileName, this.context, request.languageId,
+      );
       if (data) {
         return iconMarkerToHtml(data);
       }
     } catch (error) {
-      Logger.error(`[Bays] Deferred icon resolution failed for ${fileName}`, error);
+      Logger.error(`[Bays] Deferred icon resolution failed for ${request.fileName}`, error);
     }
     return placeholderIconHtml();
   }

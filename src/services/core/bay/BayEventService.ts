@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { convertToBay, generateIdFromNativeTab, remapFileBayUri } from '../helpers/tabConverter';
+import { convertToBay, demoteOrphanVariant, generateIdFromNativeTab, remapFileBayUri } from '../helpers/tabConverter';
 import { BayStateService } from '../BayStateService';
 import { GitSyncService } from '../../integration/GitSyncService';
 import { ClaudeConversationService } from '../../integration/ClaudeConversationService';
@@ -125,27 +125,39 @@ export class BayEventService {
     // Structural changes (open/close/pin/preview) need a full rebuild.
     // Dirty-only changes can be patched in place via the state animation channel.
     let structuralChange = false;
+    // Un cierre nativo puede dejar previews vivas sin parent (VS Code no las
+    // cierra con su .md) → resync completo, que reabre el source y re-enlaza.
+    let orphanedPreviews = false;
     const dirtyChangedBays: Bay[] = [];
     const labelChangedBays: Bay[] = [];
 
     for (const bay of event.opened) {
-      const st = convertToBay(bay, this.gitSyncService);
+      let st = convertToBay(bay, this.gitSyncService);
       if (!st) { continue; }
 
-      // Si es una variant DIFF, asegurar que el parent existe PRIMERO.
-      // Las variantes de preview NO pasan por BayHeadService (no tienen uri y
-      // serían descartadas); si su parent no está en el estado se añaden como
-      // huérfanas y el renderer las muestra como fila normal.
-      if (st.metadata.sourceBayId && st.metadata.diffType !== 'preview') {
+      // REGLA DE JERARQUÍA: una variante nunca vive sin bay parent. Una preview
+      // que llega huérfana (su .md no está abierto — p.ej. "Open Preview"
+      // reemplaza al editor) abre su source y se reconvierte ya enlazada. Si el
+      // source no se puede resolver, se degrada a bay normal (nunca se descarta).
+      if (st.metadata.diffType === 'preview' && !st.metadata.sourceBayId) {
+        st = (await this.bayHeadService.adoptPreviewOrphan(st, bay)) ?? demoteOrphanVariant(st);
+      }
+
+      // Si es variante (diff o preview), asegurar que el parent existe PRIMERO.
+      // Para las previews sourceUri es el propio .md, así que BayHeadService
+      // puede reabrirlo exactamente igual que hace con los diffs.
+      if (st.metadata.sourceBayId) {
         const parent = await this.bayHeadService.ensureParentExists(st, bay);
 
         if (parent) {
           Logger.log(`[BayEvent] Parent confirmed for variant: ${st.metadata.label} → ${parent.metadata.label}`);
         } else {
-          // Sin parent la variante sigue siendo una variante: se añade igualmente
-          // y el renderer la dibuja como fila huérfana. Descartarla la hacía
-          // desaparecer del panel hasta el siguiente resync.
-          Logger.warn(`[BayEvent] Failed to ensure parent exists for variant: ${st.metadata.label} (rendered as orphan)`);
+          // El parent no se pudo resolver ni crear (p.ej. edit de Claude Code
+          // sobre un archivo movido/renombrado). REGLA: nunca una variante
+          // suelta — se degrada a bay raíz. Descartarla tampoco es opción (la
+          // hacía desaparecer del panel hasta el siguiente resync).
+          st = demoteOrphanVariant(st);
+          Logger.warn(`[BayEvent] Parent unresolvable for variant: ${st.metadata.label} — demoted to root bay`);
         }
       }
 
@@ -179,10 +191,25 @@ export class BayEventService {
       const existingBay = this.stateService.getBayById(id);
       if (existingBay) {
         Logger.log(`[BayEvent] Processing external close: ${existingBay.metadata.label} (ID: ${id}, parentId: ${existingBay.metadata.sourceBayId || 'none'}, hasChildren: ${existingBay.state.hasVariant})`);
+
+        // REGLA DE JERARQUÍA: si el bay cerrado deja variantes de preview en el
+        // estado (removeBay las conserva porque su tab nativa sigue viva),
+        // quedarían huérfanas — marcar para resync, que reabre el source.
+        if (existingBay.state.hasVariant &&
+            this.hierarchyService.fetchVariants(id).some(v => v.metadata.diffType === 'preview')) {
+          orphanedPreviews = true;
+        }
+
         this.stateService.removeBay(id);
         hasChanges = true;
         structuralChange = true;
       }
+    }
+
+    if (orphanedPreviews) {
+      Logger.log('[BayEvent] Close left orphan previews — full resync to reopen their source');
+      void this.resyncAll();
+      return;
     }
 
     for (const bay of event.changed) {

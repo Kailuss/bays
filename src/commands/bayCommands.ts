@@ -25,7 +25,7 @@ export function registerBayCommands(
 
     vscode.commands.registerCommand('bays.closeBay', async (arg: unknown) => {
       const bay = resolve(arg);
-      if (bay) { await bay.close(); }
+      if (bay) { await (stateService.getHierarchyService()?.closeBayWithVariants(bay) ?? bay.close()); }
     }),
 
     vscode.commands.registerCommand('bays.closeOthers', async (arg: unknown) => {

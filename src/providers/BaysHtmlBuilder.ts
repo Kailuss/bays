@@ -19,7 +19,7 @@ import { bayStateCode } from '../utils/stateIndicator';
 import { getDiffTypeDisplay } from '../constants/diffTypes';
 import { relativeAge } from '../utils/relativeAge';
 import { ICONS } from '../shared/icons';
-import { IconRenderer, StylesBuilder, IconKeyRegistry, BuildSectionsOptions, WebviewResourceUris, PendingIcon, BuildSectionsResult } from './html';
+import { IconRenderer, StylesBuilder, IconKeyRegistry, BuildSectionsOptions, WebviewResourceUris, PendingIcon, PendingIconRequest, BuildSectionsResult } from './html';
 import type { BayView, GroupSection, QuickActionView, VariantView } from '../shared/protocol';
 
 export class BaysHtmlBuilder {
@@ -142,8 +142,8 @@ export class BaysHtmlBuilder {
   }
 
   /** Resuelve el HTML de un icono por nombre de archivo (parche diferido). */
-  resolveIconHtml(fileName: string, languageId?: string): Promise<string> {
-    return this.iconRenderer.renderByFileName(fileName, languageId);
+  resolveIconHtml(request: PendingIconRequest): Promise<string> {
+    return this.iconRenderer.resolvePending(request);
   }
 
   /**
@@ -285,7 +285,7 @@ export class BaysHtmlBuilder {
   private iconKeyFor(bay: Bay, pendingIcons: PendingIcon[]): string {
     const { marker, html, pending } = this.iconRenderer.resolveImmediate(bay);
     if (pending) {
-      pendingIcons.push({ bayId: bay.metadata.id, fileName: pending.fileName, languageId: pending.languageId });
+      pendingIcons.push({ bayId: bay.metadata.id, ...pending });
     }
     return marker !== undefined ? this.iconKeys.keyFor(marker) : this.iconKeys.keyForHtml(html as string);
   }

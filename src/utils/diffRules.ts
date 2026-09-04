@@ -27,6 +27,18 @@ export function classifyDiff(
 ): DiffType {
   const lower = label.toLowerCase();
 
+  // Las ediciones del chat de Claude Code: el lado derecho del diff viene
+  // SIEMPRE de su FileSystemProvider temporal (`_claude_fs_right` /
+  // `_claude_vscode_fs_right`; el izquierdo puede ser `_claude_*_left` si el
+  // documento estaba sin guardar). Se detecta por el ESQUEMA y no solo por el
+  // label `[Claude Code]`, que puede cambiar entre versiones — y va la PRIMERA
+  // porque ese label puede casar ademas cualquiera de los patrones de abajo.
+  if (originalUri?.scheme.startsWith('_claude_') ||
+      modifiedUri?.scheme.startsWith('_claude_') ||
+      label.includes('[Claude Code]')) {
+    return 'edit';
+  }
+
   if (lower.includes('working tree') || lower === 'working tree') {
     return 'working-tree';
   }

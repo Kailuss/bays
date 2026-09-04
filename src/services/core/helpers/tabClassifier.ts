@@ -31,7 +31,10 @@ export function resolveSourceUri(uri: vscode.Uri): vscode.Uri {
   if (uri.scheme === 'chat-editing-snapshot-text-model' ||
       uri.scheme === 'git' ||
       uri.scheme === 'timeline' ||
-      uri.scheme.startsWith('vscode-timeline')) {
+      uri.scheme.startsWith('vscode-timeline') ||
+      // Los providers temporales de Claude Code (`_claude_fs_left/right`,
+      // `_claude_vscode_fs_*`): su path ES la ruta del archivo real.
+      uri.scheme.startsWith('_claude_')) {
     return vscode.Uri.file(uri.path);
   }
   return uri;

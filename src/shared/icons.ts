@@ -43,8 +43,8 @@ export const ICONS = {
 
   /** La cabecera de un grupo de editores. */
   group: {
-    expanded  : 'chevron-down',
-    collapsed : 'chevron-right',
+    expanded  : 'folder-opened-compact',
+    collapsed : 'folder-compact',
     rename    : 'edit',
     color     : 'symbol-color',
     /** El candado REPORTA además de alternar: bloqueado se queda a la vista. */

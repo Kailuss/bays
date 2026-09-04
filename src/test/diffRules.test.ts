@@ -70,3 +70,21 @@ test('incoming y current', () => {
 test('lo que no case con nada es unknown', () => {
   assert.equal(classifyDiff('algo que no dice nada'), 'unknown');
 });
+
+// Las ediciones del chat de Claude Code llegan por un FileSystemProvider
+// temporal. Sin detectarlas caian en 'unknown' y el parent apuntaba a la uri del
+// provider, o sea una variante huerfana — y una variante nunca vive sin padre.
+test('Claude Code: la edicion se detecta por el ESQUEMA del provider', () => {
+  const original = { scheme: 'file', path: '/p/src/app.ts' };
+  const modified = { scheme: '_claude_vscode_fs_right', path: '/p/src/app.ts' };
+  assert.equal(classifyDiff('✻ [Claude Code] app.ts', original, modified), 'edit');
+});
+
+test('Claude Code: y por el LABEL, aunque las dos uris sean normales', () => {
+  assert.equal(classifyDiff('✻ [Claude Code] app.ts'), 'edit');
+});
+
+test('Claude Code: el esquema gana a un label que casaria otro patron', () => {
+  const modified = { scheme: '_claude_fs_right', path: '/p/src/app.ts' };
+  assert.equal(classifyDiff('Working Tree app.ts', undefined, modified), 'edit');
+});

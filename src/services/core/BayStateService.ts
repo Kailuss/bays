@@ -194,8 +194,10 @@ export class BayStateService {
     
     // Si es parent bay con children, eliminar children primero.
     // EXCEPCIÓN: las variantes de preview NO se eliminan en cascada — cerrar el
-    // .md no cierra su preview en VS Code, así que la pestaña nativa sigue viva;
-    // se dejan en el estado y el renderer las muestra como huérfanas.
+    // .md no cierra su preview en VS Code, así que la pestaña nativa sigue viva.
+    // Se dejan en el estado y la capa de eventos (BayEventService) dispara un
+    // resync que reabre el source y las re-enlaza: una variante nunca queda
+    // huérfana de forma permanente.
     if (bay.state.hasVariant && this.hierarchyService) {
       const children = this.hierarchyService.fetchVariants(id);
       for (const child of children) {

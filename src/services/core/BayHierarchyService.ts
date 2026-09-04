@@ -103,6 +103,26 @@ export class BayHierarchyService {
   }
 
   /**
+   * Cierra una bay Y sus variantes (diffs, previews) en las tabs nativas.
+   *
+   * Es la semántica de "cerrar" desde la UI de Bays: cerrar el padre arrastra
+   * a sus variantes. Cerrar la tab nativa directamente (tab bar de VS Code) NO
+   * pasa por aquí — ahí VS Code deja vivas las previews y BayEventService
+   * dispara un resync que reabre el source (una variante nunca vive sin parent).
+   *
+   * Las variantes se cierran primero: sus eventos de cierre desregistran cada
+   * una del padre antes de que el padre desaparezca del estado.
+   */
+  async closeBayWithVariants(bay: Bay): Promise<void> {
+    if (bay.state.hasVariant) {
+      for (const variant of this.fetchVariants(bay.metadata.id)) {
+        await variant.close();
+      }
+    }
+    await bay.close();
+  }
+
+  /**
    * Recalculates children count for all parents.
    * Useful after full synchronization or when inconsistencies exist.
    */

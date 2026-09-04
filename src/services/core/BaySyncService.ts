@@ -7,7 +7,7 @@ import { BayHeadService } from './bay/BayHeadService';
 import { ActiveStateService } from './bay/ActiveStateService';
 import { Bay } from '../../models/Bay';
 import { createTabGroup } from '../../models/BayGroup';
-import { convertToBay, getDiagnosticSeverity } from './helpers/tabConverter';
+import { convertToBay, demoteOrphanVariant, getDiagnosticSeverity } from './helpers/tabConverter';
 import { Logger } from '../../platform/logger';
 
 
@@ -146,13 +146,15 @@ export class BaySyncService {
     const allBays: Bay[] = [];
     const variants: Array<{ bay: Bay; nativeTab: vscode.Tab }> = [];
     
-    // First pass: collect all tabs, separating parents from children
+    // First pass: collect all tabs, separating parents from children.
+    // Una preview huérfana (sin sourceBayId porque su .md no está abierto)
+    // sigue siendo una variante — se difiere también para que la segunda
+    // pasada pueda abrir su source (regla: una variante nunca vive sin parent).
     for (const group of vscode.window.tabGroups.all) {
       group.tabs.forEach((tab, idx) => {
         const st = convertToBay(tab, this.gitSyncService, idx);
         if (st) {
-          if (st.metadata.sourceBayId) {
-            // This is a variant bay (diff) - defer it
+          if (st.metadata.sourceBayId || st.metadata.diffType === 'preview') {
             variants.push({ bay: st, nativeTab: tab });
           } else {
             // This is a parent bay or standalone bay - add it immediately
@@ -161,18 +163,32 @@ export class BaySyncService {
         }
       });
     }
-    
+
     // Second pass: process child tabs after parents are loaded
     // Process sequentially to ensure parents are opened before children are added
-    for (const { bay, nativeTab } of variants) {
-      // Preview variants don't go through BayHeadService (they have no uri and
-      // would be dropped). If their parent is present, inherit; otherwise they
-      // render as orphans — never skip them.
+    for (const { bay: converted, nativeTab } of variants) {
+      let bay = converted;
       if (bay.metadata.diffType === 'preview') {
+        // Parent ya convertido en la primera pasada → solo heredar y enlazar.
         const parent = allBays.find(t => t.metadata.id === bay.metadata.sourceBayId);
-        if (parent) { this.hierarchyService.inheritState(bay, parent); }
-        allBays.push(bay);
-        continue;
+        if (parent) {
+          this.hierarchyService.inheritState(bay, parent);
+          allBays.push(bay);
+          continue;
+        }
+
+        // Huérfana: abrir el source y reconvertir la variante ya enlazada.
+        // Si no se puede resolver, se degrada a bay raíz (nunca se descarta ni
+        // se deja como variante suelta). Con el relink hecho, cae al
+        // ensureParentExistsForSync de abajo, que encuentra la tab del source
+        // recién abierta y crea su bay.
+        const relinked = await this.bayHeadService.adoptPreviewOrphan(bay, nativeTab);
+        if (!relinked) {
+          Logger.warn(`[BaySync] Preview source unresolved: ${bay.metadata.label} — demoted to root bay`);
+          allBays.push(demoteOrphanVariant(bay));
+          continue;
+        }
+        bay = relinked;
       }
 
       // Ensure parent exists (delegate to BayHeadService)
@@ -181,9 +197,11 @@ export class BaySyncService {
       if (parent) {
         Logger.log(`[BaySync] Parent confirmed for variant: ${bay.metadata.label} → ${parent.metadata.label}`);
       } else {
-        // Igual que en BayEventService: sin parent se renderiza como huérfana,
-        // nunca se descarta (descartarla la borraba del panel por completo).
-        Logger.warn(`[BaySync] Failed to ensure parent for variant: ${bay.metadata.label} (rendered as orphan)`);
+        // Igual que en BayEventService: el parent no se pudo resolver ni crear
+        // (archivo movido/renombrado) → REGLA: nunca una variante suelta, se
+        // degrada a bay raíz. Descartarla la borraba del panel por completo.
+        bay = demoteOrphanVariant(bay);
+        Logger.warn(`[BaySync] Parent unresolvable for variant: ${bay.metadata.label} — demoted to root bay`);
       }
 
       allBays.push(bay);
