@@ -7,7 +7,7 @@ import { BayHierarchyService } from '../BayHierarchyService';
 import { BayHeadService } from './BayHeadService';
 import { ActiveStateService } from './ActiveStateService';
 import type { Bay } from '../../../models/Bay';
-import { Logger } from '../../../utils/logger';
+import { Logger } from '../../../platform/logger';
 
 /**
  * BayEventService - Gestión de Eventos de VS Code

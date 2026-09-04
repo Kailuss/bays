@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { BayStateService } from '../BayStateService';
 import { generateIdFromNativeTab } from '../helpers/tabConverter';
-import { Logger } from '../../../utils/logger';
+import { Logger } from '../../../platform/logger';
 
 /**
  * ActiveStateService - Sincronización del Estado Activo

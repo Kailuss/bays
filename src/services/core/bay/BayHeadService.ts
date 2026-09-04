@@ -4,7 +4,8 @@ import { BayStateService     } from '../BayStateService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { GitSyncService      } from '../../integration/GitSyncService';
 import { convertToBay        } from '../helpers/tabConverter';
-import { Logger              } from '../../../utils/logger';
+import { Logger              } from '../../../platform/logger';
+import { fileBayId           } from '../../../utils/idRules';
 
 /**
  * BayHeadService - Gestión de Parents para Variants
@@ -200,7 +201,7 @@ export class BayHeadService {
 function findTabForBayId(group: vscode.TabGroup, bayId: string): vscode.Tab | undefined {
   for (const tab of group.tabs) {
     const uri = nativeTabUri(tab);
-    if (uri && `${uri.toString()}-${group.viewColumn}` === bayId) { return tab; }
+    if (uri && fileBayId(uri.toString(), group.viewColumn) === bayId) { return tab; }
   }
   return undefined;
 }

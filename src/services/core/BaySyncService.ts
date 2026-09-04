@@ -8,7 +8,7 @@ import { ActiveStateService } from './bay/ActiveStateService';
 import { Bay } from '../../models/Bay';
 import { createTabGroup } from '../../models/BayGroup';
 import { convertToBay, getDiagnosticSeverity } from './helpers/tabConverter';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 
 
 /**

@@ -3,7 +3,12 @@
 
 import { vscode } from './vscodeApi';
 import { BaysContextMenu } from './contextmenu';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '../shared/protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage, RenderMessage } from '../shared/protocol';
+import { applyRender } from './render';
+import { initDragDrop, dragInFlight, onDragEnd } from './dragdrop';
+import { nameClassFor, stateSlot } from './rows';
+import { setTipDelay, hideOrphanedTip } from './tooltip';
+import { ICONS } from '../shared/icons';
 
 // Emisor tipado: cada mensaje saliente debe ser un WebviewToHostMessage
 // válido. Un campo o `type` que no exista en el protocolo no compila.
@@ -20,8 +25,8 @@ function setGroupCollapsed(header: HTMLElement, collapsed: boolean): void {
 
   const icon = header.querySelector('[data-action="toggleGroup"] .codicon');
   if (icon) {
-    icon.classList.toggle('codicon-chevron-down',  !collapsed);
-    icon.classList.toggle('codicon-chevron-right', collapsed);
+    icon.classList.toggle(`codicon-${ICONS.group.expanded}`,  !collapsed);
+    icon.classList.toggle(`codicon-${ICONS.group.collapsed}`, collapsed);
   }
 
   let sibling = header.nextElementSibling;
@@ -49,38 +54,83 @@ function toggleGroupCollapsed(header: HTMLElement | null): void {
   }
 }
 
+/**
+ * Vuelve a aplicar el plegado a las cabeceras que hay en pantalla.
+ *
+ * El plegado vive SOLO en el DOM —una clase en la cabecera y un `display` en sus
+ * hermanas— así que un bloque que la reconciliación acaba de sustituir vuelve
+ * abierto. Se guarda por `getState()` y se reaplica tras cada render que de
+ * verdad haya tocado algo.
+ */
+function applyCollapsedGroups(): void {
+  const st = vscode.getState();
+  const collapsed = new Set((st?.collapsedGroups ?? []).map(String));
+  document.querySelectorAll<HTMLElement>('.group-header').forEach(header => {
+    setGroupCollapsed(header, collapsed.has(String(header.dataset.groupid)));
+  });
+}
+
+/**
+ * Drag & drop, armado PEREZOSAMENTE la primera vez que llega encendido.
+ *
+ * Con el shell congelado el ajuste puede moverse sin que el documento se
+ * reconstruya, así que ya no vale leerlo una vez del `<body>` al arrancar. Se
+ * arma una sola vez: sus listeners son delegados en el documento y sobreviven a
+ * cualquier reconciliación.
+ */
+/** Lo que llegó mientras había un arrastre en marcha, para pintarlo al soltar. */
+let pendingRender: RenderMessage | null = null;
+
+function paint(msg: RenderMessage): void {
+  // El plegado solo se reaplica cuando el DOM se ha tocado de verdad: el render
+  // llega con cada reporte de git, y casi siempre no cambia nada.
+  setTipDelay(msg.hoverDelay);
+  // La clase la escribe quien contesta la pregunta, y así las hojas la leen en
+  // un solo sitio en vez de que cada una consulte su propio ajuste.
+  document.body.classList.toggle('no-motion', !msg.motion);
+
+  const touched = applyRender(msg.sections, msg.icons, {
+    compact : msg.compact,
+    showPath: msg.showPath,
+  });
+  if (touched) {
+    applyCollapsedGroups();
+    // La reconciliación puede haberse llevado el ancla del tip que estuviera
+    // arriba: una caja flotando sobre donde estuvo una fila se lee como un panel
+    // colgado.
+    hideOrphanedTip();
+  }
+}
+
+// Al soltar, se sirve lo que se aplazó.
+onDragEnd(() => {
+  const queued = pendingRender;
+  pendingRender = null;
+  if (queued) { paint(queued); }
+});
+
+let dragDropArmed = false;
+function syncDragDrop(enabled: boolean): void {
+  document.body.dataset.enableDragdrop = String(enabled);
+  if (enabled && !dragDropArmed) {
+    dragDropArmed = true;
+    initDragDrop();
+  }
+}
+
 //= INICIALIZACIÓN
 
 export function initInteractions(): void {
-  // Preserve scroll across full HTML rebuilds. Reassigning webview.html reloads
-  // the document (scroll resets to 0), but vscode.getState()/setState() persist
-  // across reloads within the webview's lifetime, so we restore from there.
+  // El documento ya no se recarga en cada cambio estructural: la lista se
+  // reconcilia por clave y el scroll ni se entera. Lo que SÍ lo recarga es que
+  // el webview vuelva a nacer (moverlo de sitio, o volver de estar oculto sin
+  // contexto retenido), y de eso es de lo que `getState()` protege.
   (function restoreScroll() {
     const st = vscode.getState();
     if (st && typeof st.scrollY === 'number' && st.scrollY > 0) {
       const y = st.scrollY;
       // Restore after layout so the target offset exists
       requestAnimationFrame(() => window.scrollTo(0, y));
-    }
-  })();
-
-  // Collapsed state lives only in the DOM, which a full webview.html rebuild wipes.
-  // Persist collapsed group ids via getState()/setState() (like scrollY) and
-  // re-apply them after every rebuild so a collapsed group doesn't snap back open
-  // the moment any structural change happens.
-  (function restoreCollapsedGroups() {
-    const st = vscode.getState();
-    if (!st || !Array.isArray(st.collapsedGroups) || st.collapsedGroups.length === 0) { return; }
-    const collapsed = new Set(st.collapsedGroups.map(String));
-    const apply = () => {
-      document.querySelectorAll<HTMLElement>('.group-header').forEach(header => {
-        if (collapsed.has(String(header.dataset.groupid))) { setGroupCollapsed(header, true); }
-      });
-    };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', apply);
-    } else {
-      apply();
     }
   })();
 
@@ -94,21 +144,6 @@ export function initInteractions(): void {
       vscode.setState(st);
     }, 100);
   }, { passive: true });
-
-  // Fade in body after initial render (solo si no tiene la clase loaded)
-  if (!document.body.classList.contains('loaded')) {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        requestAnimationFrame(() => {
-          document.body.classList.add('loaded');
-        });
-      });
-    } else {
-      requestAnimationFrame(() => {
-        document.body.classList.add('loaded');
-      });
-    }
-  }
 
   // Evitar mensajes duplicados durante la animación de cierre
   const closingTabs = new Set<string>();
@@ -191,9 +226,40 @@ export function initInteractions(): void {
     }
   });
 
-  // Actualización parcial desde el host (evita rebuild completo al cambiar bay activa)
+  // Todo lo que llega del host. Cada variante de `HostToWebviewMessage` tiene
+  // que estar NOMBRADA en `WEBVIEW_MESSAGE_LISTENERS` (shared/protocol.ts): sin
+  // eso, un mensaje nuevo compila sin oyente y su feature no hace nada.
   window.addEventListener('message', (e: MessageEvent<HostToWebviewMessage>) => {
     const msg = e.data;
+
+    if (msg.type === 'render') {
+      syncDragDrop(msg.enableDragDrop);
+      // A mitad de un arrastre no se toca el DOM: la reconciliación sustituiría
+      // justo los nodos contra los que el gesto está midiendo. Lo que llegue se
+      // pinta cuando se suelte.
+      if (dragInFlight()) { pendingRender = msg; return; }
+      // El plegado solo se reaplica cuando el DOM se ha tocado de verdad: este
+      // mensaje llega con cada reporte de git, y casi siempre no cambia nada.
+      paint(msg);
+      // El fundido de entrada es del PRIMER pintado y de ninguno más.
+      if (!document.body.classList.contains('loaded')) {
+        requestAnimationFrame(() => document.body.classList.add('loaded'));
+      }
+    }
+
+    if (msg.type === 'productIcons') {
+      // Elemento propio y no el del tema de ficheros: aquel se reasigna entero
+      // en cada cambio de tema, y dos escritores sobre uno se borrarian.
+      const style = document.getElementById('productIcons');
+      if (style) { style.textContent = msg.css; }
+    }
+
+    if (msg.type === 'themeFont') {
+      // El shell manda este elemento vacío: leer la fuente de un tema es I/O de
+      // disco, y ponerla en el <head> dejaría el panel en blanco hasta tenerla.
+      const style = document.getElementById('themeFont');
+      if (style) { style.textContent = msg.css; }
+    }
 
     if (msg.type === 'showContextMenu') {
       BaysContextMenu.show({
@@ -241,28 +307,21 @@ export function initInteractions(): void {
     }
 
     if (msg.type === 'bayStateChanged') {
-      // Use attribute selector with proper escaping for special characters in IDs.
-      // Variant rows render no .bay-name/.bay-state (they never show git/diagnostic
-      // state), so for them this is intentionally a no-op.
+      // Llega un CÓDIGO, no markup: el glifo lo elige este lado (`rows.ts`), que
+      // es donde vive todo lo demás que se dibuja.
+      // Las filas de variante no tienen .bay-name ni .bay-state (nunca reportan
+      // estado de git ni diagnóstico), así que para ellas esto no hace nada.
       const bay = document.querySelector(`.bay[data-bay-id="${CSS.escape(msg.bayId)}"]`);
       if (bay && !bay.classList.contains('closing')) {
-        const tabName = bay.querySelector('.bay-name');
-        const tabState = bay.querySelector('.bay-state');
+        const name = bay.querySelector('.bay-name');
+        const slot = bay.querySelector('.bay-state');
 
-        if (tabName) {
-          // Remover clases de estado anteriores y aplicar la nueva
-          tabName.className = 'bay-name' + (msg.stateClass || '');
-          // Aplicar animación de cambio
-          tabName.classList.add('changing');
-          setTimeout(() => {
-            tabName.classList.remove('changing');
-          }, 1000);
+        if (name) {
+          name.className = `bay-name${nameClassFor(msg.state)}`;
+          name.classList.add('changing');
+          setTimeout(() => name.classList.remove('changing'), 1000);
         }
-
-        // Actualizar el indicador de estado
-        if (tabState && msg.stateHtml) {
-          tabState.outerHTML = msg.stateHtml;
-        }
+        slot?.replaceWith(stateSlot(msg.state));
       }
     }
   });

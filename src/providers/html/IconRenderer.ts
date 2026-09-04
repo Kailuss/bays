@@ -1,16 +1,22 @@
 /**
- * Renderizador de iconos para tabs del webview.
- * Soporta iconos basados en fuente (Seti), base64, codicons y SVG.
+ * Renderizador de iconos para las filas del webview.
+ *
+ * Solo DECIDE qué icono le toca a una bay; convertirlo en HTML es de
+ * `utils/iconHtml.ts`, que es el único sitio que genera markup de icono y el que
+ * valida lo que viene del JSON de un tema ajeno antes de interpolarlo.
  */
 
 import * as vscode from 'vscode';
 import { BayIconManager } from '../../services/ui/BayIconManager';
 import { Bay } from '../../models/Bay';
 import { resolveBuiltInCodicon } from '../../utils/builtinIcons';
-import { resolveWebviewExtensionIcon } from '../../utils/webviewExtensionIcons';
-import { DEFAULT_FILE_ICON, parseFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
-import { Logger } from '../../utils/logger';
-import { IconData } from './types';
+import { resolveWebviewExtensionIcon } from '../../platform/webviewExtensionIcons';
+import { codiconHtml, iconMarkerToHtml, placeholderIconHtml } from '../../utils/iconHtml';
+import { IconKeyRegistry } from './IconKeyRegistry';
+import { Logger } from '../../platform/logger';
+
+/** Color de los codicons de las tabs sin icono de tema (gris claro). */
+const BUILTIN_ICON_COLOR = '#d4d7d6';
 
 export class IconRenderer {
   constructor(
@@ -19,12 +25,22 @@ export class IconRenderer {
   ) {}
 
   /**
-   * Render inmediato y SÍNCRONO para el primer pintado: usa solo la caché.
-   * Si el icono está cacheado, lo devuelve resuelto; si no, devuelve un
-   * placeholder y marca la bay como pendiente para resolverla en paralelo
-   * después (ver BaysHtmlBuilder.pendingIcons / provider.patchIcons).
+   * Qué icono le toca a una bay, SÍNCRONO y solo desde caché.
+   *
+   * Devuelve un MARCADOR cuando el icono viene del tema —así el registro puede
+   * deduplicar por él, que es lo que evita mandar el mismo `data:` URI de
+   * kilobytes una vez por fila— y HTML ya resuelto cuando no pasa por un tema:
+   * el logo de la extensión dueña de un webview, o un codicon de reserva.
+   *
+   * Un fallo de caché sale con el marcador de placeholder y se devuelve en
+   * `pending` para resolverse en paralelo y parchearse después (ver
+   * `BaysHtmlBuilder` / `provider.patchIcons`).
    */
-  renderImmediate(bay: Bay): { html: string; pending: { fileName: string; languageId?: string } | null } {
+  resolveImmediate(bay: Bay): {
+    marker?: string;
+    html?: string;
+    pending: { fileName: string; languageId?: string } | null;
+  } {
     const { bayType: tabType, viewType, label } = bay.metadata;
 
     if (tabType === 'webview') {
@@ -32,22 +48,24 @@ export class IconRenderer {
       // fall back to a built-in codicon for everything else.
       const extIcon = resolveWebviewExtensionIcon(viewType);
       if (extIcon) { return { html: extIcon, pending: null }; }
-      return { html: this.renderCodicon(resolveBuiltInCodicon(label, viewType), '#d4d7d6'), pending: null };
+      return {
+        html: codiconHtml(resolveBuiltInCodicon(label, viewType), BUILTIN_ICON_COLOR),
+        pending: null,
+      };
     }
 
     const fileName = this.resolveFileName(bay);
     if (!fileName) {
-      return { html: this.renderFallback(), pending: null };
+      return { marker: IconKeyRegistry.PLACEHOLDER, pending: null };
     }
 
     const cached = this.iconManager.getCachedIcon(fileName);
     if (cached) {
-      return { html: this.renderIconData(this.parseIconString(cached)), pending: null };
+      return { marker: cached, pending: null };
     }
 
-    // Cache miss → placeholder ahora, resolución diferida en paralelo
     return {
-      html: this.renderFallback(),
+      marker : IconKeyRegistry.PLACEHOLDER,
       pending: { fileName, languageId: bay.metadata.languageId },
     };
   }
@@ -60,16 +78,16 @@ export class IconRenderer {
     try {
       const cached = this.iconManager.getCachedIcon(fileName);
       if (cached) {
-        return this.renderIconData(this.parseIconString(cached));
+        return iconMarkerToHtml(cached);
       }
       const data = await this.iconManager.getFileIconAsBase64(fileName, this.context, languageId);
       if (data) {
-        return this.renderIconData(this.parseIconString(data));
+        return iconMarkerToHtml(data);
       }
     } catch (error) {
       Logger.error(`[Bays] Deferred icon resolution failed for ${fileName}`, error);
     }
-    return this.renderFallback();
+    return placeholderIconHtml();
   }
 
   /**
@@ -84,78 +102,5 @@ export class IconRenderer {
     }
 
     return label || null;
-  }
-
-  /**
-   * Parsea el string de icono a IconData.
-   */
-  private parseIconString(data: string): IconData {
-    if (data === DEFAULT_FILE_ICON) {
-      return { type: 'fallback' };
-    }
-
-    // Marcador de icono basado en fuente: "font-icon:\E05F:#cccccc:seti:"
-    const font = parseFontIconMarker(data);
-    if (font) {
-      return {
-        type       : 'font',
-        hexCode    : font.hexCode,
-        color      : font.color,
-        // Sin fontId no hay @font-face al que apuntar: el glyph se pintaría con
-        // la fuente de la UI (un cuadro vacío). Mejor caer al SVG genérico.
-        fontFamily : font.fontId ? iconFontFamily(font.fontId) : undefined,
-        fontSize   : font.fontSize || undefined,
-      };
-    }
-
-    // Base64 data URI
-    if (data.startsWith('data:')) {
-      return { type: 'base64', data };
-    }
-
-    // Fallback: tratar como base64
-    return { type: 'base64', data };
-  }
-
-  /**
-   * Renderiza IconData a HTML.
-   */
-  private renderIconData(icon: IconData): string {
-    switch (icon.type) {
-      case 'font': {
-        // Sin font-family el codepoint se pintaría con la fuente de la UI.
-        if (!icon.fontFamily) { return this.renderFallback(); }
-        // El `size` que declara el tema es relativo a SU contenedor (seti usa
-        // 150%); aquí la caja del icono es fija (16px vía .seti-icon), así que
-        // solo se aplica el fontSize de la definición concreta si lo trae.
-        const size = icon.fontSize ? `font-size: ${icon.fontSize};` : '';
-        return `<span class="seti-icon" style="font-family: '${icon.fontFamily}'; color: ${icon.color};${size}">&#x${icon.hexCode};</span>`;
-      }
-
-      case 'base64':
-        return `<img src="${icon.data}" alt="" />`;
-
-      case 'fallback':
-      default:
-        return this.renderFallback();
-    }
-  }
-
-  /**
-   * Renderiza un codicon de VS Code.
-   * Por defecto usa el color #d4d7d6 (gris claro).
-   */
-  private renderCodicon(name: string, color: string = '#d4d7d6'): string {
-    const style = ` style="color: ${color};"`;
-    return `<span class="codicon codicon-${name}"${style}></span>`;
-  }
-
-  /**
-   * Renderiza el icono de fallback (archivo genérico).
-   */
-  private renderFallback(): string {
-    return `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M13.85 4.44l-3.29-3.3A.5.5 0 0010.21 1H3.5A1.5 1.5 0 002 2.5v11A1.5 1.5 0 003.5 15h9a1.5 1.5 0 001.5-1.5V4.79a.5.5 0 00-.15-.35zM10.5 2.12L12.88 4.5H11a.5.5 0 01-.5-.5V2.12zM12.5 14h-9a.5.5 0 01-.5-.5v-11a.5.5 0 01.5-.5h6v2a1.5 1.5 0 001.5 1.5h2v8a.5.5 0 01-.5.5z" fill="currentColor"/>
-    </svg>`;
   }
 }

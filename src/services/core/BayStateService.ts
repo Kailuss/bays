@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Bay } from '../../models/Bay';
 import { BayGroup, createTabGroup } from '../../models/BayGroup';
-import { Logger }       from '../../utils/logger';
+import { Logger }       from '../../platform/logger';
 import type { BayHierarchyService } from './BayHierarchyService';
 import type { GroupCustomizationService } from '../ui/GroupCustomizationService';
 

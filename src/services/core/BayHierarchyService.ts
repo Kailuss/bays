@@ -1,7 +1,7 @@
 import { syncCursorPosition as syncCursorPositionUtil } from './BayCursorSyncUtils';
 import type { Bay } from '../../models/Bay';
 import type { BayStateService } from './BayStateService';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 
 /**
  * Manages hierarchical parent-child relationships between Bays.

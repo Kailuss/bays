@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ViewPrefs } from '../services/ui/ViewPrefs';
 import { BayStateService } from '../services/core/BayStateService';
 import { VSCODE_COMMANDS } from '../constants/commands';
 
@@ -8,7 +9,8 @@ import { VSCODE_COMMANDS } from '../constants/commands';
  */
 export function registerBayCommands(
   context: vscode.ExtensionContext,
-  stateService: BayStateService
+  stateService: BayStateService,
+  viewPrefs: ViewPrefs,
 ): void {
   const resolve = (arg: unknown) => {
     if (typeof arg === 'string') { return stateService.getBayById(arg); }
@@ -45,20 +47,13 @@ export function registerBayCommands(
     }),
 
     vscode.commands.registerCommand('bays.reorder', () => {
-      vscode.window.showInformationMessage('Reorder: Coming soon');
+      vscode.window.showInformationMessage(vscode.l10n.t('Reorder: Coming soon'));
     }),
 
-    vscode.commands.registerCommand('bays.toggleCompactMode', async () => {
-      const cfg = vscode.workspace.getConfiguration('bays');
-      const current = cfg.get<boolean>('compactMode', false);
-      await cfg.update('compactMode', !current, vscode.ConfigurationTarget.Global);
-    }),
-
-    vscode.commands.registerCommand('bays.toggleShowPath', async () => {
-      const cfg = vscode.workspace.getConfiguration('bays');
-      const current = cfg.get<boolean>('showFilePath', true);
-      await cfg.update('showFilePath', !current, vscode.ConfigurationTarget.Global);
-    }),
+    // Los dos conmutan la capa POR PROYECTO y no el settings.json del usuario:
+    // activar el modo compacto en una ventana no puede activarlo en todas.
+    vscode.commands.registerCommand('bays.toggleCompactMode', () => viewPrefs.toggle('compactMode')),
+    vscode.commands.registerCommand('bays.toggleShowPath',    () => viewPrefs.toggle('showFilePath')),
 
     vscode.commands.registerCommand('bays.pinBay', async (arg: unknown) => {
       const bay = resolve(arg);
@@ -96,7 +91,7 @@ export function registerBayCommands(
 
       const groups = vscode.window.tabGroups.all;
       if (groups.length <= 1) {
-        vscode.window.showInformationMessage('Only one group available');
+        vscode.window.showInformationMessage(vscode.l10n.t('Only one group available'));
         return;
       }
 
@@ -105,7 +100,7 @@ export function registerBayCommands(
         .map(g => ({ label: `Group ${g.viewColumn}`, viewColumn: g.viewColumn }));
 
       const selected = await vscode.window.showQuickPick(options, {
-        placeHolder: 'Select target group',
+        placeHolder: vscode.l10n.t('Select target group'),
       });
 
       if (selected) { await bay.moveToGroup(selected.viewColumn); }
