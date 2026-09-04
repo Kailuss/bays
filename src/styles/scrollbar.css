@@ -1,0 +1,89 @@
+/* La barra de scroll de la vista (`src/webview/scrollbar.ts`).
+
+   La NATIVA se apaga porque RESERVA su ancho: la lista acaba diez píxeles antes
+   del borde del panel, y ese hueco aparece y desaparece según haya bays de sobra
+   o no. Lo que se dibuja en su lugar es un deslizador tendido ENCIMA del
+   contenido, que no ocupa nada y que no está cuando no se está haciendo scroll,
+   que es lo que hace VS Code en todas sus listas. */
+
+:root {
+  /* Aire contra los bordes del panel. Lo espeja `GAP` en el TypeScript, que es
+     quien coloca el carril: los dos números tienen que moverse juntos. */
+  --bays-scroll-gap: 4px;
+  /* El ancho VISIBLE de la barra. El blanco que se coge es más ancho (ver
+     `.bays-scrollbar`), porque una barra de 6px no se agarra apuntándole. */
+  --bays-scroll-width: 6px;
+  /* Cuánto tarda en irse. Corto: contesta a un scroll que ya está en marcha. */
+  --bays-scroll-ms: 120ms;
+}
+
+body.no-motion {
+  --bays-scroll-ms: 0ms;
+}
+
+/* Nada de barra nativa en ninguna de las dos sintaxis: la estándar para los
+   motores que ya la traen y la de WebKit para el que renderiza el webview. */
+html {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
+/* El CARRIL es el blanco, y mide más que la barra: 13px se cogen sin apuntar,
+   6px no. Lo que se ve lo dibuja el deslizador de dentro. */
+.bays-scrollbar {
+  position: fixed;
+  top: var(--bays-scroll-gap);
+  right: 0;
+  width: 13px;
+  z-index: 20; /* sobre las filas, bajo el menú y los tooltips */
+  /* `display` contesta si hay algo que desplazar y `visibility` si alguien está
+     mirando: son dos preguntas, y una sola propiedad para las dos dejaría el
+     carril reclamando su blanco cuando no hay nada que enseñar. */
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--bays-scroll-ms) ease-out,
+              visibility 0s linear var(--bays-scroll-ms);
+}
+
+.bays-scrollbar.enabled {
+  display: block;
+}
+
+.bays-scrollbar.visible {
+  visibility: visible;
+  opacity: 1;
+  /* Al llegar, sin retención: la visibilidad cambia ya y la opacidad corre. */
+  transition: opacity var(--bays-scroll-ms) ease-out;
+}
+
+/* El deslizador se dibuja apartado del canto y a pastilla: un borde que no toca
+   nada no es un borde. */
+.bays-scrollbar-thumb {
+  position: absolute;
+  right: var(--bays-scroll-gap);
+  width: var(--bays-scroll-width);
+  border-radius: calc(var(--bays-scroll-width) / 2);
+  background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+}
+
+/* Tres estados y los tres son COLOR: lo que el puntero PODRÍA coger, y lo que ya
+   tiene. Nada se mueve — una barra que engorda bajo el puntero corre el único
+   canto con el que se está siguiendo la lista, y lo hace cada vez que el puntero
+   cruza el carril de camino a otro sitio. */
+.bays-scrollbar:hover .bays-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+}
+
+body.scrollbar-dragging .bays-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
+}
+
+/* Arrastrando, el puntero no puede seleccionar ni cambiar de forma por lo que
+   haya debajo. */
+body.scrollbar-dragging {
+  cursor: default;
+}

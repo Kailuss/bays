@@ -1,9 +1,15 @@
 {
   "name": "bays",
   "displayName": "Bays",
-  "description": "Vertical bays panel with advanced features",
+  "description": "Your open editors as a vertical list in the sidebar, with groups, variants and git state.",
   "version": "0.3.7",
   "publisher": "Kailuss",
+  "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1F2430",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Kailuss/bays.git"
@@ -13,15 +19,33 @@
   },
   "homepage": "https://github.com/Kailuss/bays#readme",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.85.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "tabs",
+    "editors",
+    "sidebar",
+    "vertical tabs",
+    "open editors"
   ],
   "activationEvents": [
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Bays only reads the list of open editors and their git and diagnostic state. It never runs code from the workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "Bays works in a virtual workspace. File actions that need a file on disk, and git state, are not available there."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -361,29 +385,44 @@
           "type": "boolean",
           "default": false,
           "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
+        },
+        "bays.animations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch for everything the view moves: the close animation, the state-change pulse and the tooltip fade. It is also turned off by `workbench.reduceMotion`."
+        },
+        "bays.followProductIconTheme": {
+          "type": "boolean",
+          "default": true,
+          "description": "Draw the panel's glyphs with the product icon theme selected in `workbench.productIconTheme`, like the rest of the workbench. Off, the panel keeps the codicons the extension ships, and nothing is read from disk."
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run check-types && npm run lint && npm run test && npm run check-docs && npm run check-layers && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "watch:tsc-webview": "tsc --noEmit --watch --project src/webview/tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "package": "npm run check-types && npm run lint && npm run test && npm run check-docs && npm run check-layers && npm run check-release && node esbuild.js --production",
     "check-types": "tsc --noEmit && tsc --noEmit -p src/webview/tsconfig.json",
+    "check-docs": "node scripts/check-docs.js",
+    "check-layers": "node scripts/check-layers.js",
+    "check-release": "node scripts/check-release.js",
+    "vsix": "node scripts/release.js package",
+    "release": "node scripts/release.js publish",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "node esbuild.js --tests && node --test \"out/test/*.test.js\"",
+    "compile-tests": "tsc -p tsconfig.integration.json --outDir out",
+    "test:integration": "npm run compile-tests && node esbuild.js && vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.85.0",
+    "@vscode/codicons": "^0.0.44",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.2",
@@ -392,8 +431,5 @@
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
-  },
-  "dependencies": {
-    "@vscode/codicons": "^0.0.44"
   }
 }

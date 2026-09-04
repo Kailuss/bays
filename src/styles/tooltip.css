@@ -1,0 +1,63 @@
+/* Los tooltips de la vista (`src/webview/tooltip.ts`), pintados aquí en vez de
+   por el atributo `title`: el nativo llega tarde y usa los colores de la
+   plataforma, que se ven de otro programa al lado de los hovers del workbench.
+   Los colores son los del widget de hover de VS Code, así que un tip de aquí y
+   uno del editor se leen como el mismo elemento de UI. */
+
+/* Un tip es UNA línea y dos como mucho, y el tope es lo que lo hace cierto:
+   puede usar el panel entero menos el hueco que guarda contra cada borde, así
+   que casi todo lo que esta vista dice —un nombre, una orden— cabe en una línea
+   se ancle donde se ancle. `100vw` y no un número escrito, porque el panel se
+   arrastra: a 300px un tope de 300px es el panel, y a 700px estaría dejando
+   media vista sin usar y plegando texto que no tenía dónde plegarse.
+
+   El tope de LÍNEAS es la otra mitad. Lo que un tip lleva es una frase o una
+   ruta, y pasadas dos líneas deja de ser un hover y pasa a ser un párrafo
+   flotando sobre la vista. `-webkit-line-clamp` es lo único que acota líneas y
+   no píxeles. */
+.bays-tip {
+  position: fixed;
+  z-index: 30; /* sobre las filas, bajo el menú contextual */
+  max-width: calc(100vw - 8px);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+  border-radius: 3px;
+  background: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
+  color: var(--vscode-editorHoverWidget-foreground, var(--vscode-editorWidget-foreground, var(--vscode-foreground)));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  font-size: var(--vscode-font-size);
+  line-height: 19px;
+  /* Se pliega en vez de recortarse: los tips enseñan sobre todo nombres y
+     rutas, y una ruta cortada no sirve de nada. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Nunca intercepta el puntero: se pinta al lado de lo que describe, y cazar
+     el hover apartaría el tip de ese mismo elemento. */
+  pointer-events: none;
+  /* Se coloca antes de medirse, así que tiene que estar invisible ese frame. */
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* Entra con un FUNDIDO y se va de golpe, y la transición se declara en ESTE
+   estado para decirlo: una transición se toma del estilo POSTERIOR al cambio,
+   así que sin ninguna en la regla de reposo la salida es instantánea y la
+   entrada corre.
+
+   Esa asimetría es el asunto. Entrando, el fundido es lo que evita que la caja
+   aterrice sobre el panel de golpe: la espera ya decidió que debe dibujarse, y
+   el fundido es solo cómo llega. Saliendo, todo lo que esconde un tip significa
+   que el usuario se ha ido a otra cosa, y una caja disolviéndose sobre un menú
+   que acaba de abrirse se lee como un panel colgado.
+
+   `visibility` cambia en los dos sentidos sin demora, que es lo que le da a la
+   opacidad algo DESDE lo que animarse. */
+.bays-tip.visible {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity var(--bays-tip-fade-ms) ease-out;
+}

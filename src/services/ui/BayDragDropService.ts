@@ -1,6 +1,6 @@
 import { BayStateService } from '../core/BayStateService';
 import { Bay }    from '../../models/Bay';
-import { Logger }          from '../../utils/logger';
+import { Logger }          from '../../platform/logger';
 
 /**
  * Service dedicated to drag & drop management of bays.
