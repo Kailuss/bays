@@ -5,59 +5,47 @@
 import * as vscode from 'vscode';
 import { Bay } from '../../models/Bay';
 import { BayGroup } from '../../models/BayGroup';
+import type { GroupSection } from '../../shared/protocol';
 
 //= OPCIONES DE RENDERIZADO
 
-/** Opciones para construir el HTML del webview */
-export type BuildHtmlOptions = {
-  webview: vscode.Webview;
+/** Lo que hace falta para componer la lista. */
+export type BuildSectionsOptions = {
   groups: BayGroup[];
   getBaysInGroup: (groupId: number) => Bay[];
-  compactMode: boolean;
+  /**
+   * La ruta se pide AQUÍ y el modo compacto no: aquélla decide si el dato
+   * VIAJA —una ruta que no se dibuja es carga en cada render— y el compacto solo
+   * decide cómo se coloca lo que ya ha viajado, que es del cliente.
+   */
   showPath: boolean;
   copilotReady: boolean;
-  enableDragDrop?: boolean;
   enableHoverActions?: boolean;
-  initialLoad?: boolean;
 };
 
 //= ICONOS
 
-/** Marcador para iconos basados en fuente (vs-seti y similares) */
-export type FontIconMarker = {
-  type: 'font';
-  hexCode: string;
-  color: string;
-  /** font-family declarada por @font-face para la fuente del tema activo */
-  fontFamily?: string;
-  /** `fontSize` de la definición del tema, si la declara (p.ej. "125%") */
-  fontSize?: string;
-};
+// Los tipos intermedios de icono (FontIconMarker / Base64Icon / FallbackIcon /
+// IconData) se fueron con `IconRenderer.parseIconString`: hoy el camino va del
+// MARCADOR al HTML en un paso, dentro de `utils/iconHtml.ts`, que es el único
+// sitio que valida lo que un tema ajeno mete en un atributo.
 
-/** El tema no ofrece icono utilizable: se dibuja el SVG genérico del renderer */
-export type FallbackIcon = {
-  type: 'fallback';
-};
-
-/** Icono en formato base64 */
-export type Base64Icon = {
-  type: 'base64';
-  data: string;
-};
-
-/** Unión de todos los tipos de icono */
-export type IconData = FontIconMarker | Base64Icon | FallbackIcon;
+/**
+ * Petición de icono que falló la caché en el pintado síncrono, sin la bay a la
+ * que pertenece: `file` se resuelve contra el icon theme por nombre de archivo;
+ * `webview` lee del disco el icono de la extensión dueña de la tab.
+ */
+export type PendingIconRequest =
+  | { kind: 'file'; fileName: string; languageId?: string }
+  | { kind: 'webview'; viewType?: string; label: string };
 
 /** Icono pendiente de resolución diferida (cache miss en el primer pintado) */
-export type PendingIcon = {
-  bayId: string;
-  fileName: string;
-  languageId?: string;
-};
+export type PendingIcon = PendingIconRequest & { bayId: string };
 
-/** Resultado de construir el HTML: markup + iconos a resolver en paralelo después */
-export type BuildHtmlResult = {
-  html: string;
+/** La lista como datos, su diccionario de iconos, y lo que faltó de la caché. */
+export type BuildSectionsResult = {
+  sections: GroupSection[];
+  icons: Record<string, string>;
   pendingIcons: PendingIcon[];
 };
 
@@ -73,11 +61,9 @@ export type WebviewResourceUris = {
 
 //= ESTADO DE BAY
 
-/** Indicador visual de estado de bay */
-export type StateIndicator = {
-  html: string;
-  nameClass: string;
-};
+// El indicador de estado ya no es un tipo de esta capa: el host manda un CÓDIGO
+// (`BayStateCode`, en el protocolo) y quien lo dibuja es el cliente, con la tabla
+// de `shared/bayState.ts`.
 
 //= CONFIGURACIÓN DE ESTILOS
 

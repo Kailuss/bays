@@ -1,44 +1,33 @@
 /**
- * Builder encargado de generar el HTML/CSS del webview de bays.
- * Orquesta los módulos especializados para renderizado.
+ * Compone lo que la vista DICE, y nada de cómo se dibuja.
  *
  * Arquitectura:
- *  - IconRenderer   → renderizado de iconos (font/base64/codicon)
- *  - StylesBuilder  → CSS crítico y CSP
- *  - types.ts       → tipos compartidos
+ *  - el SHELL (`buildShell`) se asigna una vez y no se vuelve a tocar;
+ *  - la LISTA (`buildSections`) viaja como datos, y el markup lo construye el
+ *    cliente (`webview/rows.ts`);
+ *  - los ICONOS son la excepción y viajan como HTML, deduplicados por clave en
+ *    `IconKeyRegistry`: un marcador de tema es un `data:` URI de kilobytes.
  */
 
 import * as vscode from 'vscode';
 import { randomBytes } from 'crypto';
 import { BayIconManager } from '../services/ui/BayIconManager';
 import { Bay } from '../models/Bay';
-import { BayGroup, BayGroupColor } from '../models/BayGroup';
+import { getGroupLabel } from '../models/BayGroup';
 import { FileActionRegistry } from '../services/registry/FileActionRegistry';
-import { getStateIndicator } from '../utils/stateIndicator';
-import { IconRenderer, StylesBuilder, BuildHtmlOptions, WebviewResourceUris, PendingIcon, BuildHtmlResult } from './html';
-import { BayRowRenderer, GroupHeaderRenderer, VariantRowRenderer } from './renderers';
-
-/**
- * Contexto de render de una lista de bays. Agrupa lo que antes viajaba como
- * parámetros posicionales, ahora que las propiedades del grupo (bloqueo y color)
- * también tienen que bajar hasta cada fila.
- */
-type BayListContext = {
-  showPath     : boolean;
-  copilotReady : boolean;
-  compactMode  : boolean;
-  pendingIcons : PendingIcon[];
-  /** Grupo bloqueado: ninguna fila dibuja su botón de cierre. */
-  locked       : boolean;
-  /** `null` con un solo grupo: el color existe, pero pintarlo no distingue nada. */
-  color        : BayGroupColor | null;
-};
+import { bayStateCode } from '../utils/stateIndicator';
+import { getDiffTypeDisplay } from '../constants/diffTypes';
+import { relativeAge } from '../utils/relativeAge';
+import { ICONS } from '../shared/icons';
+import { IconRenderer, StylesBuilder, IconKeyRegistry, BuildSectionsOptions, WebviewResourceUris, PendingIcon, PendingIconRequest, BuildSectionsResult } from './html';
+import type { BayView, GroupSection, QuickActionView, VariantView } from '../shared/protocol';
 
 export class BaysHtmlBuilder {
   private readonly iconRenderer: IconRenderer;
   private readonly stylesBuilder: StylesBuilder;
-  // Set per-build from options; renderBay reads it to gate the hover buttons.
-  // buildHtml runs single-flight (debounced refresh), so a transient field is safe.
+  private readonly iconKeys = new IconKeyRegistry();
+  // Set per-build from options; buildBay reads it to gate the hover buttons.
+  // buildSections runs single-flight (debounced refresh), so a transient field is safe.
   private _enableHoverActions = true;
 
   constructor(
@@ -51,48 +40,118 @@ export class BaysHtmlBuilder {
     this.stylesBuilder = new StylesBuilder();
   }
 
-  //= HTML PRINCIPAL
+  //= EL SHELL, QUE SE ASIGNA UNA VEZ
 
   /**
-   * Construye el HTML completo del webview.
+   * El documento del webview: la CSP, las hojas, el script y el contenedor
+   * vacío. Se asigna UNA vez, en `resolveWebviewView`, y no se vuelve a tocar.
+   *
+   * Reasignar `webview.html` destruye el documento entero y con él el scroll, el
+   * foco, los grupos plegados, el bundle del cliente, el CSS y la fuente del
+   * tema en base64, todo eso pagado otra vez en cada pestaña que se abriera o se
+   * cerrara. Lo que cambia viaja ahora por `postMessage`.
+   *
+   * El `<style id="themeFont">` sale VACÍO a propósito: leer la fuente de un
+   * tema es I/O de disco, y ponerla aquí dejaría el panel en blanco hasta
+   * tenerla. La rellena el mensaje `themeFont`.
+   */
+  buildShell(webview: vscode.Webview): string {
+    const uris  = this.resolveResourceUris(webview);
+    const nonce = this.generateNonce();
+    const csp   = this.stylesBuilder.buildCSP(webview, nonce);
+
+    // El cliente no alcanza `vscode.l10n`, así que el bundle cargado se inyecta
+    // aquí: síncrono, con nonce y ANTES de `main.js`. Sus etiquetas viven en
+    // tablas de nivel de módulo que se leen al importar, y un bundle que llegara
+    // por mensaje llegaría tarde a todas ellas.
+    //
+    // El `<` se escapa para que una traducción no pueda cerrar el `<script>`.
+    const bundle = JSON.stringify(vscode.l10n.bundle ?? {}).replace(/</g, '\u003c');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<link href="${uris.codiconCss}" rel="stylesheet" />
+<link href="${uris.webviewCss}" rel="stylesheet" />
+<style id="themeFont"></style>
+<!-- ULTIMO a proposito: las reglas de un pack de iconos de producto empatan en
+     especificidad con las de codicon.css, asi que gana la escrita mas tarde. Es
+     lo que hace que un id del que el pack no diga nada se quede con el codicon
+     que la extension trae. Movido por encima, el pack se apaga en silencio. -->
+<style id="productIcons"></style>
+</head>
+<body data-enable-dragdrop="false">
+  <div id="bays"></div>
+  <script nonce="${nonce}">window.__l10n = ${bundle};</script>
+  <script nonce="${nonce}" src="${uris.webviewScript}"></script>
+</body>
+</html>`;
+  }
+
+  //= LA LISTA, QUE VIAJA COMO DATOS
+
+  /**
+   * Qué dice la lista ahora mismo.
    *
    * El render es SÍNCRONO: los iconos se resuelven solo desde caché para no
-   * bloquear el primer pintado. Los que fallan la caché se devuelven en
-   * `pendingIcons` para resolverse en paralelo y parchearse por postMessage.
+   * bloquear el primer pintado. Los que fallan la caché salen con un placeholder
+   * y se devuelven en `pendingIcons` para resolverse en paralelo y parchearse
+   * por `postMessage`.
    */
-  async buildHtml(options: BuildHtmlOptions): Promise<BuildHtmlResult> {
-    const {
-      webview,
-      groups,
-      getBaysInGroup,
-      showPath,
-      copilotReady,
-      enableDragDrop = false,
-      enableHoverActions = true,
-      compactMode,
-    } = options;
+  buildSections(options: BuildSectionsOptions): BuildSectionsResult {
+    const { groups, getBaysInGroup, showPath, copilotReady, enableHoverActions = true } = options;
 
     this._enableHoverActions = enableHoverActions;
 
-    const uris = this.resolveResourceUris(webview);
-    const nonce = this.generateNonce();
     const pendingIcons: PendingIcon[] = [];
-    const baysHtml = this.renderAllBays(groups, getBaysInGroup, showPath, copilotReady, compactMode, pendingIcons);
 
-    // Cadena vacía en los temas SVG (la mayoría). En los basados en fuente trae
-    // la fuente del tema incrustada; el manager la cachea, así que reconstruir
-    // el HTML no vuelve a leer el fichero de disco.
-    const fontFaceCss = await this.iconManager.getFontFaceCss();
+    // Un grupo sin filas que dibujar no se enseña. Un grupo que solo sostiene la
+    // preview de un markdown ("Open Preview to the Side") tiene cero bays en el
+    // estado, y su cabecera sola se lee como algo roto.
+    const populated = groups
+      .map(group => ({ group, bays: getBaysInGroup(group.id) }))
+      .filter(({ bays }) => bays.length > 0);
 
-    const html = this.assembleHtml(webview, uris, nonce, baysHtml, fontFaceCss, enableDragDrop, options.initialLoad);
-    return { html, pendingIcons };
+    // Con un solo grupo no hay cabecera ni acento de color: no hay nada de lo
+    // que distinguirlo. El bloqueo, en cambio, sí sigue en pie.
+    const single = populated.length <= 1;
+
+    const sections: GroupSection[] = populated.map(({ group, bays }) => ({
+      header: single ? undefined : {
+        id     : group.id,
+        label  : getGroupLabel(group),
+        color  : group.color,
+        locked : group.isLocked,
+      },
+      bays: this.buildBays(bays, group.isLocked, showPath, copilotReady, pendingIcons),
+    }));
+
+    return { sections, icons: this.iconKeys.dictionary(), pendingIcons };
   }
 
   /**
-   * Resuelve el HTML de un icono por nombre de archivo (parche diferido).
+   * El `@font-face` del tema activo. Cadena vacía en los temas SVG (la mayoría);
+   * en los basados en fuente trae la fuente incrustada. El manager la cachea,
+   * así que volver a pedirla no relee el fichero.
    */
-  resolveIconHtml(fileName: string, languageId?: string): Promise<string> {
-    return this.iconRenderer.renderByFileName(fileName, languageId);
+  themeFontCss(): Promise<string> {
+    return this.iconManager.getFontFaceCss();
+  }
+
+  /** Resuelve el HTML de un icono por nombre de archivo (parche diferido). */
+  resolveIconHtml(request: PendingIconRequest): Promise<string> {
+    return this.iconRenderer.resolvePending(request);
+  }
+
+  /**
+   * Al cambiar el TEMA, las claves que el cliente tiene describen marcadores del
+   * tema anterior. Se tiran, y el siguiente render las vuelve a acuñar.
+   */
+  clearIconKeys(): void {
+    this.iconKeys.clear();
   }
 
   //= RESOLUCIÓN DE RECURSOS
@@ -108,252 +167,148 @@ export class BaysHtmlBuilder {
     };
   }
 
-  //= ENSAMBLAJE HTML
+  //= LAS FILAS
 
-  private assembleHtml(
-    webview: vscode.Webview,
-    uris: WebviewResourceUris,
-    nonce: string,
-    baysHtml: string,
-    fontFaceCss: string,
-    enableDragDrop: boolean,
-    initialLoad = false,
-  ): string {
-    const csp = this.stylesBuilder.buildCSP(webview, nonce);
-    const bodyClass = initialLoad ? '' : 'loaded';
-
-    // La config viaja al cliente como data-attribute del body (main.ts la lee
-    // en el arranque); el bundle es único y decide en runtime qué inicializa.
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="${csp}">
-${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
-<link href="${uris.codiconCss}" rel="stylesheet" />
-<link href="${uris.webviewCss}" rel="stylesheet" />
-</head>
-<body class="${bodyClass}" data-enable-dragdrop="${enableDragDrop}">
-  ${baysHtml || '<div class="empty">No open bays</div>'}
-  <script nonce="${nonce}" src="${uris.webviewScript}"></script>
-</body>
-</html>`;
-  }
-
-  //= RENDERIZADO DE BAYS
-
-  private renderAllBays(
-    groups: BayGroup[],
-    getBaysInGroup: (groupId: number) => Bay[],
+  private buildBays(
+    bays: Bay[],
+    locked: boolean,
     showPath: boolean,
     copilotReady: boolean,
-    compactMode: boolean,
     pendingIcons: PendingIcon[],
-  ): string {
-    // Skip groups with no renderable bays. A group holding only a markdown
-    // preview webview (e.g. "Open Preview to the Side") has zero bays in state
-    // — rendering its header with nothing under it just looks broken.
-    const populated = groups
-      .map(group => ({ group, bays: getBaysInGroup(group.id) }))
-      .filter(({ bays }) => bays.length > 0);
+  ): BayView[] {
+    // Las previews de markdown son bays de verdad (variantes de su .md), así que
+    // aquí no se filtra nada: se dibujan como fila hija, o sueltas cuando su
+    // parent no está en esta lista.
+    const parents  = bays.filter(bay => !bay.metadata.sourceBayId);
+    const variants = bays.filter(bay => bay.metadata.sourceBayId);
 
-    const context = (group: BayGroup, color: BayGroupColor | null): BayListContext => ({
-      showPath,
-      copilotReady,
-      compactMode,
-      pendingIcons,
-      locked: group.isLocked,
-      color,
-    });
-
-    // Con un solo grupo no hay cabecera ni acento de color: no hay nada de lo
-    // que distinguirlo. El bloqueo, en cambio, sí sigue en pie.
-    if (populated.length <= 1) {
-      const only = populated[0];
-      return only ? this.renderBayList(only.bays, context(only.group, null)) : '';
-    }
-
-    let html = '';
-    for (const { group, bays } of populated) {
-      html += this.renderGroupHeader(group);
-      html += this.renderBayList(bays, context(group, group.color));
-    }
-    return html;
-  }
-
-  private renderGroupHeader(group: BayGroup): string {
-    return GroupHeaderRenderer.render(group, this.esc);
-  }
-
-  private renderBayList(bays: Bay[], context: BayListContext): string {
-    // Markdown previews are real bays now (variants of their source .md), so
-    // there is no preview filtering here — they render as child rows, or as
-    // standalone rows when orphaned (source not open / in another group).
-
-    // Separate parent bays (no parentId) from variant bays (have parentId)
-    const parentBays = bays.filter(bay => !bay.metadata.sourceBayId);
-    const variantBays = bays.filter(bay => bay.metadata.sourceBayId);
-
-    // Build a map of parentId -> children
     const childrenByParent = new Map<string, Bay[]>();
-    for (const child of variantBays) {
-      const parentId = child.metadata.sourceBayId!;
-      if (!childrenByParent.has(parentId)) {
-        childrenByParent.set(parentId, []);
-      }
-      childrenByParent.get(parentId)!.push(child);
+    for (const child of variants) {
+      const parentId = child.metadata.sourceBayId as string;
+      const list = childrenByParent.get(parentId);
+      if (list) { list.push(child); } else { childrenByParent.set(parentId, [child]); }
     }
 
-    // Sort parent bays: pinned first
-    const sortedParents = [...parentBays].sort((a, b) => {
-      if (a.state.isPinned && !b.state.isPinned) { return -1; }
-      if (!a.state.isPinned && b.state.isPinned) { return 1; }
-      return 0;
+    // Las fijadas primero. `sort` es estable, así que dentro de cada mitad se
+    // conserva el orden que traía la lista (el del arrastre manual).
+    const sorted = [...parents].sort((a, b) =>
+      Number(b.state.isPinned) - Number(a.state.isPinned));
+
+    const views: BayView[] = sorted.map(parent => {
+      const children = childrenByParent.get(parent.metadata.id) ?? [];
+      return this.buildBay(parent, children, locked, showPath, copilotReady, pendingIcons);
     });
 
-    // El acento de color viaja en el bloque, no en la cabecera, para que las
-    // filas se lean como pertenecientes al grupo también al hacer scroll.
-    const colorAttr = context.color ? ` data-group-color="${context.color}"` : '';
-
-    // Render parents with their children inside a shared .bay-block wrapper.
-    // The wrapper is the D&D unit: height, cloning and positioning operate on it.
-    const rendered: string[] = [];
-    for (const parent of sortedParents) {
-      const children = childrenByParent.get(parent.metadata.id) || [];
-      const blockClass = children.length > 0 ? 'bay-block has-children' : 'bay-block';
-      const hasPreviewVariant = children.some(child => child.metadata.diffType === 'preview');
-
-      let block = `<div class="${blockClass}" data-bay-id="${this.esc(parent.metadata.id)}" data-pinned="${parent.state.isPinned}" data-groupid="${parent.state.groupId}"${colorAttr}>`;
-      block += this.renderBay(parent, context, hasPreviewVariant);
-      for (const child of children) {
-        block += this.renderVariantBay(child, context.locked);
-      }
-      block += `</div>`;
-      rendered.push(block);
+    // Variantes huérfanas: su parent no está abierto, o vive en otro grupo.
+    for (const child of variants) {
+      if (parents.some(parent => parent.metadata.id === child.metadata.sourceBayId)) { continue; }
+      views.push(this.buildOrphan(child, locked, pendingIcons));
     }
 
-    // Orphan variant bays (parent file not open) — wrapped individually as draggable blocks
-    for (const child of variantBays) {
-      if (!parentBays.some(parent => parent.metadata.id === child.metadata.sourceBayId)) {
-        const orphanHtml = this.renderOrphanVariantBay(child, context.locked);
-        rendered.push(`<div class="bay-block" data-bay-id="${this.esc(child.metadata.id)}" data-pinned="false" data-variant="true" data-groupid="${child.state.groupId}"${colorAttr}>${orphanHtml}</div>`);
-      }
-    }
-    return rendered.join('');
+    return views;
   }
 
-  /**
-   * Renders a variant bay (diff) attached to its parent.
-   * Always compact, indented, no path shown.
-   */
-  private renderVariantBay(
+  private buildBay(
     bay: Bay,
+    children: Bay[],
     locked: boolean,
-  ): string {
-    return VariantRowRenderer.render({
-      bay,
-      esc: this.esc,
-      allowClose: !locked,
-      hover: this._enableHoverActions,
-    });
+    showPath: boolean,
+    copilotReady: boolean,
+    pendingIcons: PendingIcon[],
+  ): BayView {
+    const hover = this._enableHoverActions;
+    const hasPreviewVariant = children.some(child => child.metadata.diffType === 'preview');
+
+    return {
+      id        : bay.metadata.id,
+      label     : bay.metadata.label,
+      detail    : showPath ? bay.metadata.detailLabel : undefined,
+      pathParts : showPath ? bay.metadata.pathParts : undefined,
+      tooltip   : bay.metadata.tooltipText || bay.metadata.label,
+      iconKey   : this.iconKeyFor(bay, pendingIcons),
+      active    : bay.state.isActive,
+      pinned    : bay.state.isPinned,
+      groupId   : bay.state.groupId,
+      state     : bayStateCode(bay.state),
+      canClose  : hover && !locked && bay.state.capabilities.canClose,
+      canChat   : hover && copilotReady && !!bay.metadata.uri,
+      quickAction: hover && bay.state.capabilities.canTogglePreview
+        ? this.quickActionFor(bay, hasPreviewVariant)
+        : undefined,
+      variants  : children.map(child => this.buildVariant(child, locked, false)),
+    };
   }
 
   /**
-   * Renders an orphan variant bay (diff/preview whose parent is not in this list:
-   * source file closed, or living in another editor group).
-   *
-   * Sigue siendo una VARIANTE: misma fila compacta, icono y color de diff. Antes
-   * se dibujaba con `renderBay()` y quedaba idéntica a una bay normal, así que
-   * una variante recién abierta aparentaba ser un parent. Lo único que cambia es
-   * que se muestra el label nativo (incluye el archivo) y no se indenta, porque
-   * no hay parent encima del que colgar.
+   * Una variante suelta: sigue SIENDO una variante (misma fila compacta, mismo
+   * icono y color de diff) y no una bay normal. Dibujada como aquéllas, una
+   * variante recién abierta aparentaba ser un parent. Lo que cambia es que
+   * escribe el label nativo, que incluye el fichero, y que no se indenta: no hay
+   * parent encima del que colgar.
    */
-  private renderOrphanVariantBay(bay: Bay, locked: boolean): string {
-    return VariantRowRenderer.render({
-      bay,
-      esc: this.esc,
-      orphan: true,
-      allowClose: !locked,
-      hover: this._enableHoverActions,
-    });
+  private buildOrphan(bay: Bay, locked: boolean, pendingIcons: PendingIcon[]): BayView {
+    return {
+      id       : bay.metadata.id,
+      label    : bay.metadata.label,
+      tooltip  : bay.metadata.tooltipText || bay.metadata.label,
+      iconKey  : this.iconKeyFor(bay, pendingIcons),
+      active   : bay.state.isActive,
+      pinned   : false,
+      groupId  : bay.state.groupId,
+      canClose : false,
+      canChat  : false,
+      // La fila que se dibuja ES la variante: el contenedor solo la envuelve.
+      variants : [this.buildVariant(bay, locked, true)],
+      variantOnly: true,
+    };
   }
 
-  private renderBay(
-    bay: Bay,
-    context: BayListContext,
-    hasPreviewVariant = false,
-  ): string {
-    const { showPath, copilotReady, compactMode, pendingIcons, locked } = context;
+  private buildVariant(bay: Bay, locked: boolean, orphan: boolean): VariantView {
+    const diff = getDiffTypeDisplay(bay.metadata.diffType, bay.metadata.label);
 
-    // data-bay-id only — data-pinned and data-groupid live on the parent .bay-block
-    const activeClass = bay.state.isActive ? ' active' : '';
-    const stateIndicator = getStateIndicator(bay);
+    return {
+      id       : bay.metadata.id,
+      // Bajo su parent basta el tipo ("Working Tree"); suelta, la fila necesita
+      // el label nativo para saber de qué fichero habla.
+      label    : orphan ? bay.metadata.label : (diff?.label ?? 'Diff'),
+      icon     : (diff?.icon ?? ICONS.variant.generic) as VariantView['icon'],
+      diffClass: diff?.cssClass || undefined,
+      tooltip  : bay.metadata.tooltipText || bay.metadata.label,
+      active   : bay.state.isActive,
+      orphan,
+      canClose : this._enableHoverActions && !locked && bay.state.capabilities.canClose,
+      stats    : variantStats(bay),
+    };
+  }
 
-    const pinBadge = bay.state.isPinned
-      ? '<span class="pin-badge codicon codicon-pinned" title="Pinned"></span>'
-      : '';
-
-    const hover = this._enableHoverActions;
-
-    const fileActionBtn = hover && bay.state.capabilities.canTogglePreview
-      ? this.renderFileActionButton(bay, hasPreviewVariant)
-      : '';
-
-    const chatBtn = hover && copilotReady && bay.metadata.uri
-      ? `<button data-action="addToChat" data-bay-id="${this.esc(bay.metadata.id)}" title="Add to Copilot Chat"><span class="codicon codicon-attach"></span></button>`
-      : '';
-
-    const closeBtn = hover && !locked && bay.state.capabilities.canClose
-      ? `<button data-action="closeBay" data-bay-id="${this.esc(bay.metadata.id)}" title="Close"><span class="codicon codicon-remove-close"></span></button>`
-      : '';
-
-    const { html: iconHtml, pending } = this.iconRenderer.renderImmediate(bay);
+  /** La clave del icono de una bay, encolando la resolución si falla la caché. */
+  private iconKeyFor(bay: Bay, pendingIcons: PendingIcon[]): string {
+    const { marker, html, pending } = this.iconRenderer.resolveImmediate(bay);
     if (pending) {
-      pendingIcons.push({ bayId: bay.metadata.id, fileName: pending.fileName, languageId: pending.languageId });
+      pendingIcons.push({ bayId: bay.metadata.id, ...pending });
     }
-
-    return BayRowRenderer.render({
-      bay,
-      showPath,
-      compactMode,
-      activeClass,
-      iconHtml,
-      stateIndicator,
-      pinBadge,
-      fileActionBtn,
-      chatBtn,
-      closeBtn,
-      esc: this.esc,
-    });
+    return marker !== undefined ? this.iconKeys.keyFor(marker) : this.iconKeys.keyForHtml(html as string);
   }
 
-  //= BOTONES DE ACCIÓN
+  private quickActionFor(bay: Bay, hasPreviewVariant: boolean): QuickActionView | undefined {
+    if (!this.fileActionRegistry || !bay.metadata.uri) { return undefined; }
 
-  private renderFileActionButton(bay: Bay, hasPreviewVariant = false): string {
-    if (!this.fileActionRegistry || !bay.metadata.uri) { return ''; }
+    const resolved = this.fileActionRegistry.resolve(
+      bay.metadata.label, bay.metadata.uri, { viewMode: bay.state.viewMode });
+    if (!resolved) { return undefined; }
 
-    const context = { viewMode: bay.state.viewMode };
-    const resolved = this.fileActionRegistry.resolve(bay.metadata.label, bay.metadata.uri, context);
-    if (!resolved) { return ''; }
+    // El botón de markdown CREA la variante de preview; en cuanto la bay ya
+    // tiene una (la fila hija "Preview") el botón no puede hacer nada.
+    if (resolved.id === 'openMarkdownPreview' && hasPreviewVariant) { return undefined; }
 
-    // The markdown button CREATES the preview variant; once the bay already has
-    // one (the child "Preview" row), the button is pointless — hide it.
-    if (resolved.id === 'openMarkdownPreview' && hasPreviewVariant) { return ''; }
-
-    return `<button data-action="fileAction" data-bay-id="${this.esc(bay.metadata.id)}" data-actionid="${this.esc(resolved.id)}" title="${this.esc(resolved.tooltip)}"><span class="codicon codicon-${this.esc(resolved.icon)}"></span></button>`;
+    return {
+      actionId: resolved.id,
+      icon    : resolved.icon as QuickActionView['icon'],
+      tooltip : resolved.tooltip,
+    };
   }
 
   //= UTILIDADES
-
-  private esc(s: string): string {
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
 
   // CSPRNG: la CSP confía en el nonce para script-src, así que no puede salir
   // de Math.random() (predecible).
@@ -362,4 +317,28 @@ ${fontFaceCss ? `<style>${fontFaceCss}</style>` : ''}
   }
 }
 
+/** Lo que una variante cuenta de sí misma, o nada. */
+function variantStats(bay: Bay): VariantView['stats'] {
+  const stats = bay.state.diffStats;
+  if (!stats) { return undefined; }
 
+  const { linesAdded, linesRemoved, timestamp, conflictSections } = stats;
+
+  if (linesAdded !== undefined && linesRemoved !== undefined) {
+    return {
+      text   : `+${linesAdded} -${linesRemoved}`,
+      tooltip: `${linesAdded} lines added, ${linesRemoved} lines removed`,
+    };
+  }
+  if (timestamp) {
+    return { text: relativeAge(timestamp), tooltip: new Date(timestamp).toLocaleString() };
+  }
+  if (conflictSections) {
+    return {
+      text    : `${conflictSections} conflicts`,
+      tooltip : `${conflictSections} conflict sections`,
+      conflict: true,
+    };
+  }
+  return undefined;
+}

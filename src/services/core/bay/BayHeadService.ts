@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { Bay                 } from '../../../models/Bay';
 import { BayStateService     } from '../BayStateService';
 import { BayHierarchyService } from '../BayHierarchyService';
 import { GitSyncService      } from '../../integration/GitSyncService';
 import { convertToBay        } from '../helpers/tabConverter';
-import { Logger              } from '../../../utils/logger';
+import { Logger              } from '../../../platform/logger';
+import { fileBayId           } from '../../../utils/idRules';
 
 /**
  * BayHeadService - Gestión de Parents para Variants
@@ -163,6 +165,50 @@ export class BayHeadService {
     return undefined;
   }
 
+  /**
+   * Adopta una preview huérfana. REGLA DE JERARQUÍA: una variante nunca vive
+   * sin bay parent — si la preview aparece sin su .md abierto (p.ej. "Open
+   * Preview" reemplaza al editor, o restauración de ventana), se abre el
+   * archivo source y se RECONVIERTE la tab para que la variante quede
+   * enlazada de origen (metadata es inmutable: no se puede parchear
+   * sourceBayId sobre la bay ya construida).
+   *
+   * @returns La variante reconvertida (con sourceBayId) o undefined si el
+   *          source no se pudo resolver — la llamada mantiene entonces la
+   *          huérfana visible en vez de descartarla.
+   */
+  async adoptPreviewOrphan(variant: Bay, previewTab: vscode.Tab): Promise<Bay | undefined> {
+    const sourceUri = variant.metadata.sourceUri
+      ?? await resolvePreviewSourceUri(previewTab);
+    if (!sourceUri) {
+      Logger.warn(`[BayHead] Cannot resolve source for orphan preview: ${previewTab.label}`);
+      return undefined;
+    }
+
+    try {
+      const textDocument = await vscode.workspace.openTextDocument(sourceUri);
+      await vscode.window.showTextDocument(textDocument, {
+        viewColumn: previewTab.group.viewColumn,
+        preview: false,
+        preserveFocus: true,
+      });
+    } catch (error) {
+      Logger.warn(`[BayHead] Failed to open preview source ${sourceUri.fsPath}: ${error}`);
+      return undefined;
+    }
+
+    // Con el source ya abierto, findPreviewSource (tabConverter) lo encuentra
+    // y la reconversión produce la variante con sourceBayId/sourceUri.
+    const relinked = convertToBay(previewTab, this.gitSyncService);
+    if (!relinked?.metadata.sourceBayId) {
+      Logger.warn(`[BayHead] Preview still orphan after opening source: ${previewTab.label}`);
+      return undefined;
+    }
+
+    Logger.log(`[BayHead] Opened source for orphan preview: ${previewTab.label} → ${relinked.metadata.sourceBayId}`);
+    return relinked;
+  }
+
   /** Convierte la tab del parent y la registra en el estado. */
   private adoptParentTab(parentVSTab: vscode.Tab, variant: Bay, expectedId: string): Bay | undefined {
     const parentBay = this.buildParentBay(parentVSTab, variant, expectedId);
@@ -200,9 +246,34 @@ export class BayHeadService {
 function findTabForBayId(group: vscode.TabGroup, bayId: string): vscode.Tab | undefined {
   for (const tab of group.tabs) {
     const uri = nativeTabUri(tab);
-    if (uri && `${uri.toString()}-${group.viewColumn}` === bayId) { return tab; }
+    if (uri && fileBayId(uri.toString(), group.viewColumn) === bayId) { return tab; }
   }
   return undefined;
+}
+
+/**
+ * Resuelve la URI del source de una preview cuya tab de texto NO está abierta.
+ *
+ * El label del preview es "<prefijo localizado> <archivo.md>", así que se busca
+ * en el workspace cualquier markdown cuyo NOMBRE DE ARCHIVO cierre el label con
+ * frontera de espacio — el mismo emparejamiento que usa findPreviewSource sobre
+ * tabs abiertas. Solo se acepta un match inequívoco: con dos candidatos (p.ej.
+ * dos README.md) adivinar enlazaría la preview al archivo equivocado.
+ */
+async function resolvePreviewSourceUri(previewTab: vscode.Tab): Promise<vscode.Uri | undefined> {
+  const label = previewTab.label;
+  const candidates = await vscode.workspace.findFiles('**/*.{md,mdx,markdown}', '**/node_modules/**');
+
+  const matches = candidates.filter(uri => {
+    const fileName = path.basename(uri.fsPath);
+    return label === fileName || label.endsWith(' ' + fileName);
+  });
+
+  if (matches.length !== 1) {
+    Logger.warn(`[BayHead] Preview source for '${label}' ${matches.length === 0 ? 'not found' : 'ambiguous'} in workspace (${matches.length} matches)`);
+    return undefined;
+  }
+  return matches[0];
 }
 
 /** URI del archivo que respalda una tab nativa (texto, custom editor o notebook). */

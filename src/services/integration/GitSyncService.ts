@@ -2,13 +2,14 @@ import * as vscode         from 'vscode';
 import * as path           from 'path';
 import { BayStateService } from '../core/BayStateService';
 import type { GitStatus }  from '../../models/Bay';
+import type { GitApi, GitChange, GitExtensionExports, GitRepository } from './gitApiTypes';
 
 /**
  * Encapsula toda la sincronización con Git (status + listeners de repositorio).
  */
 export class GitSyncService {
   private disposables                  : vscode.Disposable[] = [];
-  private _gitApi                      : any | null = null;
+  private _gitApi                      : GitApi | null = null;
   private _gitRepoListeners            = new Map<string, vscode.Disposable>();
   private _gitOpenRepoListenerAttached = false;
 
@@ -71,7 +72,7 @@ export class GitSyncService {
       // so on a slow workspace where git activates after 2s the retries would all
       // resolve to null and live git badge updates would be lost for the session.
       // Proactively activate the git extension and wire listeners once its API is up.
-      const gitExt = vscode.extensions.getExtension<any>('vscode.git');
+      const gitExt = vscode.extensions.getExtension<GitExtensionExports>('vscode.git');
       if (gitExt) {
         const wireWhenReady = () => {
           const api = this.resolveGitApi();
@@ -106,7 +107,7 @@ export class GitSyncService {
       // the first prefix match (parent, whose change lists never contain inner
       // files) would report null forever. The longest matching root is the repo
       // that actually tracks the file.
-      let bestRepo: any = null;
+      let bestRepo: GitRepository | null = null;
       let bestRootLen = -1;
       for (const repo of this._gitApi.repositories) {
         const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
@@ -119,16 +120,16 @@ export class GitSyncService {
 
       if (bestRepo) {
         const mergeChanges = bestRepo.state.mergeChanges || [];
-        const hasMergeConflict = mergeChanges.some((c: any) => this.changeMatchesPath(c, targetPath));
+        const hasMergeConflict = mergeChanges.some(c => this.changeMatchesPath(c, targetPath));
         if (hasMergeConflict) {
           return 'conflict';
         }
 
         const indexChanges = bestRepo.state.indexChanges || [];
-        const indexChange = indexChanges.find((c: any) => this.changeMatchesPath(c, targetPath));
+        const indexChange = indexChanges.find(c => this.changeMatchesPath(c, targetPath));
 
         const workingTreeChanges = bestRepo.state.workingTreeChanges || [];
-        const workingChange = workingTreeChanges.find((c: any) => this.changeMatchesPath(c, targetPath));
+        const workingChange = workingTreeChanges.find(c => this.changeMatchesPath(c, targetPath));
 
         const indexStatus = this.mapGitApiStatus(indexChange?.status);
         const workingStatus = this.mapGitApiStatus(workingChange?.status);
@@ -155,12 +156,11 @@ export class GitSyncService {
     this._gitOpenRepoListenerAttached = false;
   }
 
-  private resolveGitApi(): any | null {
+  private resolveGitApi(): GitApi | null {
     try {
-      const ext = vscode.extensions.getExtension('vscode.git');
-      const api = ext?.isActive ? ext.exports?.getAPI(1) ?? null : null;
-      return api;
-    } catch (err) {
+      const ext = vscode.extensions.getExtension<GitExtensionExports>('vscode.git');
+      return ext?.isActive ? ext.exports?.getAPI(1) ?? null : null;
+    } catch {
       return null;
     }
   }
@@ -183,7 +183,7 @@ export class GitSyncService {
     }
   }
 
-  private attachGitRepoListener(repo: any): void {
+  private attachGitRepoListener(repo: GitRepository): void {
     const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
     if (!repoRoot) {
       return;
@@ -205,7 +205,7 @@ export class GitSyncService {
    * Without this, the root stays in the map forever and the reopened repo's
    * stage/unstage/commit events never refresh git badges until a full restart.
    */
-  private detachGitRepoListener(repo: any): void {
+  private detachGitRepoListener(repo: GitRepository): void {
     const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
     if (!repoRoot) { return; }
     const sub = this._gitRepoListeners.get(repoRoot);
@@ -220,18 +220,18 @@ export class GitSyncService {
    * helper so both bootstrap paths (immediate setup and the delayed retry) wire
    * the same listeners under a single guard.
    */
-  private attachRepoLifecycleListeners(gitApi: any): void {
+  private attachRepoLifecycleListeners(gitApi: GitApi): void {
     if (this._gitOpenRepoListenerAttached) { return; }
     this._gitOpenRepoListenerAttached = true;
 
     this.disposables.push(
-      gitApi.onDidOpenRepository((repo: any) => {
+      gitApi.onDidOpenRepository(repo => {
         this.attachGitRepoListener(repo);
         this.updateGitStatusForRepo(repo);
       }),
     );
     this.disposables.push(
-      gitApi.onDidCloseRepository((repo: any) => {
+      gitApi.onDidCloseRepository(repo => {
         this.detachGitRepoListener(repo);
       }),
     );
@@ -250,7 +250,7 @@ export class GitSyncService {
     }
   }
 
-  private updateGitStatusForRepo(repo: any): void {
+  private updateGitStatusForRepo(repo: GitRepository): void {
     const repoRoot = this.normalizeFsPath(repo?.rootUri?.fsPath);
     if (!repoRoot) { return; }
 
@@ -297,7 +297,7 @@ export class GitSyncService {
     }
   }
 
-  private changeMatchesPath(change: any, targetPath: string): boolean {
+  private changeMatchesPath(change: GitChange, targetPath: string): boolean {
     const current = this.normalizeFsPath(change?.uri?.fsPath);
     const original = this.normalizeFsPath(change?.originalUri?.fsPath);
     return current === targetPath || original === targetPath;

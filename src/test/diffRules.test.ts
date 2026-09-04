@@ -1,0 +1,90 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { classifyDiff } from '../utils/diffRules';
+
+// Un monton de casos con ORDEN entre ellos: lo escrito en el label gana a lo
+// deducido del esquema, y el patron de una edicion gana a un hash que case por
+// casualidad. Ese orden es lo que se rompe sin que nadie lo note.
+
+test('working tree por el label', () => {
+  assert.equal(classifyDiff('app.ts (Working Tree)'), 'working-tree');
+});
+
+test('staged / index', () => {
+  assert.equal(classifyDiff('app.ts (Index)'), 'staged');
+  assert.equal(classifyDiff('app.ts (Staged)'), 'staged');
+});
+
+test('patron de edicion +X-Y', () => {
+  assert.equal(classifyDiff('app.ts +12-3'), 'edit');
+});
+
+test('el patron de edicion gana a un hash que casa por casualidad', () => {
+  // "abcdef1" casaria como commit; el +X-Y se pregunta antes.
+  assert.equal(classifyDiff('abcdef1 +1-1'), 'edit');
+});
+
+test('hash de commit en el label', () => {
+  assert.equal(classifyDiff('app.ts (1a2b3c4d)'), 'commit');
+});
+
+test('historia local', () => {
+  assert.equal(classifyDiff('app.ts (Local History)'), 'snapshot');
+  assert.equal(classifyDiff('app.ts (Timeline)'), 'snapshot');
+});
+
+test('una fecha o una hora en el label son un snapshot', () => {
+  assert.equal(classifyDiff('app.ts 2026-01-30'), 'snapshot');
+  assert.equal(classifyDiff('app.ts 14:05'), 'snapshot');
+});
+
+test('git con ref en la query es un commit', () => {
+  assert.equal(
+    classifyDiff('app.ts', { scheme: 'git', query: 'ref=HEAD', path: '/p/app.ts' }),
+    'commit',
+  );
+});
+
+test('timeline por el esquema es un snapshot', () => {
+  assert.equal(
+    classifyDiff('app.ts', { scheme: 'timeline', path: '/p/app.ts' }),
+    'snapshot',
+  );
+});
+
+test('dos snapshots de chat sin la palabra snapshot son una edicion', () => {
+  const s = { scheme: 'chat-editing-snapshot-text-model', path: '/p/app.ts' };
+  assert.equal(classifyDiff('app.ts', s, s), 'edit');
+});
+
+test('conflicto de merge', () => {
+  assert.equal(classifyDiff('app.ts (Merge Conflict)'), 'merge-conflict');
+});
+
+test('incoming y current', () => {
+  assert.equal(classifyDiff('Incoming changes'), 'incoming');
+  assert.equal(classifyDiff('Current changes'), 'current');
+  assert.equal(classifyDiff('Incoming and Current'), 'incoming-current');
+});
+
+test('lo que no case con nada es unknown', () => {
+  assert.equal(classifyDiff('algo que no dice nada'), 'unknown');
+});
+
+// Las ediciones del chat de Claude Code llegan por un FileSystemProvider
+// temporal. Sin detectarlas caian en 'unknown' y el parent apuntaba a la uri del
+// provider, o sea una variante huerfana — y una variante nunca vive sin padre.
+test('Claude Code: la edicion se detecta por el ESQUEMA del provider', () => {
+  const original = { scheme: 'file', path: '/p/src/app.ts' };
+  const modified = { scheme: '_claude_vscode_fs_right', path: '/p/src/app.ts' };
+  assert.equal(classifyDiff('✻ [Claude Code] app.ts', original, modified), 'edit');
+});
+
+test('Claude Code: y por el LABEL, aunque las dos uris sean normales', () => {
+  assert.equal(classifyDiff('✻ [Claude Code] app.ts'), 'edit');
+});
+
+test('Claude Code: el esquema gana a un label que casaria otro patron', () => {
+  const modified = { scheme: '_claude_fs_right', path: '/p/src/app.ts' };
+  assert.equal(classifyDiff('Working Tree app.ts', undefined, modified), 'edit');
+});

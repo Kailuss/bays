@@ -4,9 +4,10 @@ import { Bay                                 } from '../../../models/Bay';
 import type { BayMetadata, BayState, BayType } from '../../../models/Bay';
 import { BayHelpers                          } from '../../../models/BayHelpers';
 import type { GitSyncService                 } from '../../integration/GitSyncService';
-import { formatFilePathWithParts             } from '../../../utils/pathFormatters';
-import { resolveLanguageId                   } from '../../../utils/languageRegistry';
-import { Logger                              } from '../../../utils/logger';
+import { formatFilePathWithParts             } from '../../../platform/pathFormatters';
+import { resolveLanguageId                   } from '../../../platform/languageRegistry';
+import { Logger                              } from '../../../platform/logger';
+import { fileBayId, webviewBayId, variantBayId } from '../../../utils/idRules';
 import { classifyDiffType, determineParentId, determineParentUri, resolveSourceUri } from './tabClassifier';
 
 type TabInputData = {
@@ -177,7 +178,7 @@ export function convertToBay(
     diffType = 'snapshot';
     // El parent es el archivo real (convertir path del snapshot a file:// URI)
     parentUri = resolveSourceUri(uri);
-    parentId  = `${parentUri.toString()}-${viewColumn}`;
+    parentId  = fileBayId(parentUri.toString(), viewColumn);
   }
 
   // Variant (diff/snapshot) bays get a DETERMINISTIC id so the close/active-sync
@@ -275,6 +276,31 @@ export function convertToBay(
 }
 
 /**
+ * Degrada una variante huérfana a bay normal. REGLA DE JERARQUÍA: una variante
+ * nunca vive sola — si su parent no se puede resolver NI crear (p.ej. un edit
+ * de Claude Code sobre un archivo movido/renombrado cuya ruta ya no existe),
+ * la tab se representa como bay raíz, nunca como fila-variante suelta.
+ *
+ * Conserva el id (debe seguir siendo reconstruible desde la tab nativa para
+ * open/close/active-sync) y originalUri (matchesNative de los diffs compara
+ * ambos lados); solo pierde su condición de variante.
+ */
+export function demoteOrphanVariant(variant: Bay): Bay {
+  const metadata: BayMetadata = {
+    ...variant.metadata,
+    sourceBayId : undefined,
+    sourceUri   : undefined,
+    diffType    : undefined,
+  };
+  const state: BayState = {
+    ...variant.state,
+    diffStats    : undefined,
+    capabilities : BayHelpers.computeCapabilities(metadata, variant.state),
+  };
+  return new Bay(metadata, state);
+}
+
+/**
  * Rebuilds a plain file/custom/notebook bay for a NEW uri after a rename/move.
  *
  * Deterministic on purpose: it derives everything from `newUri` (mirroring the file
@@ -299,7 +325,7 @@ export function remapFileBayUri(
   // Mirror convertToBay's file-branch baseMetadata, but for the new uri. bayType/
   // viewType/customData are the only non-uri fields worth carrying over.
   const baseMetadata: BayMetadata = {
-    id            : `${newUri.toString()}-${viewColumn}`,
+    id            : fileBayId(newUri.toString(), viewColumn),
     uri           : newUri,
     label,
     detailLabel   : pathData.formatted,
@@ -338,16 +364,9 @@ export function generateId(
   tabType    : BayType,
   viewType?  : string,
 ): string {
-  if (uri) {
-    return `${uri.toString()}-${viewColumn}`;
-  }
-  // Uriless tabs (webviews): key off the STABLE viewType, not the mutable label.
-  // Some webview panels rewrite their title at runtime — e.g. Claude Code's chat
-  // tab (`mainThreadWebview-claudeVSCodePanel`) shows the current session name — so
-  // a label-derived id drifts on every title change, orphaning the bay and breaking
-  // active-highlight/close sync. The viewType is fixed for the panel's lifetime.
-  const key = (viewType || label).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-  return `${tabType}:${key}-${viewColumn}`;
+  return uri
+    ? fileBayId(uri.toString(), viewColumn)
+    : webviewBayId(label, viewColumn, tabType, viewType);
 }
 
 /**
@@ -362,8 +381,7 @@ export function generateVariantId(
   originalUri : vscode.Uri | undefined,
   viewColumn  : vscode.ViewColumn,
 ): string {
-  const original = originalUri ? originalUri.toString() : '';
-  return `diff:${modifiedUri.toString()}::${original}-${viewColumn}`;
+  return variantBayId(modifiedUri.toString(), originalUri?.toString(), viewColumn);
 }
 
 /**
@@ -430,7 +448,7 @@ function findPreviewSource(previewTab: vscode.Tab): { id: string; uri: vscode.Ur
 
   const describe = (tab: vscode.Tab) => {
     const input = tab.input as vscode.TabInputText;
-    return { id: `${input.uri.toString()}-${tab.group.viewColumn}`, uri: input.uri };
+    return { id: fileBayId(input.uri.toString(), tab.group.viewColumn), uri: input.uri };
   };
 
   // Prefer the preview's own group

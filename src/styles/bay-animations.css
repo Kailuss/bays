@@ -2,10 +2,10 @@
 
 /* Animación de cierre */
 .bay.closing {
-  animation: slideOut 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: slideOut var(--bays-close-ms) cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-@keyframes slideOut {
+@ke no. essyframes slideOut {
   0% {
     opacity: 1;
     transform: translateX(0);
@@ -28,7 +28,7 @@
 
 /* Animación de cambio de estado */
 .bay-name.changing {
-  animation: colorPulse 1000ms ease-in-out;
+  animation: colorPulse var(--bays-pulse-ms) ease-in-out;
 }
 
 @keyframes colorPulse {

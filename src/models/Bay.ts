@@ -14,16 +14,15 @@ export class Bay extends BayActions {
 }
 
 //: Bay type - 4 core types according to Bay architecture
-export type BayType = 'file' | 'webview' | 'custom' | 'notebook';
+export type { BayType, DiffType, GitStatus } from './BayTypes';
+import type { BayType, DiffType, GitStatus } from './BayTypes';
 
 //: Git decoration status for a file
-export type GitStatus   = 'modified' | 'added' | 'deleted' | 'untracked' | 'ignored' | 'conflict' | null;
 //: View mode for bays that support multiple visualizations
 export type BayViewMode = 'source' | 'preview' | 'split';
 //: Edit mode for bays
 export type EditMode = 'readonly' | 'editable';
 //: Diff type for child bays (diff visualizations; 'preview' = rendered Markdown preview variant)
-export type DiffType = 'working-tree' | 'staged' | 'snapshot' | 'commit' | 'edit' | 'merge-conflict' | 'incoming' | 'current' | 'incoming-current' | 'preview' | 'unknown';
 
 /** Diff statistics for child bays */
 export type DiffStats = {
@@ -95,7 +94,9 @@ export type BayMetadata = {
   originalUri?  : vscode.Uri;    // Left (original) side of a diff tab. Rename/move is handled by re-keying the bay, not this field.
 
   //: EXTENSIBILITY
-  customData?   : Record<string, any>;  // Extension-specific metadata
+  // `unknown` y no `any`: lo que se meta aquí hay que comprobarlo antes de
+  // leerlo, que es lo que una bolsa abierta necesita para no ser un agujero.
+  customData?   : Record<string, unknown>;
 }
 
 /** 5 core capabilities (other computed on-demand). @see services/core/AGENT.md */

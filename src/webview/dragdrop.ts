@@ -15,6 +15,30 @@ type GroupRegion = { groupId: string; top: number; bottom: number; headerEl: HTM
 type SiblingSlot = { el: HTMLElement; origTop: number; height: number };
 
 let isDragging         = false;
+
+/**
+ * Si hay un arrastre en curso.
+ *
+ * Lo mira el render: reconciliar a mitad de gesto sustituye justo los nodos
+ * contra los que el arrastre está midiendo, y la respuesta visual que el cliente
+ * acaba de dar se deshace bajo la mano. Lo que llegue se pinta al soltar.
+ */
+export function dragInFlight(): boolean {
+  return isDragging;
+}
+
+/**
+ * Quién quiere enterarse de que el gesto ha terminado.
+ *
+ * Va como suscripción y no como un import de vuelta a `interactions.ts`: aquel
+ * módulo ya importa éste, así que llamarlo desde aquí cerraría el ciclo. El
+ * único oyente de hoy es el render aplazado.
+ */
+const dragEndListeners: (() => void)[] = [];
+
+export function onDragEnd(listener: () => void): void {
+  dragEndListeners.push(listener);
+}
 let startY             = 0;
 let startMouseY        = 0;
 let sourceEl: HTMLElement | null = null;  // .bay-block original que se arrastra
@@ -342,6 +366,7 @@ function teardown(): void {
   originalOrder.forEach(s => { s.el.style.transform = ''; });
 
   document.body.classList.remove('drag-active');
+  const wasDragging  = isDragging;
   isDragging         = false;
   siblings           = [];
   originalOrder      = [];
@@ -351,4 +376,6 @@ function teardown(): void {
   groupRegions       = [];
   targetGroupId      = null;
   lockedSource       = false;
+
+  if (wasDragging) { dragEndListeners.forEach(listener => listener()); }
 }

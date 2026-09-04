@@ -7,15 +7,17 @@ import { BayDragDropService      } from './services/ui/BayDragDropService';
 import { FileActionRegistry      } from './services/registry/FileActionRegistry';
 import { BayIconManager          } from './services/ui/BayIconManager';
 import { GroupCustomizationService } from './services/ui/GroupCustomizationService';
+import { ViewPrefs               } from './services/ui/ViewPrefs';
+import { ProductIconService      } from './services/ui/ProductIconService';
 import { ThemeService            } from './services/ui/ThemeService';
 import { CopilotService          } from './services/integration/CopilotService';
 import { ClaudeConversationService } from './services/integration/ClaudeConversationService';
 import { registerBayCommands     } from './commands/bayCommands';
 import { registerGroupCommands   } from './commands/groupCommands';
 import { registerCopilotCommands } from './commands/copilotCommands';
-import { activateLanguageRegistry } from './utils/languageRegistry';
-import { preloadWebviewExtensionIcons } from './utils/webviewExtensionIcons';
-import { Logger                  } from './utils/logger';
+import { activateLanguageRegistry } from './platform/languageRegistry';
+import { preloadWebviewExtensionIcons } from './platform/webviewExtensionIcons';
+import { Logger                  } from './platform/logger';
 
 export async function activate(context: vscode.ExtensionContext) {
   Logger.initialize();
@@ -46,6 +48,17 @@ export async function activate(context: vscode.ExtensionContext) {
     const copilotService     = new CopilotService();
     const groupActions       = new GroupActions(groupCustomization);
 
+    // Lo que la vista conmuta desde un control propio se guarda POR PROYECTO en
+    // vez de escribir el settings.json del usuario (ver ViewPrefs).
+    const viewPrefs          = new ViewPrefs(context);
+    context.subscriptions.push(viewPrefs);
+
+    // Los glifos del panel siguen al pack de `workbench.productIconTheme`, como
+    // el resto del workbench. Apagado (`bays.followProductIconTheme`) no lee
+    // nada del disco.
+    const productIcons       = new ProductIconService();
+    context.subscriptions.push(productIcons);
+
     // Initialise icon manager (loads icon map). Do NOT block activation on the
     // theme-JSON disk read: the first render shows placeholder icons and patches
     // real ones in as they resolve, and onDidInitialize triggers a refresh once
@@ -63,6 +76,8 @@ export async function activate(context: vscode.ExtensionContext) {
       dragDropService,
       fileActionRegistry,
       groupActions,
+      viewPrefs,
+      productIcons,
     );
 
     context.subscriptions.push(
@@ -75,6 +90,9 @@ export async function activate(context: vscode.ExtensionContext) {
     //· Configuration reload
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration(e => {
+        // Lo PRIMERO: un ajuste editado a mano tira lo guardado para esa clave,
+        // así que el repintado que va detrás lee ya lo que gobierna.
+        viewPrefs.forgetConfigured(e);
         if (e.affectsConfiguration('bays')) { provider.refresh(); }
       }),
     );
@@ -146,7 +164,8 @@ export async function activate(context: vscode.ExtensionContext) {
     void enrichClaudeTitles();
 
     //· Register commands
-    registerBayCommands(context, stateService);
+    registerBayCommands(context, stateService, viewPrefs);
+    context.subscriptions.push(viewPrefs.onDidChange(() => provider.refresh()));
     registerGroupCommands(context, stateService, groupActions);
     registerCopilotCommands(context, copilotService, stateService);
 
@@ -161,7 +180,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
     //· Refresh when icons are reloaded (e.g., theme change)
     context.subscriptions.push(
-      iconManager.onDidInitialize(() => provider.refresh()),
+      iconManager.onDidInitialize(() => provider.refreshTheme()),
+    );
+
+    //· El pack de iconos de producto: lo unico que se mueve es una hoja de
+    //  estilo, y cada glifo que nombra ya esta en pantalla con el id contra el
+    //  que casa esa regla. Asi que no se vuelve a componer ninguna lista.
+    context.subscriptions.push(
+      productIcons.onDidChange(() => void provider.sendProductIcons()),
     );
 
     Logger.log('Bays activated successfully');

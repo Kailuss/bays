@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { BayMetadata, BayState } from '../Bay';
 import { BayHelpers } from '../BayHelpers';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 import { VSCODE_COMMANDS } from '../../constants/commands';
 import { TIMINGS } from '../../constants/timings';
 

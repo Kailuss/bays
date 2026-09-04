@@ -1,70 +1,44 @@
-import { Bay } from '../models/Bay';
+import type { GitStatus } from '../models/BayTypes';
+import type { BayStateCode } from '../shared/protocol';
 
 /**
- * Builds the state indicator HTML + CSS class for a bay.
- * Priority: diagnostic error > diagnostic warning > git status > dirty > clean.
+ * Lo que la fila necesita saber para decir su estado, y nada más.
+ *
+ * Se declara estructuralmente en vez de recibir una `Bay` porque aquélla arrastra
+ * `vscode` y esto es una regla pura: con la forma estrecha, la precedencia se fija
+ * con tests que corren sin extension host, y una `Bay` la satisface tal cual.
  */
-export function getStateIndicator(bay: Bay): { html: string; nameClass: string } {
+export type BayStateFacts = {
+  diagnosticSeverity?: number | null;
+  gitStatus?: GitStatus;
+  isDirty?: boolean;
+};
 
-  // ── Diagnósticos ────────────────────────────────────────────────────────────
-  if (bay.state.diagnosticSeverity === 0) {
-    return {
-      html      : '<span class="bay-state state-error" title="Error"><span class="codicon codicon-error"></span></span>',
-      nameClass : ' error',
-    };
-  }
-  if (bay.state.diagnosticSeverity === 1) {
-    return {
-      html      : '<span class="bay-state state-warning" title="Warning"><span class="codicon codicon-warning"></span></span>',
-      nameClass : ' warning',
-    };
-  }
+/**
+ * El CÓDIGO de estado de una fila, o `undefined` si está limpia.
+ *
+ * Lo que viaja al cliente es este código y no markup: el glifo, el título y la
+ * clase que tiñe el nombre son presentación, y viven en `shared/bayState.ts`,
+ * donde el cliente los dibuja. Lo que se decide aquí es la PRECEDENCIA, que es
+ * lo único de esto que se puede romper sin que cambie nada visible hasta que un
+ * fichero con un error deje de decirlo:
+ *
+ *   error > aviso > estado git > sin guardar > limpia
+ */
+export function bayStateCode(state: BayStateFacts): BayStateCode | undefined {
+  if (state.diagnosticSeverity === 0) { return 'error'; }
+  if (state.diagnosticSeverity === 1) { return 'warning'; }
 
-  // ── Estado Git ───────────────────────────────────────────────────────────────
-  switch (bay.state.gitStatus) {
-    case 'modified':
-      return {
-        html      : '<span class="bay-state state-modified" title="Modified"><span class="codicon codicon-diff-modified"></span></span>',
-        nameClass : ' modified',
-      };
-    case 'added':
-      return {
-        html      : '<span class="bay-state state-added" title="Added (Staged)"><span class="codicon codicon-diff-added"></span></span>',
-        nameClass : ' added',
-      };
-    case 'deleted':
-      return {
-        html      : '<span class="bay-state state-deleted" title="Deleted"><span class="codicon codicon-diff-removed"></span></span>',
-        nameClass : ' deleted',
-      };
-    case 'untracked':
-      return {
-        html      : '<span class="bay-state state-untracked" title="Untracked"><span class="codicon codicon-diff-added"></span></span>',
-        nameClass : ' untracked',
-      };
-    case 'ignored':
-      return {
-        html      : '<span class="bay-state state-ignored" title="Ignored"><span class="codicon codicon-circle-slash"></span></span>',
-        nameClass : ' ignored',
-      };
-    case 'conflict':
-      return {
-        html      : '<span class="bay-state state-conflict" title="Conflict"><span class="codicon codicon-diff-ignored"></span></span>',
-        nameClass : ' conflict',
-      };
+  switch (state.gitStatus) {
+    case 'modified'  : return 'modified';
+    case 'added'     : return 'added';
+    case 'deleted'   : return 'deleted';
+    case 'untracked' : return 'untracked';
+    case 'ignored'   : return 'ignored';
+    case 'conflict'  : return 'conflict';
   }
 
-  // ── Dirty (sin contexto git) ─────────────────────────────────────────────────
-  if (bay.state.isDirty) {
-    return {
-      html      : '<span class="bay-state state-dirty" title="Unsaved"><span class="codicon codicon-close-dirty"></span></span>',
-      nameClass : ' modified',
-    };
-  }
+  if (state.isDirty) { return 'dirty'; }
 
-  // ── Clean ────────────────────────────────────────────────────────────────────
-  return {
-    html      : '<span class="bay-state clean"></span>',
-    nameClass : '',
-  };
+  return undefined;
 }

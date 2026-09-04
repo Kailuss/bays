@@ -10,7 +10,7 @@ export async function copyRelativePath(
   _state: BayState
 ): Promise<void> {
   if (!metadata.uri) {
-    vscode.window.showWarningMessage('This bay has no path to copy');
+    vscode.window.showWarningMessage(vscode.l10n.t('This bay has no path to copy'));
     return;
   }
   if (!metadata.uri) {
@@ -18,19 +18,19 @@ export async function copyRelativePath(
   }
   const rel = vscode.workspace.asRelativePath(metadata.uri);
   await vscode.env.clipboard.writeText(rel);
-  vscode.window.showInformationMessage(`Copied: ${rel}`);
+  vscode.window.showInformationMessage(vscode.l10n.t('Copied: {0}', rel));
 }
 
 export async function copyPath(metadata: BayMetadata, _state: BayState): Promise<void> {
   if (!metadata.uri) {
-    vscode.window.showWarningMessage('This bay has no path to copy');
+    vscode.window.showWarningMessage(vscode.l10n.t('This bay has no path to copy'));
     return;
   }
   if (!metadata.uri) {
     return;
   }
   await vscode.env.clipboard.writeText(metadata.uri.fsPath);
-  vscode.window.showInformationMessage(`Copied: ${metadata.uri.fsPath}`);
+  vscode.window.showInformationMessage(vscode.l10n.t('Copied: {0}', metadata.uri.fsPath));
 }
 
 export async function copyFileContents(
@@ -43,8 +43,8 @@ export async function copyFileContents(
   try {
     const doc = await vscode.workspace.openTextDocument(metadata.uri);
     await vscode.env.clipboard.writeText(doc.getText());
-    vscode.window.showInformationMessage('File contents copied to clipboard');
+    vscode.window.showInformationMessage(vscode.l10n.t('File contents copied to clipboard'));
   } catch {
-    vscode.window.showErrorMessage('Failed to copy file contents');
+    vscode.window.showErrorMessage(vscode.l10n.t('Failed to copy file contents'));
   }
 }

@@ -1,0 +1,8 @@
+# LF en el repositorio Y en el árbol de trabajo, en cualquier plataforma. Sin
+# esto, un fichero escrito en Windows entra con CRLF y todo diff posterior lo
+# reporta entero.
+* text=auto eol=lf
+*.png binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

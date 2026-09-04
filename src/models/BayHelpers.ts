@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { Logger } from '../utils/logger';
+import { Logger } from '../platform/logger';
 import { VSCODE_COMMANDS } from '../constants/commands';
 import type { BayMetadata, BayState, BayCapabilities, BayViewMode as BayViewMode, BayType } from './Bay';
 

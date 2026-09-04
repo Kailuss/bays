@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { Bay } from '../../models/Bay';
 import { BayHelpers } from '../../models/BayHelpers';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 
 /**
  * Reads Claude Code's conversation title from its on-disk transcripts and uses it

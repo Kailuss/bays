@@ -19,6 +19,8 @@
 // Un único menú vivo a la vez: `show()` cierra el anterior.
 
 import type { MenuItem, MenuActionItem, MenuSeparator } from '../shared/protocol';
+import { ICONS } from '../shared/icons';
+import { setTip } from './tooltip';
 
 export type { MenuItem } from '../shared/protocol';
 
@@ -85,7 +87,7 @@ function createIconSlot(item: MenuActionItem, isGroupLeader: boolean): HTMLSpanE
 
   if (isGroupLeader && item.icon) {
     const glyph = document.createElement('span');
-    glyph.className = 'codicon codicon-' + item.icon;
+    glyph.className = `codicon codicon-${item.icon}`;
     slot.appendChild(glyph);
   }
   return slot;
@@ -125,11 +127,13 @@ function createItemEl(item: MenuItem, menuEl: MenuEl, isGroupLeader: boolean): H
   if (hasSubmenu(item)) {
     el.setAttribute('aria-haspopup', 'true');
     const chevron = document.createElement('span');
-    chevron.className = 'bays-menu-submenu-indicator codicon codicon-chevron-right';
+    chevron.className = `bays-menu-submenu-indicator codicon codicon-${ICONS.menu.submenu}`;
     el.appendChild(chevron);
   }
 
-  if (item.tooltip) { el.title = item.tooltip; }
+  // Por `data-tip` y no por `title`: nada de esta vista usa el tooltip del
+  // sistema, y los dos juntos saldrían uno encima del otro.
+  if (item.tooltip) { setTip(el, item.tooltip); }
 
   el.addEventListener('mouseenter', () => {
     focusItem(menuEl, menuEl._items.indexOf(item), { scroll: false });

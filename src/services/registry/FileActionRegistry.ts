@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Logger }  from '../../utils/logger';
+import { Logger }  from '../../platform/logger';
 import { 
   FileQuickAction, 
   DynamicFileQuickAction,

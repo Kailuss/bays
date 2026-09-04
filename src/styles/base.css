@@ -1,3 +1,31 @@
+/* Los números que la vista comparte, en un solo sitio.
+
+   Lo que mueve la vista se apaga desde UNA clase (`body.no-motion`, que escribe
+   `webview/interactions.ts` fundiendo `bays.animations` con
+   `workbench.reduceMotion`). Cada duración se declara como propiedad para que
+   apagarlas sea ponerlas a cero aquí y no ir buscando una regla por hoja: una
+   animación que se quedara fuera es la que nadie notaría hasta verla moverse en
+   una vista que se pidió quieta. */
+:root {
+  /* La animación de cierre de una fila. */
+  --bays-close-ms: 200ms;
+  /* El pulso de un cambio de estado. Lo espera un setTimeout de 1000 ms en
+     `interactions.ts`, que es lo que quita la clase: los dos números tienen que
+     moverse juntos. */
+  --bays-pulse-ms: 1000ms;
+  /* El fundido con el que entra un tooltip. */
+  --bays-tip-fade-ms: 120ms;
+}
+
+/* Vista quieta. Lo que se apaga es lo que la vista AÑADE encima de un estado; no
+   hay aquí nada que sea el estado mismo (un spinner, una marca que solo existe
+   mientras algo pasa), que es lo único que no podría pararse sin mentir. */
+body.no-motion {
+  --bays-close-ms: 0ms;
+  --bays-pulse-ms: 0ms;
+  --bays-tip-fade-ms: 0ms;
+}
+
 /* Reset */
 * {
   margin: 0;

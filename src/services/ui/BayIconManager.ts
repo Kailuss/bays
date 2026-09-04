@@ -3,19 +3,21 @@
 
 import * as vscode from 'vscode';
 import * as fsp    from 'fs/promises';
-import { Logger }  from '../../utils/logger';
+import { Logger }  from '../../platform/logger';
 import * as path   from 'path';
-import { resolveLanguageId } from '../../utils/languageRegistry';
+import { resolveLanguageId } from '../../platform/languageRegistry';
 import { DEFAULT_FILE_ICON, buildFontIconMarker, iconFontFamily } from '../../utils/iconMarkers';
+import { parseFontDecls, fontFaceBlock, fontMimeType } from '../../utils/themeFonts';
+import { asRecord, asString, iconIdEntries, iconDefinition, iconDefinitionIds } from '../../utils/iconTheme';
+import type { IconThemeJson } from '../../utils/iconTheme';
+import type { FontDecl } from '../../utils/themeFonts';
 
-/** Una fuente declarada en `fonts[]` del icon theme. */
-type ThemeFont = {
-  id     : string;
-  path   : string;   // ruta absoluta al fichero de fuente
-  format : string;   // woff2 | woff | truetype | opentype
-  weight : string;
-  style  : string;
-};
+/**
+ * Una fuente del icon theme con su ruta ya RESUELTA contra el directorio del
+ * tema. Lo que la declara y endurece es `utils/themeFonts.ts`; lo único que se
+ * añade aquí es la parte que solo el llamante sabe, que es dónde vive el fichero.
+ */
+type ThemeFont = FontDecl & { path: string };
 
 /**
  * Resuelve y cachea iconos de archivo según el tema de iconos activo.
@@ -27,7 +29,7 @@ export class BayIconManager {
   private _iconMap           : Record<string, string> | undefined;
   private _iconThemeId       : string | undefined;
   private _iconThemePath     : string | undefined;
-  private _iconThemeJson     : any;
+  private _iconThemeJson     : IconThemeJson | undefined;
   private _defaultFileIconId : string | undefined;
   private _themeFonts        : ThemeFont[] = [];
   private _fontFaceCss       : string | undefined;
@@ -96,7 +98,7 @@ export class BayIconManager {
       }
 
       let ext               = this.findIconThemeExtension(iconTheme);
-      let themeJson: any    = null;
+      let themeJson: IconThemeJson | undefined;
       let themePath: string = '';
       let themeId           = iconTheme;
 
@@ -116,15 +118,22 @@ export class BayIconManager {
       Logger.log(`[Bays] Building icon map for theme: ${themeId}, from extension: ${ext.id}`);
 
       // Buscar la entrada del tema en el package.json de la extensión
-      const themeContribution = ext.packageJSON.contributes.iconThemes.find( (t: any) => t.id === themeId );
-      if (!themeContribution) {
+      // `packageJSON` es de otra extensión: se recorre con narradores en vez de
+      // castearse, que es lo que impedía notar un contributes con otra forma.
+      const contributes = asRecord(asRecord(ext.packageJSON)?.contributes);
+      const declared    = Array.isArray(contributes?.iconThemes) ? contributes.iconThemes : [];
+      const themeContribution = declared
+        .map(asRecord)
+        .find(t => t !== null && asString(t.id) === themeId);
+      const contributionPath  = asString(themeContribution?.path);
+      if (!contributionPath) {
         Logger.warn('[Bays] Theme contribution not found in extension');
         this.clearThemeState(iconTheme);
         return;
       }
 
       // Resolver la ruta absoluta al archivo JSON del tema
-      themePath = path.join(ext.extensionPath, themeContribution.path);
+      themePath = path.join(ext.extensionPath, contributionPath);
       Logger.log('[Bays] Theme path: ' + themePath);
 
       try {
@@ -137,7 +146,7 @@ export class BayIconManager {
 
       try {
         const themeContent = await fsp.readFile(themePath, 'utf8');
-        themeJson          = JSON.parse(themeContent);
+        themeJson          = JSON.parse(themeContent) as IconThemeJson;
       } catch (err) {
         Logger.error('[Bays] Error parsing icon theme JSON:', err);
         this.clearThemeState(iconTheme);
@@ -151,34 +160,21 @@ export class BayIconManager {
       // El id del icono de archivo por defecto lo declara el propio tema en su
       // clave `file`; no siempre se llama `_file`. Guardarlo evita adivinarlo
       // buscando claves que "contengan file" en iconDefinitions.
-      this._defaultFileIconId =
-        typeof themeJson.file === 'string' ? themeJson.file : undefined;
+      this._defaultFileIconId = asString(themeJson.file);
 
       this._themeFonts  = this.parseThemeFonts(themeJson, path.dirname(themePath));
       this._fontFaceCss = undefined;   // se regenera perezosamente por tema
 
       const iconMap: Record<string, string> = {};
 
-      // Mapear nombres de archivo → id de icono
-      if (themeJson.fileNames) {
-        Object.entries(themeJson.fileNames).forEach(([name, value]) => {
-          iconMap[`name:${name.toLowerCase()}`] = value as string;
-        });
-      }
-
-      // Mapear extensiones de archivo → id de icono
-      if (themeJson.fileExtensions) {
-        Object.entries(themeJson.fileExtensions).forEach(([fileExt, value]) => {
-          iconMap[`ext:${fileExt.toLowerCase()}`] = value as string;
-        });
-      }
-
-      // Mapear ids de lenguaje → id de icono
-      if (themeJson.languageIds) {
-        Object.entries(themeJson.languageIds).forEach(([lang, value]) => {
-          iconMap[`lang:${lang.toLowerCase()}`] = value as string;
-        });
-      }
+      // Los tres mapas del tema, con el prefijo que dice por qué pregunta entró
+      // cada clave. `iconIdEntries` descarta lo que no sea una cadena en vez de
+      // castearlo: un valor de otra forma metía `[object Object]` en el mapa, y
+      // eso no falla de manera ruidosa — sencillamente ese tipo de fichero no
+      // encuentra su icono nunca.
+      for (const [name, id] of iconIdEntries(themeJson.fileNames))      { iconMap[`name:${name}`] = id; }
+      for (const [ext_, id] of iconIdEntries(themeJson.fileExtensions)) { iconMap[`ext:${ext_}`]  = id; }
+      for (const [lang, id] of iconIdEntries(themeJson.languageIds))    { iconMap[`lang:${lang}`] = id; }
 
       // Log de archivos especiales mapeados para debugging
       const specialFiles = ['.vscodeignore', '.gitignore', '.npmignore', '.dockerignore'];
@@ -202,43 +198,24 @@ export class BayIconManager {
    * sin declararla vía @font-face el webview pinta el codepoint crudo (cuadros).
    * De cada fuente se toma el primer `src` con formato conocido.
    */
-  private parseThemeFonts(themeJson: any, themeDir: string): ThemeFont[] {
-    const declared = themeJson?.fonts;
-    if (!Array.isArray(declared)) { return []; }
+  private parseThemeFonts(themeJson: unknown, themeDir: string): ThemeFont[] {
+    const declared = typeof themeJson === 'object' && themeJson !== null
+      ? (themeJson as { fonts?: unknown }).fonts
+      : undefined;
 
-    const fonts: ThemeFont[] = [];
-    for (const font of declared) {
-      const sources = Array.isArray(font?.src) ? font.src : [];
-      const source  = sources.find((s: any) => typeof s?.path === 'string');
-      if (!source) { continue; }
-
-      const relative = process.platform === 'win32'
-        ? String(source.path).replace(/\//g, path.sep)
-        : String(source.path);
-
-      fonts.push({
-        id     : typeof font.id === 'string' ? font.id : '',
-        path   : path.resolve(themeDir, relative),
-        format : typeof source.format === 'string' ? source.format : 'woff',
-        weight : typeof font.weight === 'string' ? font.weight : 'normal',
-        style  : typeof font.style === 'string' ? font.style : 'normal',
-      });
-    }
-    return fonts;
+    // El parseo y la lista blanca viven en `utils/themeFonts.ts`: los valores
+    // salen del JSON de un tema ajeno y acaban dentro de un `<style>`, así que
+    // un `weight` con `</style>` cerraría el elemento. Aquí solo se resuelve la
+    // ruta, que es lo único que este lado sabe.
+    return parseFontDecls(declared).map(font => ({
+      ...font,
+      path: path.resolve(
+        themeDir,
+        process.platform === 'win32' ? font.src.replace(/\//g, path.sep) : font.src,
+      ),
+    }));
   }
 
-  /** MIME apropiado para incrustar la fuente como `data:` URI. */
-  private fontMimeType(fontPath: string): string {
-    switch (path.extname(fontPath).toLowerCase()) {
-      case '.woff2' : return 'font/woff2';
-      case '.woff'  : return 'font/woff';
-      case '.ttf'   : return 'font/ttf';
-      case '.otf'   : return 'font/otf';
-      case '.eot'   : return 'application/vnd.ms-fontobject';
-      case '.svg'   : return 'image/svg+xml';
-      default       : return 'font/woff';
-    }
-  }
 
   /**
    * CSS `@font-face` de las fuentes del tema activo, con el fichero incrustado
@@ -259,12 +236,8 @@ export class BayIconManager {
     for (const font of this._themeFonts) {
       try {
         const data = await fsp.readFile(font.path);
-        const uri  = `data:${this.fontMimeType(font.path)};base64,${data.toString('base64')}`;
-        blocks.push(
-          `@font-face{font-family:"${iconFontFamily(font.id)}";` +
-          `src:url("${uri}") format("${font.format}");` +
-          `font-weight:${font.weight};font-style:${font.style};}`
-        );
+        const uri = `data:${fontMimeType(font.path)};base64,${data.toString('base64')}`;
+        blocks.push(fontFaceBlock(iconFontFamily(font.id), uri, font));
       } catch (err) {
         Logger.warn(`[Bays] Could not load icon theme font ${font.path}: ${err}`);
       }
@@ -279,17 +252,12 @@ export class BayIconManager {
    * Busca la extensión que declara el tema de iconos activo.
    * Devuelve `undefined` si no se encuentra (usamos un fallback entonces).
    */
-  private findIconThemeExtension(themeId: string): vscode.Extension<any> | undefined {
+  private findIconThemeExtension(themeId: string): vscode.Extension<unknown> | undefined {
     return vscode.extensions.all.find(e => {
-      try {
-        const contributes = e.packageJSON.contributes;
-        if (!contributes || !contributes.iconThemes) {
-          return false;
-        }
-        return contributes.iconThemes.some((t: any) => t.id === themeId);
-      } catch {
-        return false;
-      }
+      const contributes = asRecord(asRecord(e.packageJSON)?.contributes);
+      const themes      = contributes?.iconThemes;
+      if (!Array.isArray(themes)) { return false; }
+      return themes.some(t => asString(asRecord(t)?.id) === themeId);
     });
   }
 
@@ -383,14 +351,15 @@ export class BayIconManager {
         // Fallback al icono de archivo por defecto
         if (!iconId) {
           const declaredDefault = this._defaultFileIconId;
-          if (declaredDefault && themeJson.iconDefinitions?.[declaredDefault]) {
+          const has = (id: string) => iconDefinition(themeJson.iconDefinitions, id) !== null;
+          if (declaredDefault && has(declaredDefault)) {
             iconId = declaredDefault;
-          } else if (themeJson.iconDefinitions?.['_file']) {
+          } else if (has('_file')) {
             iconId = '_file';
-          } else if (themeJson.iconDefinitions?.['file']) {
+          } else if (has('file')) {
             iconId = 'file';
           } else {
-            const fileIconKey = Object.keys(themeJson.iconDefinitions || {}).find(
+            const fileIconKey = iconDefinitionIds(themeJson.iconDefinitions).find(
               key => key.toLowerCase().includes('file') && !key.toLowerCase().includes('folder')
             );
             if (fileIconKey) {
@@ -406,14 +375,7 @@ export class BayIconManager {
           }
         }
 
-        if (!iconId || !themeJson.iconDefinitions) {
-          // Fallback final si no hay iconId o definiciones
-          const fallbackIcon = DEFAULT_FILE_ICON;
-          this._iconCache.set(cacheKey, fallbackIcon);
-          return fallbackIcon;
-        }
-
-        const iconDef = themeJson.iconDefinitions[iconId];
+        const iconDef = iconId ? iconDefinition(themeJson.iconDefinitions, iconId) : null;
         if (!iconDef) {
           // Fallback final si no se encuentra la definición del icono
           const fallbackIcon = DEFAULT_FILE_ICON;
@@ -429,14 +391,12 @@ export class BayIconManager {
           // para que el renderer aplique la font-family correcta: un tema puede
           // declarar varias fuentes y `fonts[0]` es la de por defecto cuando la
           // definición no especifica ninguna.
-          const fontId = typeof iconDef.fontId === 'string'
-            ? iconDef.fontId
-            : (this._themeFonts[0]?.id ?? '');
+          const fontId = iconDef.fontId ?? (this._themeFonts[0]?.id ?? '');
           const fontIconData = buildFontIconMarker(
             iconDef.fontCharacter,
-            iconDef.fontColor || '#cccccc',
+            iconDef.fontColor ?? '#cccccc',
             fontId,
-            typeof iconDef.fontSize === 'string' ? iconDef.fontSize : '',
+            iconDef.fontSize ?? '',
           );
           this._iconCache.set(cacheKey, fontIconData);
           return fontIconData;

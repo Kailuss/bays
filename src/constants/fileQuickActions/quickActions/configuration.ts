@@ -24,7 +24,7 @@ export const CONFIGURATION_ACTIONS: FileQuickAction[] = [
     execute : async (_uri) => {
       const action = await vscode.window.showQuickPick(
         ['Encrypt', 'Decrypt'],
-        { placeHolder: 'Choose action for .env file' }
+        { placeHolder: vscode.l10n.t('Choose action for .env file') }
       );
 
       if (!action) {
@@ -51,7 +51,7 @@ export const CONFIGURATION_ACTIONS: FileQuickAction[] = [
     execute : async (uri) => {
       await vscode.commands.executeCommand('vscode.open', uri);
       const choice = await vscode.window.showInformationMessage(
-        'View full license details at choosealicense.com',
+        vscode.l10n.t('View full license details at choosealicense.com'),
         'Open Site'
       );
       if (choice) {
@@ -68,7 +68,7 @@ export const CONFIGURATION_ACTIONS: FileQuickAction[] = [
     match   : byName('.prettierrc', '.prettierrc.json', '.prettierrc.js', 'prettier.config.js', '.prettierrc.yml'),
     execute : async (_uri) => {
       const confirm = await vscode.window.showWarningMessage(
-        'Format all files in workspace with Prettier?',
+        vscode.l10n.t('Format all files in workspace with Prettier?'),
         { modal: true },
         'Yes, Format All'
       );

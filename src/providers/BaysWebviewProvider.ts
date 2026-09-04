@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { getConfiguration }     from '../constants/styles'; //
+import { getConfiguration }     from '../constants/styles';
+import { ViewPrefs }            from '../services/ui/ViewPrefs';
+import { ProductIconService }   from '../services/ui/ProductIconService';
 import { TIMINGS }              from '../constants/timings';
 import { Bay }                  from '../models/Bay';
 import { BayHelpers }           from '../models/BayHelpers';
@@ -9,7 +11,8 @@ import { BayIconManager }       from '../services/ui/BayIconManager';
 import { CopilotService }       from '../services/integration/CopilotService';
 import { BayDragDropService }   from '../services/ui/BayDragDropService';
 import { FileActionRegistry }   from '../services/registry/FileActionRegistry';
-import { Logger }               from '../utils/logger';
+import { Logger }               from '../platform/logger';
+import { bayStateCode }         from '../utils/stateIndicator';
 import { BaysHtmlBuilder }      from './BaysHtmlBuilder';
 import type { PendingIcon }     from './html';
 import { BayContextMenu }       from './BayContextMenu';
@@ -23,6 +26,9 @@ import type {
   UpdateBayLabelMessage,
   UpdateIconsMessage,
   BayStateChangedMessage,
+  RenderMessage,
+  ThemeFontMessage,
+  ProductIconsMessage,
 } from '../shared/protocol';
 
 /**
@@ -47,7 +53,8 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private _fullRefreshPending = false;
-  private _initialLoadComplete = false;
+  /** El cliente ha mandado su `ready`: antes de eso, un postMessage se pierde. */
+  private _clientReady = false;
   private readonly htmlBuilder: BaysHtmlBuilder;
   private readonly contextMenu: BayContextMenu;
   private readonly groupActions: GroupActions;
@@ -61,6 +68,8 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     private readonly dragDropService: BayDragDropService,
     private readonly fileActionRegistry: FileActionRegistry,
     groupActions: GroupActions,
+    private readonly viewPrefs: ViewPrefs,
+    private readonly productIcons: ProductIconService,
   ) {
     this.htmlBuilder  = new BaysHtmlBuilder(_extensionUri, iconManager, context, fileActionRegistry);
     this.contextMenu  = new BayContextMenu(stateService, copilotService);
@@ -71,7 +80,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
       // Partial update for lightweight changes (active bay only)
       stateService.onDidChangeStateSilent(() => this.refreshSilent()),
       // Notify bay state changes for animation
-      stateService.onDidChangeBayState((bayId: string) => void this.notifyBayStateChanged(bayId)),
+      stateService.onDidChangeBayState((bayId: string) => this.notifyBayStateChanged(bayId)),
       // Partial update when a webview's title is rewritten at runtime (Claude Code, …)
       stateService.onDidChangeBayLabel((bayId: string) => this.notifyBayLabelChanged(bayId)),
       // Rebuild when workspace folders change (updates header title)
@@ -104,7 +113,14 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     // Set initial panel title to the workspace name
     webviewView.title = this.getWorkspaceName();
 
-    this.refresh();
+    // El shell se asigna UNA vez y no se vuelve a tocar. Lo que cambia viaja por
+    // postMessage; ver `BaysHtmlBuilder.buildShell`.
+    webviewView.webview.html = this.htmlBuilder.buildShell(webviewView.webview);
+    this._clientReady = false;
+
+    // No se pinta nada aquí: un mensaje enviado a un webview que todavía no ha
+    // registrado su listener se PIERDE, así que el primer pintado cuelga del
+    // `ready` del cliente.
   }
 
   /**
@@ -112,45 +128,105 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
    * Pequeño debounce para evitar repintados repetidos cuando cambian muchos eventos.
    */
   refresh(): void {
-    Logger.log('[Bays] refresh() called, view exists: ' + !!this._view);
-    if (!this._view) { return; }
+    if (!this._view || !this._clientReady) { return; }
     this._fullRefreshPending = true;
     if (this._debounceTimer) { clearTimeout(this._debounceTimer); }
-    this._debounceTimer = setTimeout(async () => {
+    this._debounceTimer = setTimeout(() => {
       this._debounceTimer = null;
       this._fullRefreshPending = false;
-      if (!this._view) { return; }
-
-      const config       = getConfiguration();
-      const groups       = this.stateService.getGroups();
-      const copilotReady = this.copilotService.isAvailable();
-      
-      Logger.log('[Bays] Building HTML, groups: ' + groups.length);
-
-      const { html, pendingIcons } = await this.htmlBuilder.buildHtml({
-        webview        : this._view.webview,
-        groups,
-        getBaysInGroup : (groupId) => this.stateService.getBaysByGroupId(groupId),
-        compactMode        : config.compactMode,
-        showPath           : config.showFilePath,
-        copilotReady,
-        enableDragDrop     : config.enableDragDrop,
-        enableHoverActions : config.enableHoverActions,
-        initialLoad        : !this._initialLoadComplete,
-      });
-
-      this._view.webview.html = html;
-      this._initialLoadComplete = true;
-
-      // Also update the native VS Code panel title
-      this._view.title = this.getWorkspaceName();
-
-      // Resolve icons that missed the cache in parallel and patch them in
-      // (first paint isn't blocked on disk I/O — rows render with a placeholder)
-      void this.patchIcons(pendingIcons);
-
-      Logger.log('[Bays] HTML assigned to webview');
+      this.render();
     }, TIMINGS.WEBVIEW_REFRESH_DEBOUNCE);
+  }
+
+  /**
+   * Compone la lista y la manda. Sin debounce: quien lo necesita es `refresh()`.
+   */
+  private render(): void {
+    if (!this._view) { return; }
+
+    const config       = getConfiguration(this.viewPrefs);
+    const groups       = this.stateService.getGroups();
+    const copilotReady = this.copilotService.isAvailable();
+
+    const { sections, icons, pendingIcons } = this.htmlBuilder.buildSections({
+      groups,
+      getBaysInGroup     : (groupId: number) => this.stateService.getBaysByGroupId(groupId),
+      showPath           : config.showFilePath,
+      copilotReady,
+      enableHoverActions : config.enableHoverActions,
+    });
+
+    this._view.webview.postMessage({
+      type    : 'render',
+      sections,
+      icons,
+      enableDragDrop: config.enableDragDrop,
+      compact : config.compactMode,
+      showPath: config.showFilePath,
+      hoverDelay: config.hoverDelay,
+      motion  : config.motion,
+    } satisfies RenderMessage);
+
+    // Also update the native VS Code panel title
+    this._view.title = this.getWorkspaceName();
+
+    // Resolve icons that missed the cache in parallel and patch them in
+    // (first paint isn't blocked on disk I/O — rows render with a placeholder)
+    void this.patchIcons(pendingIcons);
+  }
+
+  /**
+   * El cliente ha cargado. Es el único momento en que se sabe que hay alguien
+   * escuchando, así que es de aquí de donde cuelgan el primer pintado y el
+   * `@font-face` del tema.
+   */
+  private handleReady(): void {
+    this._clientReady = true;
+    this.render();
+    void this.sendThemeFont();
+    void this.sendProductIcons();
+  }
+
+  /**
+   * El tema de iconos de PRODUCTO, que el shell manda vacío.
+   *
+   * Va por su propio `<style>` y no por el del tema de ficheros: aquél se
+   * reasigna entero en cada cambio de tema de iconos, y dos escritores sobre el
+   * mismo elemento se turnarían borrándose.
+   */
+  async sendProductIcons(): Promise<void> {
+    const view = this._view;
+    if (!view || !this._clientReady) { return; }
+    const css = await this.productIcons.getCss();
+    if (this._view !== view) { return; }
+    view.webview.postMessage({ type: 'productIcons', css } satisfies ProductIconsMessage);
+  }
+
+  /**
+   * El tema de iconos ha cambiado: hay que repintar las filas Y reenviar el
+   * `@font-face`.
+   *
+   * Con el shell congelado, esa fuente ya no viaja en el `<head>` de cada
+   * rebuild: vive en un `<style id="themeFont">` que solo se rellena por mensaje,
+   * así que un cambio de tema que no lo reenviara dejaría los glifos del tema
+   * nuevo pintados con la fuente del anterior (o como cuadros vacíos).
+   */
+  refreshTheme(): void {
+    // Las claves de icono describen marcadores del tema ANTERIOR: numeradas
+    // desde cero con otros marcadores detrás, el cliente pintaría un icono por
+    // otro. Se tiran antes de recomponer.
+    this.htmlBuilder.clearIconKeys();
+    this.refresh();
+    void this.sendThemeFont();
+  }
+
+  /** El `@font-face` del tema activo, que el shell manda vacío. */
+  private async sendThemeFont(): Promise<void> {
+    const view = this._view;
+    if (!view) { return; }
+    const css = await this.htmlBuilder.themeFontCss();
+    if (this._view !== view) { return; }
+    view.webview.postMessage({ type: 'themeFont', css } satisfies ThemeFontMessage);
   }
 
   /**
@@ -182,12 +258,16 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
     if (!this._view || pending.length === 0) { return; }
 
     const view = this._view;
-    const icons = await Promise.all(
+    const resolved = await Promise.all(
       pending.map(async (p) => ({
         bayId: p.bayId,
-        html : await this.htmlBuilder.resolveIconHtml(p.fileName, p.languageId),
+        html : await this.htmlBuilder.resolveIconHtml(p),
       })),
     );
+    // Null = sin mejora sobre el placeholder ya pintado (p.ej. el icono de la
+    // extensión dueña de un webview no se pudo leer): esa bay no se parchea.
+    const icons = resolved.filter((p): p is { bayId: string; html: string } => p.html !== null);
+    if (icons.length === 0) { return; }
 
     // Bail out if a full rebuild replaced the view/DOM while we were resolving
     if (this._view !== view || this._fullRefreshPending) { return; }
@@ -199,20 +279,16 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
    * Notifica al webview que el estado de una bay ha cambiado (diagnóstico o git status).
    * Envía el nuevo estado para actualización granular sin reconstruir el HTML.
    */
-  async notifyBayStateChanged(bayId: string): Promise<void> {
+  notifyBayStateChanged(bayId: string): void {
     if (!this._view || this._fullRefreshPending) { return; }
 
     const bay = this.stateService.getBayById(bayId);
     if (!bay) { return; }
 
-    const { getStateIndicator } = await import('../utils/stateIndicator.js');
-    const stateIndicator = getStateIndicator(bay);
-
     this._view.webview.postMessage({
-      type: 'bayStateChanged',
-      bayId: bayId,
-      stateClass: stateIndicator.nameClass,
-      stateHtml: stateIndicator.html,
+      type : 'bayStateChanged',
+      bayId,
+      state: bayStateCode(bay.state),
     } satisfies BayStateChangedMessage);
   }
 
@@ -238,6 +314,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   //= MESSAGE HANDLERS
 
   private readonly messageHandlers: MessageHandlers = {
+    ready          : async () => this.handleReady(),
     openBay        : async (msg) => await this.handleOpenBay     (msg.bayId),
     closeBay       : async (msg) => await this.handleCloseBay    (msg.bayId),
     closeVariant   : async (msg) => await this.handleCloseVariant(msg.bayId),
@@ -288,7 +365,7 @@ export class BaysWebviewProvider implements vscode.WebviewViewProvider {
   private async handleCloseBay(bayId: string): Promise<void> {
     const bay = this.findBay(bayId);
     if (bay) {
-      await bay.close();
+      await (this.stateService.getHierarchyService()?.closeBayWithVariants(bay) ?? bay.close());
     }
   }
 

@@ -41,9 +41,13 @@ export default typescriptEslint.config(
             }],
             "@typescript-eslint/await-thenable": "error",
 
-            // El codebase interopera con APIs `any` (git extension, postMessage):
-            // aviso, no error, para no forzar casts ruidosos de golpe.
-            "@typescript-eslint/no-explicit-any": "warn",
+            // ERROR y no aviso. Lo que este codebase lee de fuera —el API de la
+            // extensión de git, el packageJSON de otra extensión, el JSON de un
+            // tema de iconos— pide `unknown`, no `any`: `unknown` no se puede
+            // leer sin comprobarlo antes, así que obliga a que la comprobación
+            // exista, mientras que `any` deja que falte y compile. Un warning
+            // permanente acaba en warning que nadie lee.
+            "@typescript-eslint/no-explicit-any": "error",
 
             // `_` como prefijo de descarte (convención ya usada en el código).
             "@typescript-eslint/no-unused-vars": ["error", {
@@ -51,6 +55,14 @@ export default typescriptEslint.config(
                 varsIgnorePattern: "^_",
                 caughtErrors: "none",
             }],
+        },
+    },
+    {
+        // La suite pura: `test()` de node:test devuelve una promesa que gestiona
+        // el runner, así que la regla de promesas perdidas reporta cada caso.
+        files: ["src/test/**/*.ts"],
+        rules: {
+            "@typescript-eslint/no-floating-promises": "off",
         },
     },
     {

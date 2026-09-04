@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import type { DiffType } from '../../../models/Bay';
+import { fileBayId } from '../../../utils/idRules';
+import { classifyDiff } from '../../../utils/diffRules';
 
 /**
  * Clasifica un bay diff según su label y URIs.
@@ -10,90 +12,9 @@ export function classifyDiffType(
   originalUri?: vscode.Uri,
   modifiedUri?: vscode.Uri
 ): DiffType {
-  const lower = label.toLowerCase();
-
-  if (lower.includes('working tree') || lower === 'working tree') {
-    return 'working-tree';
-  }
-  if (lower.includes('staged') || lower.includes('index')) {
-    return 'staged';
-  }
-
-  // Copilot/AI edits: pattern +X-Y (added/removed lines)
-  const editPattern = /[+]\d+[-]\d+/;
-  if (editPattern.test(label)) {
-    return 'edit';
-  }
-
-  if (originalUri?.scheme === 'chat-editing-snapshot-text-model' && 
-      modifiedUri?.scheme === 'chat-editing-snapshot-text-model') {
-    if (!lower.includes('snapshot')) {
-      return 'edit';
-    }
-  }
-
-  if (lower.includes('snapshot') || 
-      lower.includes('timeline') || 
-      lower.includes('local history') ||
-      lower.includes('history:')) {
-    return 'snapshot';
-  }
-
-  const commitHashPattern = /\b[a-f0-9]{7,40}\b/i;
-  if (commitHashPattern.test(label)) {
-    return 'commit';
-  }
-
-  if (/\d{4}-\d{2}-\d{2}/.test(label) ||
-      /\d{1,2}:\d{2}/.test(label)) {
-    return 'snapshot';
-  }
-
-  if (originalUri || modifiedUri) {
-    const originalScheme = originalUri?.scheme;
-    const modifiedScheme = modifiedUri?.scheme;
-    const originalQuery = originalUri?.query || '';
-
-    if (originalScheme === 'git' && (originalQuery.includes('ref=') || commitHashPattern.test(originalQuery))) {
-      return 'commit';
-    }
-
-    if (originalScheme === 'git' || 
-        originalScheme === 'timeline' ||
-        originalScheme === 'chat-editing-snapshot-text-model' ||
-        originalScheme?.startsWith('vscode-timeline') ||
-        modifiedScheme === 'timeline' ||
-        modifiedScheme === 'chat-editing-snapshot-text-model' ||
-        modifiedScheme?.startsWith('vscode-timeline')) {
-      return 'snapshot';
-    }
-  }
-
-  if (lower.includes('merge conflict') || lower.includes('conflict')) {
-    return 'merge-conflict';
-  }
-  if (lower.includes('incoming')) {
-    if (lower.includes('current')) {
-      return 'incoming-current';
-    }
-    return 'incoming';
-  }
-  if (lower.includes('current')) {
-    return 'current';
-  }
-
-  if (lower.includes('↔') || 
-      lower.includes(' vs ') || 
-      lower.includes('compare') ||
-      lower.includes('comparing')) {
-    if (originalUri && modifiedUri && 
-        originalUri.path !== modifiedUri.path) {
-      return 'unknown';
-    }
-    return 'snapshot';
-  }
-
-  return 'unknown';
+  // La regla vive en `utils/diffRules.ts` y es pura: de una URI solo mira su
+  // esquema, su query y su path, así que aquí se le entregan como cadenas.
+  return classifyDiff(label, originalUri, modifiedUri);
 }
 
 /**
@@ -110,7 +31,10 @@ export function resolveSourceUri(uri: vscode.Uri): vscode.Uri {
   if (uri.scheme === 'chat-editing-snapshot-text-model' ||
       uri.scheme === 'git' ||
       uri.scheme === 'timeline' ||
-      uri.scheme.startsWith('vscode-timeline')) {
+      uri.scheme.startsWith('vscode-timeline') ||
+      // Los providers temporales de Claude Code (`_claude_fs_left/right`,
+      // `_claude_vscode_fs_*`): su path ES la ruta del archivo real.
+      uri.scheme.startsWith('_claude_')) {
     return vscode.Uri.file(uri.path);
   }
   return uri;
@@ -169,5 +93,5 @@ export function determineParentId(
   modifiedUri?: vscode.Uri
 ): string | undefined {
   const parentUri = determineParentUri(diffType, uri, originalUri, modifiedUri);
-  return parentUri ? `${parentUri.toString()}-${viewColumn}` : undefined;
+  return parentUri ? fileBayId(parentUri.toString(), viewColumn) : undefined;
 }

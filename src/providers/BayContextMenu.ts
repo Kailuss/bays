@@ -2,6 +2,7 @@ import { Bay } from '../models/Bay';
 import { BayStateService } from '../services/core/BayStateService';
 import { CopilotService } from '../services/integration/CopilotService';
 import type { MenuItem } from '../shared/protocol';
+import { ICONS } from '../shared/icons';
 
 // El modelo del menú vive en el protocolo compartido (cruza postMessage y el
 // cliente lo consume con los MISMOS tipos). Re-exportado por conveniencia.
@@ -31,48 +32,48 @@ export class BayContextMenu {
     const locked = this.stateService.getGroup(bay.state.groupId)?.isLocked ?? false;
 
     const items: MenuItem[] = locked ? [] : [
-      { id: 'close',        label: 'Close',             icon: 'close'     },
-      { id: 'closeOthers',  label: 'Close Others',      icon: 'close-all' },
-      { id: 'closeToRight', label: 'Close to the Right', icon: 'close-all' },
+      { id: 'close',        label: 'Close',              icon: ICONS.menu.close     },
+      { id: 'closeOthers',  label: 'Close Others',       icon: ICONS.menu.closeMany },
+      { id: 'closeToRight', label: 'Close to the Right', icon: ICONS.menu.closeMany },
       { type: 'separator' },
     ];
 
     items.push(
       bay.state.isPinned
-        ? { id: 'unpin', label: 'Unpin', icon: 'pin'    }
-        : { id: 'pin',   label: 'Pin',   icon: 'pinned' }
+        ? { id: 'unpin', label: 'Unpin', icon: ICONS.menu.unpin }
+        : { id: 'pin',   label: 'Pin',   icon: ICONS.menu.pin   }
     );
 
     if (hasMultipleGroups && !locked) {
       items.push(
         { type: 'separator' },
-        { id: 'closeGroup', label: 'Close Group', icon: 'close-all' },
+        { id: 'closeGroup', label: 'Close Group', icon: ICONS.menu.closeMany },
       );
     }
 
     if (hasUri) {
       items.push(
         { type: 'separator' },
-        { id: 'revealInExplorer',     label: 'Reveal in Explorer View',  icon: 'files'          },
-        { id: 'revealInFileExplorer', label: 'Reveal in File Explorer',  icon: 'folder-opened'  },
-        { id: 'openTimeline',         label: 'Open Timeline',            icon: 'history'        },
+        { id: 'revealInExplorer',     label: 'Reveal in Explorer View',  icon: ICONS.menu.revealInView },
+        { id: 'revealInFileExplorer', label: 'Reveal in File Explorer',  icon: ICONS.menu.revealInOs   },
+        { id: 'openTimeline',         label: 'Open Timeline',            icon: ICONS.menu.timeline     },
         { type: 'separator' },
-        { id: 'copyRelativePath',     label: 'Copy Relative Path',       icon: 'clippy'         },
-        { id: 'copyPath',             label: 'Copy Path',                icon: 'copy'           },
-        { id: 'copyFileContents',     label: 'Copy File Contents',       icon: 'copy'           },
-        { id: 'duplicateFile',        label: 'Duplicate File',           icon: 'files'          },
+        { id: 'copyRelativePath',     label: 'Copy Relative Path',       icon: ICONS.menu.copyRelative },
+        { id: 'copyPath',             label: 'Copy Path',                icon: ICONS.menu.copyPath     },
+        { id: 'copyFileContents',     label: 'Copy File Contents',       icon: ICONS.menu.copyPath     },
+        { id: 'duplicateFile',        label: 'Duplicate File',           icon: ICONS.menu.duplicate    },
         { type: 'separator' },
-        { id: 'compareWithActive',    label: 'Compare with Active Editor', icon: 'diff'         },
-        { id: 'openChanges',          label: 'Open Changes',             icon: 'git-compare'    },
-        { id: 'splitRight',           label: 'Split Right',              icon: 'split-horizontal' },
-        { id: 'moveToNewWindow',      label: 'Move to New Window',       icon: 'multiple-windows' },
+        { id: 'compareWithActive',    label: 'Compare with Active Editor', icon: ICONS.menu.compare      },
+        { id: 'openChanges',          label: 'Open Changes',             icon: ICONS.menu.changes      },
+        { id: 'splitRight',           label: 'Split Right',              icon: ICONS.menu.split        },
+        { id: 'moveToNewWindow',      label: 'Move to New Window',       icon: ICONS.menu.newWindow    },
       );
     }
 
     if (hasUri && this.copilotService.isAvailable()) {
       items.push(
         { type: 'separator' },
-        { id: 'addToChat', label: 'Add to Copilot Chat', icon: 'attach' },
+        { id: 'addToChat', label: 'Add to Copilot Chat', icon: ICONS.menu.chat },
       );
     }
 
@@ -82,7 +83,7 @@ export class BayContextMenu {
   /** Ejecuta el item elegido en el webview. Ignora los ids desconocidos. */
   async execute(actionId: string, bay: Bay): Promise<void> {
     switch (actionId) {
-      case 'close'                : await bay.close();                 break;
+      case 'close'                : await (this.stateService.getHierarchyService()?.closeBayWithVariants(bay) ?? bay.close()); break;
       case 'closeOthers'          : await bay.closeOthers();           break;
       case 'closeToRight'         : await bay.closeToRight();          break;
       case 'closeGroup'           : await bay.closeGroup();            break;

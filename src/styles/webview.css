@@ -51,4 +51,7 @@
 @import './bay-file-states.css';
 @import './bay-actions.css';       /* Normal bays actions */
 @import './context-menu.css';      /* Menú contextual (réplica del nativo) */
+@import './tooltip.css';           /* Los tooltips propios: nada lleva `title` */
+/* DETRAS de todo lo que declara un scroller: apaga la barra nativa. */
+@import './scrollbar.css';
 @import './utilities.css';

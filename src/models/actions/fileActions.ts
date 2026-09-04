@@ -52,9 +52,9 @@ export async function duplicateFile(
       preserveFocus: false,
     });
 
-    vscode.window.showInformationMessage(`File duplicated: ${newName}`);
+    vscode.window.showInformationMessage(vscode.l10n.t('File duplicated: {0}', newName));
   } catch (err) {
-    vscode.window.showErrorMessage(`Failed to duplicate file: ${err}`);
+    vscode.window.showErrorMessage(vscode.l10n.t('Failed to duplicate file: {0}', String(err)));
   }
 }
 
