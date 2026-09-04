@@ -4,5 +4,11 @@ node_modules
 .vscode-test
 .vscode
 *.vsix
-*.md
-!README.md
+
+# Notas de trabajo: por PATRON y no por nombre. Escrito uno a uno, el fichero que
+# se queda fuera es siempre el SIGUIENTE.
+[Pp]lan*.md
+
+# Lo demas de la documentacion SI se versiona. CLAUDE.md es lo primero que se lee
+# al empezar una sesion: sin trackear se pierde con un `git clean`, no se revisa
+# en un PR y no hay forma de ver cuando dejo de ser verdad.
