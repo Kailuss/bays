@@ -53,7 +53,7 @@ export const WEB_ACTIONS: FileQuickAction[] = [
       try {
         await vscode.commands.executeCommand('rest-client.request');
       } catch {
-        vscode.window.showWarningMessage('Install REST Client extension to send requests');
+        vscode.window.showWarningMessage(vscode.l10n.t('Install REST Client extension to send requests'));
       }
     },
   },

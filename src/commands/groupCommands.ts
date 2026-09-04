@@ -26,7 +26,7 @@ export function registerGroupCommands(
   const run = async (arg: unknown, action: (group: BayGroup) => Promise<boolean>) => {
     const group = resolve(arg);
     if (!group) {
-      void vscode.window.showInformationMessage('No editor group available');
+      void vscode.window.showInformationMessage(vscode.l10n.t('No editor group available'));
       return;
     }
     if (await action(group)) { stateService.refreshGroupCustomizations(); }

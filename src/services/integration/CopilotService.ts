@@ -57,7 +57,7 @@ export class CopilotService {
       return true;
     } catch (error) {
       vscode.window.showWarningMessage(
-        `Failed to attach file to Copilot Chat: ${error instanceof Error ? error.message : String(error)}`
+        vscode.l10n.t('Failed to attach file to Copilot Chat: {0}', error instanceof Error ? error.message : String(error))
       );
       return false;
     }
@@ -94,7 +94,7 @@ export class CopilotService {
       return true;
     } catch (error) {
       vscode.window.showWarningMessage(
-        `Failed to attach files to Copilot Chat: ${error instanceof Error ? error.message : String(error)}`
+        vscode.l10n.t('Failed to attach files to Copilot Chat: {0}', error instanceof Error ? error.message : String(error))
       );
       return false;
     }
@@ -104,7 +104,7 @@ export class CopilotService {
   async addMultipleFiles(tabs: Bay[]): Promise<void> {
     const fileTabs = tabs.filter(t => t.metadata.uri);
     if (fileTabs.length === 0) {
-      vscode.window.showInformationMessage('No file tabs to add');
+      vscode.window.showInformationMessage(vscode.l10n.t('No file tabs to add'));
       return;
     }
     const selected = await vscode.window.showQuickPick(
@@ -116,7 +116,7 @@ export class CopilotService {
       })),
       {
         canPickMany: true,
-        placeHolder: 'Select files to add to Copilot Chat context',
+        placeHolder: vscode.l10n.t('Select files to add to Copilot Chat context'),
       }
     );
 
@@ -131,7 +131,7 @@ export class CopilotService {
 
     if (success) {
       vscode.window.showInformationMessage(
-        `Added ${selectedTabs.length} file(s) to Copilot Chat context`
+        vscode.l10n.t('Added {0} file(s) to Copilot Chat context', selectedTabs.length)
       );
     }
   }

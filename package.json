@@ -1,7 +1,7 @@
 {
   "name": "bays",
   "displayName": "Bays",
-  "description": "Your open editors as a vertical list in the sidebar, with groups, variants and git state.",
+  "description": "%description%",
   "version": "0.3.7",
   "publisher": "Kailuss",
   "license": "MIT",
@@ -36,14 +36,15 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "Bays only reads the list of open editors and their git and diagnostic state. It never runs code from the workspace."
+      "description": "%capabilities.untrustedWorkspaces%"
     },
     "virtualWorkspaces": {
       "supported": "limited",
-      "description": "Bays works in a virtual workspace. File actions that need a file on disk, and git state, are not available there."
+      "description": "%capabilities.virtualWorkspaces%"
     }
   },
   "contributes": {
@@ -51,7 +52,7 @@
       "activitybar": [
         {
           "id": "baysContainer",
-          "title": "Bays",
+          "title": "%container.baysContainer%",
           "icon": "$(files)"
         }
       ]
@@ -61,7 +62,7 @@
         {
           "type": "webview",
           "id": "bays",
-          "name": "Bays",
+          "name": "%view.bays.name%",
           "icon": "./icon.png"
         }
       ]
@@ -69,178 +70,178 @@
     "commands": [
       {
         "command": "bays.refresh",
-        "title": "Refresh",
+        "title": "%command.refresh%",
         "icon": "$(refresh)",
         "category": "Bays"
       },
       {
         "command": "bays.openBay",
-        "title": "Open Bay",
+        "title": "%command.openBay%",
         "category": "Bays"
       },
       {
         "command": "bays.closeBay",
-        "title": "Close Bay",
+        "title": "%command.closeBay%",
         "icon": "$(close)",
         "category": "Bays"
       },
       {
         "command": "bays.closeOthers",
-        "title": "Close Others",
+        "title": "%command.closeOthers%",
         "category": "Bays"
       },
       {
         "command": "bays.closeToRight",
-        "title": "Close to the Right",
+        "title": "%command.closeToRight%",
         "category": "Bays"
       },
       {
         "command": "bays.closeAll",
-        "title": "Close All",
+        "title": "%command.closeAll%",
         "icon": "$(close-all)",
         "category": "Bays"
       },
       {
         "command": "bays.pinBay",
-        "title": "Pin Bay",
+        "title": "%command.pinBay%",
         "icon": "$(pinned)",
         "category": "Bays"
       },
       {
         "command": "bays.unpinBay",
-        "title": "Unpin Bay",
+        "title": "%command.unpinBay%",
         "icon": "$(pin)",
         "category": "Bays"
       },
       {
         "command": "bays.revealInExplorer",
-        "title": "Reveal in Explorer",
+        "title": "%command.revealInExplorer%",
         "icon": "$(go-to-file)",
         "category": "Bays"
       },
       {
         "command": "bays.copyRelativePath",
-        "title": "Copy Relative Path",
+        "title": "%command.copyRelativePath%",
         "icon": "$(clippy)",
         "category": "Bays"
       },
       {
         "command": "bays.copyFileContents",
-        "title": "Copy File Contents",
+        "title": "%command.copyFileContents%",
         "icon": "$(copy)",
         "category": "Bays"
       },
       {
         "command": "bays.compareWithActive",
-        "title": "Compare with Active Editor",
+        "title": "%command.compareWithActive%",
         "icon": "$(diff)",
         "category": "Bays"
       },
       {
         "command": "bays.moveToGroup",
-        "title": "Move to Group…",
+        "title": "%command.moveToGroup%",
         "icon": "$(split-horizontal)",
         "category": "Bays"
       },
       {
         "command": "bays.addToCopilotChat",
-        "title": "Add to Copilot Chat",
+        "title": "%command.addToCopilotChat%",
         "icon": "$(add)",
         "category": "Bays"
       },
       {
         "command": "bays.addMultipleToCopilotChat",
-        "title": "Add Files to Copilot Chat…",
+        "title": "%command.addMultipleToCopilotChat%",
         "icon": "$(sparkle)",
         "category": "Bays"
       },
       {
         "command": "bays.closeGroup",
-        "title": "Close Group",
+        "title": "%command.closeGroup%",
         "icon": "$(close-all)",
         "category": "Bays"
       },
       {
         "command": "bays.copyPath",
-        "title": "Copy Path",
+        "title": "%command.copyPath%",
         "icon": "$(copy)",
         "category": "Bays"
       },
       {
         "command": "bays.openTimeline",
-        "title": "Open Timeline",
+        "title": "%command.openTimeline%",
         "icon": "$(history)",
         "category": "Bays"
       },
       {
         "command": "bays.splitRight",
-        "title": "Split Right",
+        "title": "%command.splitRight%",
         "icon": "$(split-horizontal)",
         "category": "Bays"
       },
       {
         "command": "bays.openChanges",
-        "title": "Open Changes",
+        "title": "%command.openChanges%",
         "icon": "$(git-compare)",
         "category": "Bays"
       },
       {
         "command": "bays.revealInFileExplorer",
-        "title": "Reveal in File Explorer",
+        "title": "%command.revealInFileExplorer%",
         "icon": "$(folder-opened)",
         "category": "Bays"
       },
       {
         "command": "bays.moveToNewWindow",
-        "title": "Move to New Window",
+        "title": "%command.moveToNewWindow%",
         "icon": "$(multiple-windows)",
         "category": "Bays"
       },
       {
         "command": "bays.duplicateFile",
-        "title": "Duplicate File",
+        "title": "%command.duplicateFile%",
         "icon": "$(files)",
         "category": "Bays"
       },
       {
         "command": "bays.saveAll",
-        "title": "Save All",
+        "title": "%command.saveAll%",
         "icon": "$(save-all)",
         "category": "Bays"
       },
       {
         "command": "bays.reorder",
-        "title": "Reorder Bays",
+        "title": "%command.reorder%",
         "icon": "$(list-ordered)",
         "category": "Bays"
       },
       {
         "command": "bays.toggleCompactMode",
-        "title": "Toggle Compact Mode",
+        "title": "%command.toggleCompactMode%",
         "icon": "$(collapse-all)",
         "category": "Bays"
       },
       {
         "command": "bays.toggleShowPath",
-        "title": "Toggle View Path",
+        "title": "%command.toggleShowPath%",
         "icon": "$(list-selection)",
         "category": "Bays"
       },
       {
         "command": "bays.renameGroup",
-        "title": "Rename Group…",
+        "title": "%command.renameGroup%",
         "icon": "$(edit)",
         "category": "Bays"
       },
       {
         "command": "bays.setGroupColor",
-        "title": "Set Group Color…",
+        "title": "%command.setGroupColor%",
         "icon": "$(symbol-color)",
         "category": "Bays"
       },
       {
         "command": "bays.toggleGroupLock",
-        "title": "Toggle Group Lock",
+        "title": "%command.toggleGroupLock%",
         "icon": "$(lock)",
         "category": "Bays"
       }
@@ -359,42 +360,42 @@
       ]
     },
     "configuration": {
-      "title": "Bays",
+      "title": "%config.title%",
       "properties": {
         "bays.showFilePath": {
           "type": "boolean",
           "default": true,
-          "description": "Show the relative file path as description next to each bay."
+          "description": "%config.showFilePath%"
         },
         "bays.compactMode": {
           "type": "boolean",
           "default": false,
-          "description": "Enable compact mode: bays show file name and path in a single line with reduced height (28px)."
+          "description": "%config.compactMode%"
         },
         "bays.enableHoverActions": {
           "type": "boolean",
           "default": true,
-          "description": "Show action buttons (file actions, Copilot, close) when hovering over a bay."
+          "description": "%config.enableHoverActions%"
         },
         "bays.enableDragDrop": {
           "type": "boolean",
           "default": true,
-          "description": "Enable drag & drop reordering of bays within and across groups."
+          "description": "%config.enableDragDrop%"
         },
         "bays.syncCursorPosition": {
           "type": "boolean",
           "default": false,
-          "description": "Synchronize cursor position (line and column) between parent bays and their children (diffs, snapshots, etc.). When enabled, moving the cursor in one bay will update all related bays."
+          "description": "%config.syncCursorPosition%"
         },
         "bays.animations": {
           "type": "boolean",
           "default": true,
-          "description": "Master switch for everything the view moves: the close animation, the state-change pulse and the tooltip fade. It is also turned off by `workbench.reduceMotion`."
+          "description": "%config.animations%"
         },
         "bays.followProductIconTheme": {
           "type": "boolean",
           "default": true,
-          "description": "Draw the panel's glyphs with the product icon theme selected in `workbench.productIconTheme`, like the rest of the workbench. Off, the panel keeps the codicons the extension ships, and nothing is read from disk."
+          "description": "%config.followProductIconTheme%"
         }
       }
     }

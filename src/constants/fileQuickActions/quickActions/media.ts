@@ -72,7 +72,7 @@ export const MEDIA_ACTIONS: FileQuickAction[] = [
 
       const dataUri = `data:${mimeType};base64,${base64}`;
       await vscode.env.clipboard.writeText(dataUri);
-      vscode.window.showInformationMessage('✓ Copied as Base64 data URI');
+      vscode.window.showInformationMessage(vscode.l10n.t('Copied as a Base64 data URI'));
     },
   },
 

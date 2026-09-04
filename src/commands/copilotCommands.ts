@@ -21,7 +21,7 @@ export function registerCopilotCommands(
     vscode.commands.registerCommand('bays.addMultipleToCopilotChat', async () => {
       const allBays = stateService.getAllBays();
       if (allBays.length === 0) {
-        vscode.window.showInformationMessage('No bays open');
+        vscode.window.showInformationMessage(vscode.l10n.t('No open bays'));
         return;
       }
       await copilotService.addMultipleFiles(allBays);

@@ -11,7 +11,7 @@ export async function pin(
   activateFn: () => Promise<void>
 ): Promise<void> {
   if (!state.capabilities.canPin) {
-    vscode.window.showWarningMessage('This bay cannot be pinned');
+    vscode.window.showWarningMessage(vscode.l10n.t('This bay cannot be pinned'));
     return;
   }
   await activateFn();
@@ -25,7 +25,7 @@ export async function unpin(
   activateFn: () => Promise<void>
 ): Promise<void> {
   if (!state.isPinned) {
-    vscode.window.showWarningMessage('This bay is not pinned');
+    vscode.window.showWarningMessage(vscode.l10n.t('This bay is not pinned'));
     return;
   }
   await activateFn();
