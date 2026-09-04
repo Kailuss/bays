@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { BayGroup, BayGroupColor, defaultGroupColor } from '../../models/BayGroup';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 
 const STORAGE_KEY = 'bays.groupCustomizations';
 

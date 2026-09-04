@@ -1,0 +1,10 @@
+{
+  // Solo la suite de INTEGRACIÓN.
+  //
+  // `out/test/` es de esbuild y de nadie más: `node --test` recibe un glob plano
+  // ahí, y que tsc escribiera los mismos nombres dejaría dos dueños para un
+  // directorio cuyo contenido decide qué tests existen. Aquí se emite solo
+  // `out/test-integration/`, que es lo que lee `.vscode-test.mjs`.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "out", "docs", "src/webview", "src/test"]
+}

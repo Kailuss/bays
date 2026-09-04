@@ -8,7 +8,17 @@ import * as vscode from 'vscode';
  */
 export const GROUP_COLORS = ['blue', 'green', 'yellow', 'orange', 'red', 'purple'] as const;
 
-export type BayGroupColor = typeof GROUP_COLORS[number];
+// El TIPO lo declara el protocolo, porque el color viaja al cliente y allí decide
+// qué acento lleva un bloque: dos uniones para un mismo conjunto se separan, y
+// separarse aquí significa un color que el cliente no sabe dibujar. Lo que se
+// queda es la LISTA, que es lo único que este lado necesita para repartirlos.
+export type { BayGroupColor } from '../shared/protocol';
+import type { BayGroupColor } from '../shared/protocol';
+
+// Y que las dos mitades cuadren no lo puede decir el compilador desde la lista
+// sola: esta asignación es lo que lo dice, y falla si alguna se mueve sin la otra.
+const _COLORS_MATCH_THE_PROTOCOL: readonly BayGroupColor[] = GROUP_COLORS;
+void _COLORS_MATCH_THE_PROTOCOL;
 
 /**
  * Todo grupo tiene color: si el usuario no ha elegido uno, se reparte la paleta

@@ -1,20 +1,25 @@
 import type { Bay } from '../../models/Bay';
 import { updateEditorCursor } from './BayEditorUtils';
-import { Logger } from '../../utils/logger';
+import { Logger } from '../../platform/logger';
 import * as vscode from 'vscode';
 
 /**
  * Synchronizes cursor position (line and column) between a parent bay and all its children.
  * If syncCursorPosition config is enabled, updates all related editors.
  *
- * @param stateService BayStateService instance
+ * @param bays lo ÚNICO que esto necesita del estado: resolver una bay por su id.
+ *   Se declara estructuralmente en vez de recibir el `BayStateService` entero
+ *   porque importarlo cerraría un ciclo (aquel módulo importa éste), y porque un
+ *   `any` no es la respuesta a un ciclo: deja pasar cualquier cosa.
  * @param bayId Bay ID that changed cursor position
  * @param line Cursor line (1-based)
  * @param column Cursor column (1-based)
  * @param fetchVariants Function to fetch child bays
  */
+type BayLookup = { getBayById(id: string): Bay | undefined };
+
 export async function syncCursorPosition(
-  stateService: any,
+  bays: BayLookup,
   bayId: string,
   line: number,
   column: number,
@@ -25,7 +30,7 @@ export async function syncCursorPosition(
     return; // Feature disabled
   }
 
-  const bay = stateService.getBayById(bayId);
+  const bay = bays.getBayById(bayId);
   if (!bay) {
     return;
   }
@@ -40,7 +45,7 @@ export async function syncCursorPosition(
 
   if (bay.metadata.sourceBayId) {
     // Is a child, find parent and siblings
-    parentBay = stateService.getBayById(bay.metadata.sourceBayId);
+    parentBay = bays.getBayById(bay.metadata.sourceBayId);
     if (parentBay) {
       family.push(parentBay);
       family.push(...fetchVariants(bay.metadata.sourceBayId));

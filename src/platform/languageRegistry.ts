@@ -59,6 +59,26 @@ function isBuiltIn(ext: vscode.Extension<unknown>): boolean {
  * `packageJSON` está disponible sin activar la extensión, así que esto no
  * despierta nada.
  */
+/**
+ * Los tres narradores mínimos con los que se lee un `packageJSON` ajeno. Se
+ * escriben aquí y no en un módulo común a propósito: no llevan ninguna decisión
+ * dentro (son la definición del propio lenguaje), así que dos copias no pueden
+ * separarse, y tenerlos al lado hace evidente qué se está comprobando.
+ */
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function buildLanguageRegistry(): void {
   const names   = new Map<string, string>();
   const exts    = new Map<string, string>();
@@ -71,25 +91,29 @@ export function buildLanguageRegistry(): void {
   });
 
   for (const extension of ordered) {
-    let contributed: any[];
-    try {
-      contributed = extension.packageJSON?.contributes?.languages ?? [];
-    } catch {
-      continue;
-    }
+    // El `packageJSON` es de otra extensión: se lee como `unknown` y se estrecha
+    // paso a paso. Con `any` la comprobación podía faltar y compilar igual, que
+    // es exactamente lo que aquí no se puede permitir — lo que se saca de ahí
+    // acaba decidiendo qué icono lleva cada fila.
+    const pkg          = asRecord(extension.packageJSON);
+    const contributes  = asRecord(pkg?.contributes);
+    const contributed  = contributes?.languages;
     if (!Array.isArray(contributed)) { continue; }
 
-    for (const language of contributed) {
-      const id = language?.id;
-      if (typeof id !== 'string' || !id) { continue; }
+    for (const entry of contributed) {
+      const language = asRecord(entry);
+      if (!language) { continue; }
 
-      for (const fileName of language.filenames ?? []) {
+      const id = asString(language.id);
+      if (!id) { continue; }
+
+      for (const fileName of asArray(language.filenames)) {
         if (typeof fileName !== 'string') { continue; }
         const key = fileName.toLowerCase();
         if (!names.has(key)) { names.set(key, id); }
       }
 
-      for (const fileExt of language.extensions ?? []) {
+      for (const fileExt of asArray(language.extensions)) {
         if (typeof fileExt !== 'string' || !fileExt) { continue; }
         // Las contribuciones las declaran con punto inicial (".sh"); normalizar
         // por si alguna extensión lo omite.
@@ -97,7 +121,7 @@ export function buildLanguageRegistry(): void {
         if (!exts.has(key)) { exts.set(key, id); }
       }
 
-      for (const pattern of language.filenamePatterns ?? []) {
+      for (const pattern of asArray(language.filenamePatterns)) {
         if (typeof pattern !== 'string') { continue; }
         const regex = globToRegExp(pattern);
         if (regex) { globs.push({ regex, id }); }
